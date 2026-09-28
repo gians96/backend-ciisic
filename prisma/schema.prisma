@@ -154,3 +154,15 @@ model Asistencia {
   @@index([id_evento], map: "idx_asistencia_evento")
   @@unique([id_usuario, id_evento], map: "uq_asistencia_persona_evento")
 }
+model PaperSubmission {
+  id               String   @id @db.VarChar(36)
+  title            String   @db.VarChar(300)
+  mainAuthor       Json
+  coauthors        Json
+  filename         String   @db.VarChar(255)
+  originalFilename String   @db.VarChar(255)
+  size             Int
+  createdAt        DateTime @default(now())
+
+  @@index([createdAt])
+}
