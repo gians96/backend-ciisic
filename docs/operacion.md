@@ -25,7 +25,7 @@ Restaurar: `DROP DATABASE ciisic_vii; CREATE DATABASE ciisic_vii;` e importar el
 npm run bootstrap:admin -- --correo tu@undc.edu.pe --nombres "Nombre" --apellidos "Apellidos"
 ```
 
-Muestra una contraseña temporal una sola vez (en la imagen: `node dist/src/database/bootstrapAdmin.js -- …`).
+Muestra una contraseña temporal una sola vez (en la imagen: `node dist/src/database/bootstrapAdmin.js --correo …`).
 
 ## Rotación de secretos
 
