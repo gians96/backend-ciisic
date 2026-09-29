@@ -29,7 +29,7 @@ describe('importación de credenciales del entorno anterior', () => {
         process.env.DECOLECTA_TOKEN = 'sk_1234.decolecta-token'
         process.env.BREVO_API_KEY = 'xkeysib-clave-5678'
         process.env.BREVO_SENDER = 'Remitente@Gmail.com'
-        process.env.BREVO_SENDER_NAME = 'Inscripción al congreso'
+        process.env.BREVO_SENDER_NAME = '"Inscripción al congreso"'
         m.tokenConsulta.count.mockResolvedValue(0)
         m.credencialCorreo.count.mockResolvedValue(0)
 

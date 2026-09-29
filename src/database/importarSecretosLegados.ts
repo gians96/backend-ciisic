@@ -11,8 +11,11 @@ import { cifrar, sufijo } from '../core/crypto'
  */
 const OBSOLETAS = ['NUBETEC_TOKEN', 'API_RENIEC_DNI', 'RENIEC_PROVIDER', 'RENIEC_TOKEN', 'API_URL', 'BREVO_SENDER_SUBJECT']
 
+/** Valor de la variable sin espacios ni comillas envolventes (`"…"` o `'…'` de un .env). */
 function valor(nombre: string): string {
-    return process.env[nombre]?.trim() ?? ''
+    const texto = process.env[nombre]?.trim() ?? ''
+    const comillas = /^(['"])(.*)\1$/s.exec(texto)
+    return (comillas ? comillas[2] : texto).trim()
 }
 
 /** 00:00 del primer día del mes siguiente en hora de Lima (UTC−5). */
