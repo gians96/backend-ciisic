@@ -1,3 +1,7 @@
+// Esquema de la API del congreso CIISIC.
+// Convención (specs/001-esquema-bd-espanol/data-model.md): tablas en español, snake_case y plural;
+// modelos singulares en PascalCase mapeados con @@map / @map.
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,161 +12,384 @@ datasource db {
   shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
-model Administradores {
-  id                Int      @id @default(autoincrement())
-  nombres           String
-  apellidos         String
-  correoElectronico String   @unique
-  contrasena        String
-  creadoEn          DateTime @default(now())
-  actualizadoEn     DateTime @updatedAt
-  rolId             Int
-  rol               Roles    @relation(fields: [rolId], references: [id])
-}
+// ─── Administración ──────────────────────────────────────────────────────────
 
-model Roles {
-  id              Int               @id @default(autoincrement())
+model Rol {
+  id              Int             @id @default(autoincrement())
+  codigo          String          @unique(map: "uq_roles_codigo") @db.VarChar(30)
   nombre          String
-  administradores Administradores[]
+  administradores Administrador[]
+
+  @@map("roles")
 }
 
-model Usuario {
-  id                Int            @id @default(autoincrement())
-  dni               String         @unique @db.Char(8)
-  nombres           String
-  apellidos         String
-  correoElectronico String         @unique
-  celular           String         @db.Char(9)
-  creadoEn          DateTime       @default(now())
-  actualizadoEn     DateTime       @updatedAt
-  idTipoDocumentoId String?
-  numero            String         @unique
-  inscripciones     Inscripcion[]
-  tipoDocumento     TipoDocumento? @relation(fields: [idTipoDocumentoId], references: [id])
-  asistencias       Asistencia[]   @relation("UsuarioAsistencia")
+model Administrador {
+  id                     Int           @id @default(autoincrement())
+  nombres                String
+  apellidos              String
+  correo                 String        @unique(map: "uq_administradores_correo")
+  contrasenaHash         String        @map("contrasena_hash")
+  creadoEn               DateTime      @default(now()) @map("creado_en")
+  actualizadoEn          DateTime      @updatedAt @map("actualizado_en")
+  rolId                  Int           @map("rol_id")
+  activo                 Boolean       @default(true)
+  rol                    Rol           @relation(fields: [rolId], references: [id], map: "fk_administradores_rol")
+  inscripcionesRevisadas Inscripcion[] @relation("InscripcionRevisor")
 
-  @@index([idTipoDocumentoId], map: "Usuario_idTipoDocumentoId_fkey")
+  @@index([rolId], map: "idx_administradores_rol")
+  @@map("administradores")
 }
+
+// ─── Eventos ─────────────────────────────────────────────────────────────────
+
+enum EstadoEvento {
+  BORRADOR
+  PUBLICADO
+  FINALIZADO
+  ARCHIVADO
+}
+
+model Evento {
+  id                    Int                    @id @default(autoincrement())
+  codigo                String                 @unique(map: "uq_eventos_codigo") @db.VarChar(60)
+  nombre                String                 @db.VarChar(200)
+  nombreCorto           String                 @map("nombre_corto") @db.VarChar(80)
+  descripcion           String?                @db.Text
+  sede                  String?                @db.VarChar(200)
+  fechaInicio           DateTime               @map("fecha_inicio") @db.Date
+  fechaFin              DateTime               @map("fecha_fin") @db.Date
+  inscripcionesInicio   DateTime?              @map("inscripciones_inicio")
+  inscripcionesFin      DateTime?              @map("inscripciones_fin")
+  inscripcionesAbiertas Boolean                @default(true) @map("inscripciones_abiertas")
+  estado                EstadoEvento           @default(BORRADOR)
+  esPrincipal           Boolean                @default(false) @map("es_principal")
+  dominioInstitucional  String                 @default("undc.edu.pe") @map("dominio_institucional") @db.VarChar(100)
+  correoContacto        String?                @map("correo_contacto")
+  telefonoContacto      String?                @map("telefono_contacto") @db.VarChar(30)
+  remitenteNombre       String?                @map("remitente_nombre") @db.VarChar(120)
+  asuntoAprobacion      String?                @map("asunto_aprobacion") @db.VarChar(200)
+  logoArchivo           String?                @map("logo_archivo") @db.VarChar(255)
+  datosPago             Json?                  @map("datos_pago")
+  creadoEn              DateTime               @default(now()) @map("creado_en")
+  actualizadoEn         DateTime               @updatedAt @map("actualizado_en")
+  categorias            CategoriaInscripcion[]
+  inscripciones         Inscripcion[]
+  actividades           Actividad[]
+  ponencias             Ponencia[]
+  mensajesContacto      MensajeContacto[]
+  integraciones         IntegracionEvento[]
+
+  @@map("eventos")
+}
+
+// ─── Participantes e inscripciones ───────────────────────────────────────────
 
 model TipoDocumento {
-  id          String    @id
-  nombre      String
-  abreviatura String    @unique
-  usuarios    Usuario[]
+  id            String         @id
+  nombre        String
+  abreviatura   String         @unique(map: "uq_tipos_documento_abreviatura")
+  participantes Participante[]
+
+  @@map("tipos_documento")
+}
+
+model Participante {
+  id              Int           @id @default(autoincrement())
+  tipoDocumentoId String        @map("tipo_documento_id")
+  numeroDocumento String        @map("numero_documento") @db.VarChar(20)
+  nombres         String
+  apellidos       String
+  correo          String        @unique(map: "uq_participantes_correo")
+  celular         String        @db.VarChar(20)
+  creadoEn        DateTime      @default(now()) @map("creado_en")
+  actualizadoEn   DateTime      @updatedAt @map("actualizado_en")
+  tipoDocumento   TipoDocumento @relation(fields: [tipoDocumentoId], references: [id], map: "fk_participantes_tipo_documento")
+  inscripciones   Inscripcion[]
+  asistencias     Asistencia[]
+
+  @@unique([tipoDocumentoId, numeroDocumento], map: "uq_participantes_documento")
+  @@map("participantes")
+}
+
+model CategoriaInscripcion {
+  id              Int               @id @default(autoincrement())
+  eventoId        Int               @map("evento_id")
+  codigo          String            @db.VarChar(40)
+  nombre          String
+  descripcion     String?
+  caracteristicas Json?
+  precioDesde     Decimal?          @map("precio_desde") @db.Decimal(10, 2)
+  esEstudiantil   Boolean           @default(false) @map("es_estudiantil")
+  orden           Int               @default(0)
+  evento          Evento            @relation(fields: [eventoId], references: [id], map: "fk_categorias_inscripcion_evento")
+  tipos           TipoInscripcion[]
+
+  @@unique([eventoId, codigo], map: "uq_categorias_inscripcion_evento_codigo")
+  @@map("categorias_inscripcion")
 }
 
 model TipoInscripcion {
-  id                 Int                 @id @default(autoincrement())
-  nombre             String
-  precio             Decimal
-  descripcion        String?
-  activo             Boolean             @default(true)
-  badge              String?
-  caracteristicas    Json?
-  value              String?
-  institutionalPrice Decimal
-  tipoPlanId         Int
-  inscripciones      Inscripcion[]
-  tipoPlan           TipoPlanInscripcion @relation(fields: [tipoPlanId], references: [id])
+  id                  Int                  @id @default(autoincrement())
+  categoriaId         Int                  @map("categoria_id")
+  codigo              String               @db.VarChar(80)
+  nombre              String
+  etiqueta            String?
+  descripcion         String?              @db.Text
+  caracteristicas     Json?
+  precio              Decimal              @db.Decimal(10, 2)
+  precioInstitucional Decimal              @map("precio_institucional") @db.Decimal(10, 2)
+  activo              Boolean              @default(true)
+  orden               Int                  @default(0)
+  categoria           CategoriaInscripcion @relation(fields: [categoriaId], references: [id], map: "fk_tipos_inscripcion_categoria")
+  inscripciones       Inscripcion[]
 
-  @@index([tipoPlanId], map: "TipoInscripcion_tipoPlanId_fkey")
-}
-
-model TipoPlanInscripcion {
-  id              Int               @id @default(autoincrement())
-  nombre          String            @unique
-  descripcion     String?
-  caracteristicas Json?
-  precioDesde     Decimal?
-  PlanInscripcion TipoInscripcion[]
+  @@unique([categoriaId, codigo], map: "uq_tipos_inscripcion_categoria_codigo")
+  @@map("tipos_inscripcion")
 }
 
 model Clasificacion {
   id            Int           @id @default(autoincrement())
   nombre        String
   inscripciones Inscripcion[]
+
+  @@map("clasificaciones")
 }
 
 model EstadoInscripcion {
   id            Int           @id @default(autoincrement())
-  nombre        String        @unique
+  codigo        String        @unique(map: "uq_estados_inscripcion_codigo") @db.VarChar(30)
+  nombre        String        @unique(map: "uq_estados_inscripcion_nombre")
   inscripciones Inscripcion[]
+
+  @@map("estados_inscripcion")
 }
 
 model Inscripcion {
-  id                   Int               @id @default(autoincrement())
-  usuarioId            Int
-  tipoInscripcionId    Int?
-  clasificacionId      Int?
-  estadoId             Int
-  creadoEn             DateTime          @default(now())
-  actualizadoEn        DateTime          @updatedAt
-  bancoSeleccionado    String?
-  billeteraDigital     String?
-  descuento            Decimal           @default(0.000000000000000000000000000000)
-  esEmailInstitucional Boolean           @default(false)
-  fechaPago            DateTime
-  file                 String?
-  hasDiscount          Boolean           @default(false)
-  modalidadDeposito    String?
-  numeroOperacion      String            @unique
-  pago                 Decimal
-  tipoOperacion        String?
-  clasificacion        Clasificacion?    @relation(fields: [clasificacionId], references: [id])
-  estado               EstadoInscripcion @relation(fields: [estadoId], references: [id])
-  tipoInscripcion      TipoInscripcion?  @relation(fields: [tipoInscripcionId], references: [id])
-  usuario              Usuario           @relation(fields: [usuarioId], references: [id])
+  id                     Int               @id @default(autoincrement())
+  eventoId               Int               @map("evento_id")
+  participanteId         Int               @map("participante_id")
+  tipoInscripcionId      Int?              @map("tipo_inscripcion_id")
+  clasificacionId        Int?              @map("clasificacion_id")
+  estadoId               Int               @map("estado_id")
+  creadoEn               DateTime          @default(now()) @map("creado_en")
+  actualizadoEn          DateTime          @updatedAt @map("actualizado_en")
+  banco                  String?
+  billeteraDigital       String?           @map("billetera_digital")
+  descuento              Decimal           @default(0) @db.Decimal(10, 2)
+  esCorreoInstitucional  Boolean           @default(false) @map("es_correo_institucional")
+  fechaPago              DateTime          @map("fecha_pago")
+  voucherArchivo         String?           @map("voucher_archivo")
+  tieneDescuento         Boolean           @default(false) @map("tiene_descuento")
+  modalidadPago          String?           @map("modalidad_pago")
+  numeroOperacion        String            @unique(map: "uq_inscripciones_numero_operacion") @map("numero_operacion")
+  monto                  Decimal           @db.Decimal(10, 2)
+  tipoOperacion          String?           @map("tipo_operacion")
+  motivoRechazo          String?           @map("motivo_rechazo") @db.VarChar(500)
+  revisadoPorId          Int?              @map("revisado_por_id")
+  revisadoEn             DateTime?         @map("revisado_en")
+  credencialEnviadaEn    DateTime?         @map("credencial_enviada_en")
+  esEstudianteUndc       Boolean           @default(false) @map("es_estudiante_undc")
+  codigoEstudiante       String?           @map("codigo_estudiante") @db.VarChar(20)
+  verificacionEstudiante Json?             @map("verificacion_estudiante")
+  evento                 Evento            @relation(fields: [eventoId], references: [id], map: "fk_inscripciones_evento")
+  participante           Participante      @relation(fields: [participanteId], references: [id], map: "fk_inscripciones_participante")
+  tipoInscripcion        TipoInscripcion?  @relation(fields: [tipoInscripcionId], references: [id], onDelete: SetNull, map: "fk_inscripciones_tipo_inscripcion")
+  clasificacion          Clasificacion?    @relation(fields: [clasificacionId], references: [id], onDelete: SetNull, map: "fk_inscripciones_clasificacion")
+  estado                 EstadoInscripcion @relation(fields: [estadoId], references: [id], map: "fk_inscripciones_estado")
+  revisadoPor            Administrador?    @relation("InscripcionRevisor", fields: [revisadoPorId], references: [id], onDelete: SetNull, map: "fk_inscripciones_revisado_por")
 
-  @@index([clasificacionId], map: "Inscripcion_clasificacionId_fkey")
-  @@index([estadoId], map: "Inscripcion_estadoId_fkey")
-  @@index([tipoInscripcionId], map: "Inscripcion_tipoInscripcionId_fkey")
-  @@index([usuarioId], map: "Inscripcion_usuarioId_fkey")
+  @@unique([eventoId, participanteId], map: "uq_inscripciones_evento_participante")
+  @@index([participanteId], map: "idx_inscripciones_participante")
+  @@index([tipoInscripcionId], map: "idx_inscripciones_tipo_inscripcion")
+  @@index([clasificacionId], map: "idx_inscripciones_clasificacion")
+  @@index([estadoId], map: "idx_inscripciones_estado")
+  @@index([revisadoPorId], map: "idx_inscripciones_revisado_por")
+  @@map("inscripciones")
 }
 
-model Contact {
-  id        Int      @id @default(autoincrement())
-  firstName String
-  lastName  String
-  email     String
-  subject   String
-  message   String
-  timestamp DateTime @default(now())
-}
+// ─── Actividades y asistencia ────────────────────────────────────────────────
 
-model Evento {
-  id            Int    @id @default(autoincrement())
-  nombre        String    @db.VarChar(150)
-  fecha         DateTime
-  hora_comienzo DateTime
-  hora_termino  DateTime
+model Actividad {
+  id          Int          @id @default(autoincrement())
+  eventoId    Int          @map("evento_id")
+  nombre      String       @db.VarChar(150)
+  fecha       DateTime
+  horaInicio  DateTime     @map("hora_inicio")
+  horaFin     DateTime     @map("hora_fin")
+  evento      Evento       @relation(fields: [eventoId], references: [id], map: "fk_actividades_evento")
+  asistencias Asistencia[]
 
-  asistencias    Asistencia[] @relation("EventoAsistencia")
-
-  @@index([id], map: "evento_pkey")
+  @@index([eventoId], map: "idx_actividades_evento")
+  @@map("actividades")
 }
 
 model Asistencia {
-  id             Int    @id @default(autoincrement())
-  dia_hora       DateTime  @default(now())
-  id_usuario     Int
-  id_evento      Int
+  id             Int          @id @default(autoincrement())
+  registradoEn   DateTime     @default(now()) @map("registrado_en")
+  participanteId Int          @map("participante_id")
+  actividadId    Int          @map("actividad_id")
+  actividad      Actividad    @relation(fields: [actividadId], references: [id], map: "fk_asistencias_actividad")
+  participante   Participante @relation(fields: [participanteId], references: [id], map: "fk_asistencias_participante")
 
-  Evento         Evento    @relation("EventoAsistencia", fields: [id_evento], references: [id])
-  Usuario        Usuario   @relation("UsuarioAsistencia", fields: [id_usuario], references: [id])
-
-  @@index([id_usuario], map: "idx_asistencia_id")
-  @@index([id_evento], map: "idx_asistencia_evento")
-  @@unique([id_usuario, id_evento], map: "uq_asistencia_persona_evento")
+  @@unique([participanteId, actividadId], map: "uq_asistencias_participante_actividad")
+  @@index([actividadId], map: "idx_asistencias_actividad")
+  @@map("asistencias")
 }
-model PaperSubmission {
-  id               String   @id @db.VarChar(36)
-  title            String   @db.VarChar(300)
-  mainAuthor       Json
-  coauthors        Json
-  filename         String   @db.VarChar(255)
-  originalFilename String   @db.VarChar(255)
-  size             Int
-  createdAt        DateTime @default(now())
 
-  @@index([createdAt])
+// ─── Ponencias y contacto ────────────────────────────────────────────────────
+
+model Ponencia {
+  id              String   @id @db.VarChar(36)
+  eventoId        Int      @map("evento_id")
+  titulo          String   @db.VarChar(300)
+  autorPrincipal  Json     @map("autor_principal")
+  coautores       Json
+  archivo         String   @db.VarChar(255)
+  archivoOriginal String   @map("archivo_original") @db.VarChar(255)
+  tamanoBytes     Int      @map("tamano_bytes")
+  creadoEn        DateTime @default(now()) @map("creado_en")
+  evento          Evento   @relation(fields: [eventoId], references: [id], map: "fk_ponencias_evento")
+
+  @@index([eventoId, creadoEn], map: "idx_ponencias_evento_creado")
+  @@map("ponencias")
+}
+
+model MensajeContacto {
+  id        Int      @id @default(autoincrement())
+  eventoId  Int?     @map("evento_id")
+  nombres   String
+  apellidos String
+  correo    String
+  asunto    String
+  mensaje   String   @db.Text
+  leido     Boolean  @default(false)
+  creadoEn  DateTime @default(now()) @map("creado_en")
+  evento    Evento?  @relation(fields: [eventoId], references: [id], onDelete: SetNull, map: "fk_mensajes_contacto_evento")
+
+  @@index([eventoId], map: "idx_mensajes_contacto_evento")
+  @@map("mensajes_contacto")
+}
+
+// ─── Consultas de documentos (spec 003) ──────────────────────────────────────
+
+enum ProveedorConsulta {
+  DECOLECTA
+  APIPERU
+}
+
+enum PeriodoRenovacion {
+  DIARIO
+  MENSUAL
+  ANUAL
+  NINGUNO
+}
+
+enum EstadoTokenConsulta {
+  ACTIVO
+  AGOTADO
+  INVALIDO
+}
+
+enum ResultadoConsulta {
+  EXITO
+  NO_ENCONTRADO
+  AGOTADO
+  TOKEN_INVALIDO
+  ERROR
+  CACHE
+  SIN_TOKENS
+}
+
+enum OrigenConsulta {
+  LANDING
+  PANEL
+  SISTEMA
+}
+
+model TokenConsulta {
+  id                Int                 @id @default(autoincrement())
+  proveedor         ProveedorConsulta
+  nombre            String              @db.VarChar(100)
+  tokenCifrado      String              @map("token_cifrado") @db.Text
+  tokenSufijo       String              @map("token_sufijo") @db.VarChar(8)
+  limiteConsultas   Int?                @map("limite_consultas")
+  consultasUsadas   Int                 @default(0) @map("consultas_usadas")
+  periodoRenovacion PeriodoRenovacion   @default(MENSUAL) @map("periodo_renovacion")
+  fechaRenovacion   DateTime?           @map("fecha_renovacion")
+  prioridad         Int                 @default(100)
+  estado            EstadoTokenConsulta @default(ACTIVO)
+  activo            Boolean             @default(true)
+  ultimoError       String?             @map("ultimo_error") @db.VarChar(500)
+  ultimoUsoEn       DateTime?           @map("ultimo_uso_en")
+  agotadoEn         DateTime?           @map("agotado_en")
+  creadoEn          DateTime            @default(now()) @map("creado_en")
+  actualizadoEn     DateTime            @updatedAt @map("actualizado_en")
+  consultas         ConsultaDocumento[]
+
+  @@index([activo, estado, prioridad], map: "idx_tokens_consulta_seleccion")
+  @@map("tokens_consulta")
+}
+
+model ConsultaDocumento {
+  id              Int                @id @default(autoincrement())
+  tokenConsultaId Int?               @map("token_consulta_id")
+  proveedor       ProveedorConsulta?
+  tipoDocumento   String             @default("dni") @map("tipo_documento") @db.VarChar(10)
+  numeroMascara   String             @map("numero_mascara") @db.VarChar(20)
+  resultado       ResultadoConsulta
+  codigoHttp      Int?               @map("codigo_http")
+  duracionMs      Int?               @map("duracion_ms")
+  origen          OrigenConsulta
+  detalle         String?            @db.VarChar(300)
+  creadoEn        DateTime           @default(now()) @map("creado_en")
+  token           TokenConsulta?     @relation(fields: [tokenConsultaId], references: [id], onDelete: SetNull, map: "fk_consultas_documento_token")
+
+  @@index([creadoEn], map: "idx_consultas_documento_creado")
+  @@index([tokenConsultaId, creadoEn], map: "idx_consultas_documento_token_creado")
+  @@map("consultas_documento")
+}
+
+model PersonaConsultada {
+  id              Int               @id @default(autoincrement())
+  tipoDocumento   String            @default("dni") @map("tipo_documento") @db.VarChar(10)
+  numeroDocumento String            @map("numero_documento") @db.VarChar(20)
+  nombres         String            @db.VarChar(120)
+  apellidoPaterno String            @map("apellido_paterno") @db.VarChar(120)
+  apellidoMaterno String            @map("apellido_materno") @db.VarChar(120)
+  proveedor       ProveedorConsulta
+  consultadoEn    DateTime          @default(now()) @map("consultado_en")
+
+  @@unique([tipoDocumento, numeroDocumento], map: "uq_personas_consultadas_documento")
+  @@map("personas_consultadas")
+}
+
+// ─── Integraciones (spec 005) ────────────────────────────────────────────────
+
+enum TipoIntegracion {
+  DEPORTES_FI
+}
+
+enum EstadoIntegracion {
+  OK
+  ERROR
+}
+
+model IntegracionEvento {
+  id                     Int                @id @default(autoincrement())
+  eventoId               Int                @map("evento_id")
+  tipo                   TipoIntegracion
+  nombre                 String             @db.VarChar(120)
+  urlBase                String             @map("url_base") @db.VarChar(255)
+  tokenCifrado           String             @map("token_cifrado") @db.Text
+  tokenSufijo            String             @map("token_sufijo") @db.VarChar(8)
+  activo                 Boolean            @default(true)
+  ultimoEstado           EstadoIntegracion? @map("ultimo_estado")
+  ultimoError            String?            @map("ultimo_error") @db.VarChar(500)
+  ultimaSincronizacionEn DateTime?          @map("ultima_sincronizacion_en")
+  creadoEn               DateTime           @default(now()) @map("creado_en")
+  actualizadoEn          DateTime           @updatedAt @map("actualizado_en")
+  evento                 Evento             @relation(fields: [eventoId], references: [id], onDelete: Cascade, map: "fk_integraciones_evento_evento")
+
+  @@index([eventoId], map: "idx_integraciones_evento_evento")
+  @@map("integraciones_evento")
 }
