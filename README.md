@@ -1,144 +1,53 @@
-# 🎓 Inscripción Congreso – Backend  
+# Backend CIISIC — API multi-evento
 
-[![CI](https://github.com/PIEROLS15/inscripcion-congreso-backend/actions/workflows/ci.yml/badge.svg)](https://github.com/PIEROLS15/inscripcion-congreso-backend/actions/workflows/ci.yml)  
-![Node.js](https://img.shields.io/badge/node-%3E%3D20-green)  
-![TypeScript](https://img.shields.io/badge/typescript-5.x-blue)  
-![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
+API del Congreso Internacional de Ingeniería de Sistemas e Investigación Científica (UNDC):
+eventos, inscripciones, tipos de inscripción, actividades y asistencia, ponencias, consultas
+de DNI con pool de tokens, verificación de estudiantes UNDC e integración con deportes-fi.
 
-Backend modular construido con **Express + TypeScript**. 
-Incluye validaciones con **Yup**, linting con **ESLint/Prettier**, y CI con **GitHub Actions**.
+- **Stack**: Node 22 · Express 5 · TypeScript · Prisma 6 · MySQL 8 · yup · Jest
+- **Arquitectura y contratos entre sistemas**: [`docs/arquitectura-ecosistema.md`](docs/arquitectura-ecosistema.md)
+- **Especificaciones (SDD con GitHub Spec Kit)**: [`specs/`](specs) y la constitución en
+  [`.specify/memory/constitution.md`](.specify/memory/constitution.md)
 
----
+| Spec | Tema |
+|---|---|
+| [001](specs/001-esquema-bd-espanol) | Esquema de BD en español (migración in-place, runbook) |
+| [002](specs/002-multi-evento) | Multi-evento, API pública y administrativa, compatibilidad |
+| [003](specs/003-consultas-dni) | Consultas DNI (Decolecta, apiperu) con rotación de tokens |
+| [004](specs/004-verificacion-estudiante) | Verificación de estudiantes con API_UNDC |
+| [005](specs/005-integracion-deportes) | Integración con deportes-fi (Semana Sistémica) |
 
-## 🚀 Tecnologías principales
-
-- [Node.js 20+](https://nodejs.org/) - Entorno de ejecución para JavaScript/TypeScript en el servidor
-- [Express](https://expressjs.com/) – Framework minimalista para construir APIs en Node.js
-- [TypeScript](https://www.typescriptlang.org/) - Superset de JavaScript
-- [Yup](https://github.com/jquense/yup) – validaciones de inputs  
-- [ESLint](https://eslint.org/) – reglas de estilo 
-- [GitHub Actions](https://docs.github.com/en/actions) – CI/CD
-
----
-
-## 📂 Estructura del proyecto
+## Desarrollo local
 
 ```bash
-config/                      # Configuración (ej: variables de entorno)
-prisma/                      # ORM para la base de datos
-├── index.ts                 # Punto de entrada para inicializar la conexión
-├── config.ts                # Lee variables de entorno y define la config
-├── migrations/              # Scripts de migraciones
-└── seeders/                 # Datos iniciales (usuarios de prueba, roles, etc.)
-src/
-├── api/                     # Módulos de negocio (cada API independiente)
-│   └── hello/               # Ejemplo de API
-│       ├── controllers/     # Controladores
-│       ├── routes/          # Definición de rutas estilo
-│       └── services/        # Lógica de negocio
-├── database/                # Configuración y utilidades de base de datos
-├── middlewares/             # Middlewares globales (errorHandler, validate, etc.)
-├── types/                   # Tipos y utilidades compartidas
-├── app.ts                   # Configuración de la app Express
-└── server.ts                # Punto de entrada del servidor
-tests/                       # Pruebas unitarias
-uploads/                     # Almacenamiento de vouchers
-```
-
-## 🛠️ Instalación
-
-### Prerequisitos
-
-Asegúrate de tener [Node](https://nodejs.org/es/) instalado en tu sistema:
-
-```bash
-node -v
- ```
-
-### Configuración del proyecto
-
-1. **Clona el repositorio:**
-   ```bash
-   git clone https://github.com/PIEROLS15/inscripcion-congreso-backend.git
-   cd inscripcion-congreso-backend
-   ```
-
-2. **Instala las dependencias:**
-   ```bash
-   npm install
-   
-3. **Levantar servicios de mysql:**
-   ```bash
-   Debes crear la base de datos en mysql, por ejemplo con el nombre: congreso_inscripcion_db
-   
-4. **Archivo .env:**
-   ```bash
-   DATABASE_URL="mysql://root:@localhost:3306/congreso_inscripcion_db"
-   
-5. **Ejecutar la creación de tablas:**
-   ```bash
-   npx prisma migrate dev
-
-6. **Ejecutar los datos semillas:**
-   ```bash
-   npm run seed
-
-## 🚀 Desarrollo
-
-### Servidor de desarrollo
-
-Inicia el servidor de desarrollo en `http://localhost:3010`:
-
-```bash
+cp .env.example .env          # completar DATABASE_URL, JWT_SECRET, etc.
+npm ci
+npx prisma migrate deploy     # o `npx prisma migrate dev` en una BD de desarrollo
+npm run seed                  # catálogos (idempotente); `npm run seed -- --demo` agrega tipos de ejemplo
+npm run bootstrap:admin:dev   # SuperAdmin inicial (BOOTSTRAP_ADMIN_* en .env)
 npm run dev
 ```
 
-### 🐳 Docker (Entorno Local)
+Calidad: `npm run lint`, `npx tsc --noEmit`, `npm test`.
 
-Para ejecutar el proyecto usando Docker:
+## Estructura
 
-1. **Construir la imagen Docker:**
-   ```bash
-   docker build -t inscripcion-backend .
-   ```
+```
+config/env.ts                 variables de entorno validadas
+prisma/schema.prisma          modelos en español (@@map / @map)
+prisma/migrations/            migraciones (las de renombrado están escritas a mano)
+prisma/preflight/             verificaciones previas y conteos para producción
+src/core/                     errores, fechas (Lima), cifrado, plantillas, paginación
+src/middlewares/              auth por rol, validación, uploads, rate limits, errores
+src/api/<módulo>/             controllers · routes · services · validation
+  event · registration-type · inscription · activity · participant · papers · contact
+  document-lookup · student-verification · integration · admin · catalog
+tests/                        Jest (*.test.ts)
+```
 
-2. **Ejecutar el contenedor:**
-   ```bash
-   docker run -d -p 3000:3010 --env-file .env --name inscripcion-backend-container inscripcion-backend
-   ```
+## Despliegue
 
-3. **Verificar que el contenedor esté ejecutándose:**
-   ```bash
-   docker ps
-   ```
-
-4. **Ver los logs del contenedor:**
-   ```bash
-   docker logs inscripcion-backend-container
-   ```
-
-5. **Detener y eliminar el contenedor:**
-   ```bash
-   docker stop inscripcion-backend-container
-   docker rm inscripcion-backend-container
-   ```
-
-El servidor estará disponible en `http://localhost:3000` y se conectará a la base de datos usando las variables del archivo `.env`.
-
-## 🤝 Contribución
-
-1. Fork el proyecto
-2. Crea una rama para tu feature (`git checkout -b feature/nueva-api`)
-3. Agrega tu módulo dentro de src/api/ (`ejemplo: user/`).
-4. Ejecuta lint antes de hacer commit: npm run lint:fix.
-5. Commit tus cambios (`git commit -m 'Add new api'`)
-6. Push a la rama (`git push origin feature/nueva-api`)
-7. Abre un Pull Request
-
-## 📄 Licencia
-
-Este proyecto está bajo la licencia GPL. Ver `LICENSE` para más detalles.
-
----
-
-Desarrollado por [PIEROLS15](https://github.com/PIEROLS15) [gians96](https://github.com/gians96)para el VII CIISIC
+Ver el runbook de `specs/001-esquema-bd-espanol/plan.md`: respaldo → preflight →
+`npx prisma migrate deploy` → conteos → iniciar la nueva versión. Variables nuevas
+obligatorias en producción: `SECRETS_ENCRYPTION_KEY`; recomendadas: `UNDC_API_URL`,
+`UNDC_API_KEY`, `INTEGRATIONS_ALLOWED_HOSTS`.

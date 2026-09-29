@@ -1,26 +1,69 @@
 import * as yup from 'yup'
+import { fechaLima, REGEX_FECHA } from '../../core/fechas'
+import { ESTADOS_INSCRIPCION } from '../../core/catalogos'
 
-export const createInscriptionSchema = yup.object({
-  usuario: yup.object({
-    idTipoDocumentoId: yup.string().oneOf(['dni', 'ce']).required(),
-    dni: yup.string().matches(/^\d{8,9}$/).required(),
+const numeroDocumento = () => yup.string().trim().required().when('tipoDocumento', {
+    is: 'dni',
+    then: (schema) => schema.matches(/^\d{8}$/, 'El DNI debe tener 8 dígitos'),
+    otherwise: (schema) => schema.matches(/^[A-Za-z0-9]{9,12}$/, 'El carné de extranjería debe tener entre 9 y 12 caracteres'),
+})
+
+export const participanteSchema = yup.object({
+    tipoDocumento: yup.string().oneOf(['dni', 'ce']).required(),
+    numeroDocumento: numeroDocumento(),
     nombres: yup.string().trim().min(2).max(120).required(),
     apellidos: yup.string().trim().min(2).max(120).required(),
-    correoElectronico: yup.string().trim().lowercase().email().required(),
-    celular: yup.string().matches(/^\d{9}$/).required(),
-  }).required(),
-  tipoInscripcionId: yup.number().integer().positive().required(),
-  clasificacionId: yup.number().integer().positive().nullable().optional(),
-  estadoId: yup.number().integer().positive().default(1),
-  modalidadDeposito: yup.string().oneOf(['banco', 'billetera']).required(),
-  bancoSeleccionado: yup.string().trim().max(80).nullable().optional(),
-  tipoOperacion: yup.string().trim().max(80).nullable().optional(),
-  billeteraDigital: yup.string().trim().max(80).nullable().optional(),
-  numeroOperacion: yup.string().trim().min(3).max(100).required(),
-  fechaPago: yup.date().max(new Date()).required(),
-  pago: yup.number().min(0).required(),
-  esEmailInstitucional: yup.boolean().default(false),
-  hasDiscount: yup.boolean().default(false),
-  descuento: yup.number().min(0).default(0),
-  file: yup.string().optional(),
+    correo: yup.string().trim().lowercase().email().max(191).required(),
+    celular: yup.string().trim().matches(/^\+?\d{9,15}$/, 'El celular debe tener entre 9 y 15 dígitos').required(),
+})
+
+/** Fecha de pago `YYYY-MM-DD` no posterior a hoy (hora de Lima), evaluada en cada solicitud. */
+const fechaPago = () => yup.string().trim().matches(REGEX_FECHA, 'Use el formato AAAA-MM-DD').required()
+    .test('no-futura', 'La fecha de pago no puede ser futura', (value) => !value || value <= fechaLima())
+
+export const crearInscripcionSchema = yup.object({
+    participante: participanteSchema.required(),
+    tipoInscripcionId: yup.number().integer().positive().required(),
+    clasificacionId: yup.number().integer().positive().nullable(),
+    modalidadPago: yup.string().oneOf(['banco', 'billetera']).required(),
+    banco: yup.string().trim().lowercase().max(40).nullable(),
+    tipoOperacion: yup.string().oneOf(['directo', 'interbancario']).nullable(),
+    billeteraDigital: yup.string().trim().lowercase().max(40).nullable(),
+    numeroOperacion: yup.string().trim().min(3).max(100).required(),
+    fechaPago: fechaPago(),
+    verificacionToken: yup.string().trim().max(4000).nullable(),
+}).required()
+
+export type CrearInscripcionInput = yup.InferType<typeof crearInscripcionSchema>
+
+/** Cuerpo de la ruta legacy `POST /v1/inscription` (landing anterior). */
+export const inscripcionLegacySchema = yup.object({
+    usuario: yup.object({
+        idTipoDocumentoId: yup.string().oneOf(['dni', 'ce']).required(),
+        dni: yup.string().trim().matches(/^\d{8,9}$/).required(),
+        nombres: yup.string().trim().min(2).max(120).required(),
+        apellidos: yup.string().trim().min(2).max(120).required(),
+        correoElectronico: yup.string().trim().lowercase().email().required(),
+        celular: yup.string().trim().matches(/^\d{9}$/).required(),
+    }).required(),
+    tipoInscripcionId: yup.number().integer().positive().required(),
+    clasificacionId: yup.number().integer().positive().nullable(),
+    modalidadDeposito: yup.string().oneOf(['banco', 'billetera']).required(),
+    bancoSeleccionado: yup.string().trim().max(80).nullable(),
+    tipoOperacion: yup.string().trim().max(80).nullable(),
+    billeteraDigital: yup.string().trim().max(80).nullable(),
+    numeroOperacion: yup.string().trim().min(3).max(100).required(),
+    fechaPago: yup.date().required().test('no-futura', 'La fecha de pago no puede ser futura', (value) => !value || value.getTime() <= Date.now() + 24 * 60 * 60 * 1000),
+}).required()
+
+export type InscripcionLegacyInput = yup.InferType<typeof inscripcionLegacySchema>
+
+export const cambiarEstadoSchema = yup.object({
+    estado: yup.string().oneOf([...ESTADOS_INSCRIPCION]).required(),
+    motivo: yup.string().trim().max(500).nullable()
+        .when('estado', { is: 'RECHAZADO', then: (schema) => schema.required('Indique el motivo del rechazo').min(3) }),
+}).required()
+
+export const cambiarEstadoLegacySchema = yup.object({
+    estadoId: yup.number().integer().min(1).max(5).required(),
 }).required()

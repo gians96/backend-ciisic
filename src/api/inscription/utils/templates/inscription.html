@@ -237,17 +237,16 @@
 
       <div class="info-grid">
         <div class="info-box">
-          <div class="info-title">Datos del congreso:</div>
+          <div class="info-title">Datos del evento:</div>
           <div class="info-content">
             <h3>
-              VIII Congreso Internacional de Ingeniería de Sistemas e
-              Investigación Científica
+              {{EVENTO_NOMBRE}}
             </h3>
             <div class="info-item">
-              <strong>Número de contacto:</strong> +51 949 026 908
+              <strong>Número de contacto:</strong> {{EVENTO_TELEFONO}}
             </div>
             <div class="info-item">
-              <strong>Correo de contacto:</strong> congreso@undc.edu.pe
+              <strong>Correo de contacto:</strong> {{EVENTO_CORREO}}
             </div>
           </div>
         </div>
@@ -256,9 +255,10 @@
           <div class="info-title">Datos personales:</div>
           <div class="info-content">
             <h3>{{NOMBRES}} {{APELLIDOS}}</h3>
-            <div class="info-item"><strong>DNI:</strong> {{DNI}}</div>
+            <div class="info-item"><strong>{{TIPO_DOCUMENTO}}:</strong> {{NUMERO_DOCUMENTO}}</div>
             <div class="info-item"><strong>Celular:</strong> {{CELULAR}}</div>
             <div class="info-item"><strong>Correo:</strong> {{CORREO}}</div>
+            <div class="info-item"><strong>Inscripción:</strong> {{TIPO_INSCRIPCION}}</div>
           </div>
         </div>
       </div>
@@ -301,7 +301,7 @@
         <strong>Nota:</strong>
         <p>
           Este documento es generado mediante la plataforma virtual de
-          inscripción al VIII CIISIC de la Facultad de Ingeniería, esta copia es
+          inscripción al {{EVENTO_NOMBRE_CORTO}} de la Facultad de Ingeniería, esta copia es
           considerada no controlada.
         </p>
       </div>

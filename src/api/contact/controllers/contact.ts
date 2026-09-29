@@ -1,63 +1,48 @@
 import { Request, Response } from 'express'
-import { getContacts, getContactById, createContact, deleteContact } from '../services/contact'
+import { idParam } from '../../../core/http-error'
+import { parsePagination } from '../../../core/pagination'
+import { obtenerEventoPorId, obtenerEventoPrincipal, obtenerEventoPublico } from '../../event/services/public-event'
+import * as service from '../services/contact'
 
-export async function list(req: Request, res: Response) {
-    try {
-        const data = await getContacts()
-        return res.status(200).json(data)
-    } catch (error) {
-        return res.status(500).json({
-            error: 'Error inesperado',
-            details: (error as Error).message,
-        })
-    }
+export async function publicCreate(req: Request, res: Response) {
+    const evento = await obtenerEventoPublico(String(req.params.codigo))
+    res.status(201).json({ success: true, data: await service.crearMensaje(evento.id, req.body) })
 }
 
+/** Legacy: `{ firstName, lastName, email, subject, message }` → evento principal. */
 export async function create(req: Request, res: Response) {
-    try {
-        const data = req.body
-        const classification = await createContact(data)
-        return res.status(201).json(classification)
-    } catch (error) {
-        return res.status(400).json({
-            error: 'Error en la creación del contacto',
-            details: (error as Error).message,
-        })
-    }
+    const evento = await obtenerEventoPrincipal().catch(() => null)
+    const { firstName, lastName, email, subject, message } = req.body
+    const creado = await service.crearMensaje(evento?.id ?? null, { nombres: firstName, apellidos: lastName, correo: email, asunto: subject, mensaje: message })
+    res.status(201).json({ success: true, data: creado })
+}
+
+function leidoDe(query: Request['query']): boolean | undefined {
+    if (query.leido === 'true') return true
+    if (query.leido === 'false') return false
+    return undefined
+}
+
+export async function listByEvent(req: Request, res: Response) {
+    const evento = await obtenerEventoPorId(idParam(req.params.eventId, 'eventId'))
+    res.json({ success: true, ...(await service.listarMensajes(evento.id, leidoDe(req.query), parsePagination(req.query))) })
+}
+
+/** Legacy: `GET /v1/contact` (todos los mensajes). */
+export async function list(req: Request, res: Response) {
+    const { data } = await service.listarMensajes(undefined, undefined, parsePagination(req.query, 100, 1000))
+    res.json(data)
 }
 
 export async function find(req: Request, res: Response) {
-    try {
-        const id = parseInt(req.params.id, 10)
-        if (isNaN(id)) {
-            return res.status(400).json({ error: 'El id debe ser un número válido' })
-        }
-        const classification = await getContactById(id)
-        if (!classification) {
-            return res.status(404).json({ error: `Contacto con id ${id} no encontrado` })
-        }
-        return res.json(classification)
-    } catch (error) {
-        return res.status(500).json({
-            error: 'Error al obtener el contacto',
-            details: (error as Error).message,
-        })
-    }
+    res.json(await service.obtenerMensaje(idParam(req.params.id)))
 }
 
+export async function update(req: Request, res: Response) {
+    res.json({ success: true, data: await service.marcarLeido(idParam(req.params.id), req.body.leido) })
+}
 
 export async function remove(req: Request, res: Response) {
-    try {
-        const id = parseInt(req.params.id, 10)
-        if (isNaN(id)) {
-            return res.status(400).json({ error: 'El id debe ser un número válido' })
-        }
-        await deleteContact(id)
-        return res.status(200).json({ message: 'Contacto eliminado correctamente' })
-    } catch (error) {
-        return res.status(500).json({
-            error: 'Error al eliminar el contacto',
-            details: (error as Error).message,
-        })
-    }
+    await service.eliminarMensaje(idParam(req.params.id))
+    res.json({ success: true, data: null })
 }

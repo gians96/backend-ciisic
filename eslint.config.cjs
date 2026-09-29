@@ -27,7 +27,10 @@ module.exports = [
             'semi': ['error', 'never'],
             // 'indent': ['error', 2, { SwitchCase: 1 }],
 
-            // typescript
+            // typescript (TypeScript ya valida variables no definidas; las reglas base
+            // no entienden tipos y dan falsos positivos en firmas de interfaces)
+            'no-undef': 'off',
+            'no-unused-vars': 'off',
             '@typescript-eslint/no-explicit-any': 'error',
             '@typescript-eslint/no-unused-vars': ['warn'],
         },

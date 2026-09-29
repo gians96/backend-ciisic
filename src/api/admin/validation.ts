@@ -1,16 +1,32 @@
 import * as yup from 'yup'
+import { ROLES } from '../../core/catalogos'
 
+/** Acepta `correo` o el campo anterior `correoElectronico` (landing actual). */
 export const loginSchema = yup.object({
-  correoElectronico: yup.string().trim().lowercase().email().required(),
-  contrasena: yup.string().required(),
-}).required()
+    correo: yup.string().trim().lowercase().email(),
+    correoElectronico: yup.string().trim().lowercase().email(),
+    contrasena: yup.string().max(200).required(),
+}).test('correo', 'El correo es obligatorio', (value) => Boolean(value?.correo || value?.correoElectronico)).required()
+
+const campos = {
+    nombres: yup.string().trim().min(2).max(100),
+    apellidos: yup.string().trim().min(2).max(100),
+    correo: yup.string().trim().lowercase().email().max(191),
+    contrasena: yup.string().min(12).max(128),
+    rolCodigo: yup.string().oneOf([...ROLES]),
+    activo: yup.boolean(),
+}
 
 export const createAdminSchema = yup.object({
-  nombres: yup.string().trim().min(2).max(100).required(),
-  apellidos: yup.string().trim().min(2).max(100).required(),
-  correoElectronico: yup.string().trim().lowercase().email().required(),
-  contrasena: yup.string().min(12).max(128).required(),
-  rolId: yup.number().integer().oneOf([1, 2]).default(2),
+    ...campos,
+    nombres: campos.nombres.required(),
+    apellidos: campos.apellidos.required(),
+    correo: campos.correo.required(),
+    contrasena: campos.contrasena.required(),
 }).required()
 
-export const updateAdminSchema = createAdminSchema.partial()
+// Sin valores por defecto: una actualización parcial nunca cambia el rol implícitamente
+export const updateAdminSchema = yup.object(campos).required()
+
+export type CreateAdminInput = yup.InferType<typeof createAdminSchema>
+export type UpdateAdminInput = yup.InferType<typeof updateAdminSchema>

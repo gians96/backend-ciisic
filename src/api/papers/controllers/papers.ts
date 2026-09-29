@@ -1,50 +1,68 @@
-import type { Request, Response, NextFunction } from 'express'
+import type { Request, Response } from 'express'
 import { ValidationError } from 'yup'
 import path from 'path'
+import { badRequest, idParam, notFound, unprocessable } from '../../../core/http-error'
+import { obtenerEventoPorId, obtenerEventoPrincipal, obtenerEventoPublico } from '../../event/services/public-event'
 import { paperSchema } from '../validation'
 import { hasPdfSignature } from '../upload'
-import { createPaper, findPaper, listPapers, papersDirectory } from '../services/papers'
+import { createPaper, findPaper, listPapers, papersDirectory, PAPERS_POR_PAGINA } from '../services/papers'
 
-export async function create(req: Request, res: Response, next: NextFunction) {
-  if (!req.file || !hasPdfSignature(req.file.buffer)) {
-    res.status(422).json({ success: false, code: 'INVALID_PDF', message: 'Adjunta un archivo PDF válido y no vacío.' })
-    return
-  }
-  try {
-    const raw = JSON.parse(typeof req.body.data === 'string' ? req.body.data : '')
-    const data = await paperSchema.validate(raw, { abortEarly: false, stripUnknown: true })
-    const receipt = await createPaper(data, req.file)
-    res.status(201).json({ success: true, data: receipt })
-  } catch (error) {
-    if (error instanceof SyntaxError || error instanceof ValidationError) {
-      res.status(422).json({ success: false, code: 'INVALID_PAPER', message: 'Completa título, nombres, apellidos y universidad de cada autor. Se permiten hasta tres coautores.' })
-      return
+async function registrar(eventoId: number, req: Request) {
+    if (!req.file || !hasPdfSignature(req.file.buffer)) throw unprocessable('INVALID_PDF', 'Adjunta un archivo PDF válido y no vacío.')
+    try {
+        const raw = JSON.parse(typeof req.body.data === 'string' ? req.body.data : '')
+        const data = await paperSchema.validate(raw, { abortEarly: false, stripUnknown: true })
+        return await createPaper(eventoId, data, req.file)
+    } catch (error) {
+        if (error instanceof SyntaxError || error instanceof ValidationError) {
+            throw unprocessable('INVALID_PAPER', 'Completa título, nombres, apellidos y universidad de cada autor. Se permiten hasta tres coautores.')
+        }
+        throw error
     }
-    next(error)
-  }
 }
 
-export async function list(req: Request, res: Response, next: NextFunction) {
-  const page = Number(req.query.page || 1)
-  if (!Number.isSafeInteger(page) || page < 1 || page > 100000) {
-    res.status(400).json({ success: false, message: 'Página inválida.' })
-    return
-  }
-  try { res.json({ success: true, data: await listPapers(page), page, pageSize: 50 }) } catch (error) { next(error) }
+export async function publicCreate(req: Request, res: Response) {
+    const evento = await obtenerEventoPublico(String(req.params.codigo))
+    res.status(201).json({ success: true, data: await registrar(evento.id, req) })
 }
 
-export async function download(req: Request, res: Response, next: NextFunction) {
-  const id = String(req.params.id)
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
-    res.status(400).json({ success: false, message: 'Código de recepción inválido.' })
-    return
-  }
-  try {
+/** Legacy: `POST /v1/papers` asociado al evento principal. */
+export async function create(req: Request, res: Response) {
+    const evento = await obtenerEventoPrincipal()
+    res.status(201).json({ success: true, data: await registrar(evento.id, req) })
+}
+
+function pagina(req: Request): number {
+    const page = Number(req.query.page || 1)
+    if (!Number.isSafeInteger(page) || page < 1 || page > 100000) throw badRequest('INVALID_PAGE', 'Página inválida.')
+    return page
+}
+
+export async function listByEvent(req: Request, res: Response) {
+    const evento = await obtenerEventoPorId(idParam(req.params.eventId, 'eventId'))
+    const page = pagina(req)
+    const { total, ponencias } = await listPapers(evento.id, page)
+    res.json({ success: true, data: ponencias, meta: { page, pageSize: PAPERS_POR_PAGINA, total } })
+}
+
+/** Legacy: `GET /v1/papers` (evento principal). */
+export async function list(req: Request, res: Response) {
+    const evento = await obtenerEventoPrincipal()
+    const page = pagina(req)
+    const { ponencias } = await listPapers(evento.id, page)
+    res.json({ success: true, data: ponencias, page, pageSize: PAPERS_POR_PAGINA })
+}
+
+export async function download(req: Request, res: Response) {
+    const id = String(req.params.id)
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) throw badRequest('INVALID_ID', 'Código de recepción inválido.')
     const paper = await findPaper(id)
-    if (!paper) { res.status(404).json({ success: false, message: 'Paper no encontrado.' }); return }
+    if (!paper) throw notFound('PAPER_NOT_FOUND', 'Ponencia no encontrada.')
     res.setHeader('Cache-Control', 'private, no-store')
-    res.download(path.join(papersDirectory, path.basename(paper.filename)), `paper-${paper.id}.pdf`, error => {
-      if (error && !res.headersSent) next(Object.assign(error, { statusCode: 404, message: 'Archivo no encontrado.' }))
+    await new Promise<void>((resolve, reject) => {
+        res.download(path.join(papersDirectory, path.basename(paper.archivo)), `ponencia-${paper.id}.pdf`, (error) => {
+            if (error && !res.headersSent) reject(notFound('FILE_NOT_FOUND', 'Archivo no encontrado.'))
+            else resolve()
+        })
     })
-  } catch (error) { next(error) }
 }

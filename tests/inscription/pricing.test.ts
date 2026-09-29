@@ -1,0 +1,31 @@
+import { calcularPrecio, esCorreoInstitucional } from '../../src/api/inscription/services/pricing'
+
+const base = { precio: 120, precioInstitucional: 100 }
+
+describe('reglas de precio', () => {
+    it('categoría estudiantil: precio UNDC solo con verificación', () => {
+        expect(calcularPrecio({ ...base, esEstudiantil: true, estudianteUndcVerificado: true, correoInstitucional: true }))
+            .toEqual({ monto: 100, descuento: 20, aplicaInstitucional: true })
+        expect(calcularPrecio({ ...base, esEstudiantil: true, estudianteUndcVerificado: false, correoInstitucional: true }))
+            .toEqual({ monto: 120, descuento: 0, aplicaInstitucional: false })
+    })
+
+    it('estudiante externo paga el precio regular', () => {
+        expect(calcularPrecio({ ...base, esEstudiantil: true, estudianteUndcVerificado: false, correoInstitucional: false }).monto).toBe(120)
+    })
+
+    it('categoría general: precio institucional por dominio de correo', () => {
+        expect(calcularPrecio({ precio: 140, precioInstitucional: 120, esEstudiantil: false, estudianteUndcVerificado: false, correoInstitucional: true }).monto).toBe(120)
+        expect(calcularPrecio({ precio: 140, precioInstitucional: 120, esEstudiantil: false, estudianteUndcVerificado: false, correoInstitucional: false }).monto).toBe(140)
+    })
+
+    it('modo legacy conserva la regla histórica por dominio', () => {
+        expect(calcularPrecio({ ...base, esEstudiantil: true, estudianteUndcVerificado: false, correoInstitucional: true, legacy: true }).monto).toBe(100)
+    })
+
+    it('reconoce el dominio institucional sin distinguir mayúsculas', () => {
+        expect(esCorreoInstitucional('2020123456@UNDC.edu.pe', 'undc.edu.pe')).toBe(true)
+        expect(esCorreoInstitucional('alguien@undc.edu.pe.evil.com', 'undc.edu.pe')).toBe(false)
+        expect(esCorreoInstitucional('sin-arroba', 'undc.edu.pe')).toBe(false)
+    })
+})

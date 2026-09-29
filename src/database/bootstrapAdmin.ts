@@ -2,26 +2,30 @@ import 'dotenv/config'
 import bcrypt from 'bcryptjs'
 import { prisma } from './prisma'
 
+/** Crea el SuperAdmin inicial si no existe (no modifica uno existente). */
 async function bootstrapAdmin() {
-    const correoElectronico = process.env.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase()
+    const correo = process.env.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase()
     const contrasena = process.env.BOOTSTRAP_ADMIN_PASSWORD
-    if (!correoElectronico || !contrasena || contrasena.length < 12) {
+    if (!correo || !contrasena || contrasena.length < 12) {
         throw new Error('BOOTSTRAP_ADMIN_EMAIL y BOOTSTRAP_ADMIN_PASSWORD (mínimo 12 caracteres) son obligatorios')
     }
 
-    const existing = await prisma.administradores.findUnique({ where: { correoElectronico } })
+    const existing = await prisma.administrador.findUnique({ where: { correo } })
     if (existing) {
         console.log('El administrador inicial ya existe; no se modificó su contraseña.')
         return
     }
 
-    await prisma.administradores.create({
+    const rol = await prisma.rol.findUnique({ where: { codigo: 'SUPERADMIN' } })
+    if (!rol) throw new Error('No existe el rol SUPERADMIN; ejecute primero las migraciones y los seeds')
+
+    await prisma.administrador.create({
         data: {
             nombres: process.env.BOOTSTRAP_ADMIN_NAMES || 'Administrador',
             apellidos: process.env.BOOTSTRAP_ADMIN_SURNAMES || 'CIISIC',
-            correoElectronico,
-            contrasena: await bcrypt.hash(contrasena, 12),
-            rolId: 1,
+            correo,
+            contrasenaHash: await bcrypt.hash(contrasena, 12),
+            rolId: rol.id,
         },
     })
     console.log('Administrador inicial creado correctamente.')

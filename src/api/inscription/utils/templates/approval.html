@@ -131,11 +131,11 @@
                 class="paragraph"
               >
                 <h3 style="margin-bottom: 15px; color: #333333">
-                  Hola {{userName}}, tu inscripción fue aprobada 🎉
+                  Hola {{NOMBRE}}, tu inscripción fue aprobada 🎉
                 </h3>
                 <p style="margin: 0; padding: 0">
                   Este mensaje se genera automáticamente para notificar que su
-                  pago al VIII CIISIC se ha validado exitosamente.
+                  pago al {{EVENTO_NOMBRE_CORTO}} se ha validado exitosamente.
                 </p>
               </td>
             </tr>
@@ -343,7 +343,7 @@
               >
                 ¿Tienes consultas?
                 <a
-                  href="mailto:congreso@undc.edu.pe"
+                  href="mailto:{{EVENTO_CORREO}}"
                   target="_blank"
                   style="
                     color: #127db3;
@@ -354,7 +354,7 @@
                     text-decoration: none;
                   "
                 >
-                  congreso@undc.edu.pe
+                  {{EVENTO_CORREO}}
                 </a>
               </td>
             </tr>
@@ -396,8 +396,7 @@
                 "
               >
                 <p style="margin: 0; padding: 0">
-                  © 2026 VIII CIISIC - Congreso Internacional de Ingeniería de
-                  Sistemas
+                  © {{ANIO}} {{EVENTO_NOMBRE_CORTO}} · {{EVENTO_NOMBRE}}
                 </p>
               </td>
             </tr>
