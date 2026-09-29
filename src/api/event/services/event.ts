@@ -1,13 +1,16 @@
 import { Prisma } from '@prisma/client'
 import type { Evento } from '@prisma/client'
 import { prisma } from '../../../database/prisma'
-import { conflict } from '../../../core/http-error'
+import { conflict, unprocessable } from '../../../core/http-error'
 import { aColumnaFecha, fechaLima, fechaSoloDia } from '../../../core/fechas'
 import { monto } from '../../../core/catalogos'
 import { obtenerEventoPorId } from './public-event'
 import type { ActualizarEventoInput, CrearEventoInput } from '../validation'
 
-export function aEventoAdmin(evento: Evento, totalInscripciones?: number) {
+type CredencialResumen = { id: number, nombre: string, remitenteCorreo: string }
+const conCredencial = { credencialCorreo: { select: { id: true, nombre: true, remitenteCorreo: true } } } satisfies Prisma.EventoInclude
+
+export function aEventoAdmin(evento: Evento & { credencialCorreo?: CredencialResumen | null }, totalInscripciones?: number) {
     return {
         id: evento.id,
         codigo: evento.codigo,
@@ -28,6 +31,8 @@ export function aEventoAdmin(evento: Evento, totalInscripciones?: number) {
         remitenteNombre: evento.remitenteNombre,
         asuntoAprobacion: evento.asuntoAprobacion,
         datosPago: evento.datosPago ?? null,
+        credencialCorreoId: evento.credencialCorreoId,
+        credencialCorreo: evento.credencialCorreo ?? null,
         creadoEn: evento.creadoEn,
         actualizadoEn: evento.actualizadoEn,
         ...(totalInscripciones !== undefined ? { totalInscripciones } : {}),
@@ -54,7 +59,15 @@ function datosEvento(input: ActualizarEventoInput): Prisma.EventoUncheckedUpdate
     if (input.remitenteNombre !== undefined) data.remitenteNombre = input.remitenteNombre
     if (input.asuntoAprobacion !== undefined) data.asuntoAprobacion = input.asuntoAprobacion
     if (input.datosPago !== undefined) data.datosPago = input.datosPago === null ? Prisma.JsonNull : input.datosPago as Prisma.InputJsonValue
+    if (input.credencialCorreoId !== undefined) data.credencialCorreoId = input.credencialCorreoId
     return data
+}
+
+async function verificarCredencialCorreo(id: number | null | undefined) {
+    if (!id) return
+    if (!await prisma.credencialCorreo.findUnique({ where: { id } })) {
+        throw unprocessable('EMAIL_CREDENTIAL_NOT_FOUND', 'La credencial de correo no existe.', { credencialCorreoId: 'Seleccione una credencial existente' })
+    }
 }
 
 async function verificarCodigoLibre(codigo: string, exceptoId?: number) {
@@ -65,19 +78,23 @@ async function verificarCodigoLibre(codigo: string, exceptoId?: number) {
 export async function listarEventos() {
     const eventos = await prisma.evento.findMany({
         orderBy: [{ fechaInicio: 'desc' }, { id: 'desc' }],
-        include: { _count: { select: { inscripciones: true } } },
+        include: { _count: { select: { inscripciones: true } }, ...conCredencial },
     })
     return eventos.map((evento) => aEventoAdmin(evento, evento._count.inscripciones))
 }
 
 export async function obtenerEvento(id: number) {
-    const evento = await obtenerEventoPorId(id)
-    const total = await prisma.inscripcion.count({ where: { eventoId: id } })
+    await obtenerEventoPorId(id)
+    const [evento, total] = await Promise.all([
+        prisma.evento.findUniqueOrThrow({ where: { id }, include: conCredencial }),
+        prisma.inscripcion.count({ where: { eventoId: id } }),
+    ])
     return aEventoAdmin(evento, total)
 }
 
 export async function crearEvento(input: CrearEventoInput) {
     await verificarCodigoLibre(input.codigo)
+    await verificarCredencialCorreo(input.credencialCorreoId)
     const origen = input.copiarDeEventoId
         ? await prisma.evento.findUnique({
             where: { id: input.copiarDeEventoId },
@@ -97,6 +114,7 @@ export async function crearEvento(input: CrearEventoInput) {
                 fechaInicio: aColumnaFecha(input.fechaInicio),
                 fechaFin: aColumnaFecha(input.fechaFin),
                 ...(input.datosPago === undefined && origen?.datosPago ? { datosPago: origen.datosPago as Prisma.InputJsonValue } : {}),
+                ...(input.credencialCorreoId === undefined && origen?.credencialCorreoId ? { credencialCorreoId: origen.credencialCorreoId } : {}),
             },
         })
         for (const categoria of origen?.categorias ?? []) {
@@ -131,12 +149,13 @@ export async function crearEvento(input: CrearEventoInput) {
         }
         return creado
     })
-    return aEventoAdmin(evento, 0)
+    return obtenerEvento(evento.id)
 }
 
 export async function actualizarEvento(id: number, input: ActualizarEventoInput) {
     const actual = await obtenerEventoPorId(id)
     if (input.codigo && input.codigo !== actual.codigo) await verificarCodigoLibre(input.codigo, id)
+    await verificarCredencialCorreo(input.credencialCorreoId)
     const inicio = input.fechaInicio ?? fechaSoloDia(actual.fechaInicio)
     const fin = input.fechaFin ?? fechaSoloDia(actual.fechaFin)
     if (inicio && fin && fin < inicio) throw conflict('INVALID_DATES', 'La fecha de fin debe ser posterior a la de inicio.')

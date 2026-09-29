@@ -51,6 +51,15 @@ export async function listRoles(_req: Request, res: Response) {
     res.json({ success: true, data: await prisma.rol.findMany({ orderBy: { id: 'asc' } }) })
 }
 
+// API del sitio: catálogos que necesita el formulario de inscripción de la landing
+export async function siteCatalogs(_req: Request, res: Response) {
+    const [clasificaciones, tiposDocumento] = await Promise.all([
+        prisma.clasificacion.findMany({ orderBy: { id: 'asc' }, select: { id: true, nombre: true } }),
+        prisma.tipoDocumento.findMany({ orderBy: { id: 'asc' }, select: { id: true, nombre: true, abreviatura: true } }),
+    ])
+    res.json({ success: true, data: { clasificaciones, tiposDocumento } })
+}
+
 // Legacy: la landing anterior consulta estos catálogos al cargar; ya no existen en BD.
 export function emptyList(_req: Request, res: Response) {
     res.json([])

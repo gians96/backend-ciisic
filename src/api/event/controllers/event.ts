@@ -1,7 +1,8 @@
 import { Request, Response } from 'express'
 import { idParam } from '../../../core/http-error'
 import { actualizarEvento, crearEvento, eliminarEvento, listarEventos, obtenerEvento, resumenEvento } from '../services/event'
-import { aEventoPublico, obtenerEventoPublico } from '../services/public-event'
+import { aEventoPublico } from '../services/public-event'
+import { eventoDelSitio } from '../../../middlewares/sitio'
 
 export async function list(_req: Request, res: Response) {
     res.json({ success: true, data: await listarEventos() })
@@ -29,6 +30,6 @@ export async function summary(req: Request, res: Response) {
 }
 
 export async function publicFind(req: Request, res: Response) {
-    const evento = await obtenerEventoPublico(String(req.params.codigo))
+    const evento = eventoDelSitio(req)
     res.json({ success: true, data: aEventoPublico(evento) })
 }

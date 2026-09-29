@@ -6,6 +6,7 @@ import { errorHandler } from './middlewares/errorHandler'
 import { loadRoutes } from './loaders/routesLoader'
 import { env } from '../config/env'
 import { normalizeErrorResponses } from './middlewares/normalizeResponse'
+import { origenPermitido } from './core/cors'
 
 const app = express()
 
@@ -19,7 +20,7 @@ if (env.NODE_ENV !== 'test') app.use(morgan(env.NODE_ENV === 'production' ? 'com
 
 app.use(cors({
     origin(origin, callback) {
-        if (!origin || env.CORS_ORIGINS.includes(origin)) return callback(null, true)
+        if (!origin || origenPermitido(origin, env.CORS_ORIGINS)) return callback(null, true)
         return callback(Object.assign(new Error('Origen no permitido por CORS'), { status: 403, code: 'CORS_FORBIDDEN' }))
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],

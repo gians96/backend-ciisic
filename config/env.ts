@@ -25,11 +25,17 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error('PORT debe ser un puerto válido')
 }
 
+/** Avisos de configuración que no impiden arrancar; `server.ts` los muestra al iniciar. */
+export const advertencias: string[] = []
+
 const jwtSecret = required('JWT_SECRET', 'test-secret-at-least-32-characters-long')
-if (jwtSecret.length < 32) throw new Error('JWT_SECRET debe tener al menos 32 caracteres')
+if (jwtSecret.length < 16) throw new Error('JWT_SECRET debe tener al menos 16 caracteres (se recomiendan 32 o más)')
+if (jwtSecret.length < 32) advertencias.push('JWT_SECRET tiene menos de 32 caracteres: rótalo por uno aleatorio más largo (las sesiones activas se cerrarán).')
+
+// Orígenes de navegador permitidos (la landing nueva y el panel usan BFF y no los necesitan).
+// Admite comodines de subdominio: `https://*.episundc.pe`.
 const corsOrigins = csv('CORS_ORIGINS', isTest ? 'http://localhost:3000' : '')
-if (isProduction && corsOrigins.length === 0) throw new Error('CORS_ORIGINS es obligatoria en producción')
-const integrationValue = (name: string) => isProduction ? required(name) : (process.env[name] || '')
+if (isProduction && corsOrigins.length === 0) advertencias.push('CORS_ORIGINS está vacía: ningún navegador podrá llamar a la API directamente (solo servidor a servidor).')
 
 /**
  * Clave AES-256 (32 bytes en base64) para cifrar secretos salientes.
@@ -70,9 +76,8 @@ export const env = Object.freeze({
     // Integraciones (spec 005)
     INTEGRATIONS_ALLOWED_HOSTS: csv('INTEGRATIONS_ALLOWED_HOSTS'),
     INTEGRATIONS_TIMEOUT_MS: entero('INTEGRATIONS_TIMEOUT_MS', 10000, 1000),
-    // Correo
-    BREVO_API_KEY: integrationValue('BREVO_API_KEY'),
-    BREVO_SENDER: integrationValue('BREVO_SENDER'),
-    BREVO_SENDER_NAME: process.env.BREVO_SENDER_NAME || '',
-    BREVO_SENDER_SUBJECT: process.env.BREVO_SENDER_SUBJECT || 'Inscripción aprobada',
+    BREVO_API_URL: (process.env.BREVO_API_URL || 'https://api.brevo.com/v3').replace(/\/+$/, ''),
+    EMAIL_TIMEOUT_MS: entero('EMAIL_TIMEOUT_MS', 15000, 1000),
+    // Rutas legacy de la landing anterior (spec 002). Desactivar cuando la landing nueva esté en producción.
+    LEGACY_ROUTES_ENABLED: !['false', '0', 'no'].includes((process.env.LEGACY_ROUTES_ENABLED || 'true').trim().toLowerCase()),
 })

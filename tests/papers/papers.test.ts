@@ -5,17 +5,20 @@ import app from '../../src/app'
 import { prisma } from '../../src/database/prisma'
 import { papersDirectory } from '../../src/api/papers/services/papers'
 import { tokenDeRol } from '../helpers/tokens'
+import { registroDeToken, TOKEN_SITIO } from '../helpers/sitio'
 
 jest.mock('../../src/database/prisma', () => ({
     prisma: {
         ponencia: { create: jest.fn(), findMany: jest.fn(), findUnique: jest.fn(), count: jest.fn() },
         evento: { findUnique: jest.fn(), findFirst: jest.fn() },
+        tokenAcceso: { findUnique: jest.fn(), update: jest.fn() },
     },
 }))
 
 const m = prisma as unknown as {
     ponencia: { create: jest.Mock, findMany: jest.Mock, findUnique: jest.Mock, count: jest.Mock }
     evento: { findUnique: jest.Mock, findFirst: jest.Mock }
+    tokenAcceso: { findUnique: jest.Mock }
 }
 const evento = { id: 1, codigo: 'ciisic-viii-2026', estado: 'PUBLICADO', esPrincipal: true }
 const autor = { firstName: 'Ana', lastName: 'Pérez', university: 'UNDC' }
@@ -23,12 +26,13 @@ const payload = { title: 'Investigación de prueba', mainAuthor: autor, coauthor
 const pdf = Buffer.from('%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF')
 
 const enviar = (url: string, data: unknown, buffer = pdf, filename = 'paper.pdf', contentType = 'application/pdf') =>
-    request(app).post(url).field('data', JSON.stringify(data)).attach('file', buffer, { filename, contentType })
+    request(app).post(url).set('X-Api-Key', TOKEN_SITIO).field('data', JSON.stringify(data)).attach('file', buffer, { filename, contentType })
 
 beforeEach(() => {
     jest.clearAllMocks()
     m.evento.findUnique.mockResolvedValue(evento)
     m.evento.findFirst.mockResolvedValue(evento)
+    m.tokenAcceso.findUnique.mockResolvedValue(registroDeToken(evento))
 })
 
 describe('registro de ponencias', () => {
@@ -38,7 +42,7 @@ describe('registro de ponencias', () => {
             guardado = data
             return Promise.resolve({ id: data.id, creadoEn: new Date() })
         })
-        const r = await enviar('/api/v1/public/events/ciisic-viii-2026/papers', { ...payload, coauthors: [{ ...autor, university: 'Otra' }] })
+        const r = await enviar('/api/v1/site/papers', { ...payload, coauthors: [{ ...autor, university: 'Otra' }] })
         expect(r.status).toBe(201)
         expect(r.body.data.id).toMatch(/^[0-9a-f-]{36}$/)
         expect(guardado).toMatchObject({ eventoId: 1, titulo: 'Investigación de prueba', coautores: [{ ...autor, university: 'Otra' }] })

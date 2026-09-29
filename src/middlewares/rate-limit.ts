@@ -1,8 +1,11 @@
-import rateLimit from 'express-rate-limit'
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit'
 import { env } from '../../config/env'
+import type { SitioRequest } from './sitio'
 
 /**
  * Crea un limitador por IP con respuesta en el formato de error estándar.
+ * En la API del sitio la IP es la del visitante que reenvía el BFF de la landing
+ * (`X-Client-Ip`, aceptada solo con un token de evento válido).
  * En pruebas se desactiva para no acoplar los tests al orden de ejecución.
  */
 export function limitador(windowMs: number, limit: number, message = 'Demasiadas solicitudes. Intenta nuevamente en unos minutos.') {
@@ -12,6 +15,7 @@ export function limitador(windowMs: number, limit: number, message = 'Demasiadas
         standardHeaders: true,
         legacyHeaders: false,
         skip: () => env.NODE_ENV === 'test',
+        keyGenerator: (req) => ipKeyGenerator((req as SitioRequest).clienteIp ?? req.ip ?? ''),
         message: { success: false, code: 'RATE_LIMITED', message },
     })
 }

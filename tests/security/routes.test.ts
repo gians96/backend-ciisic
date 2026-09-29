@@ -1,6 +1,20 @@
 import request from 'supertest'
 import app from '../../src/app'
+import { prisma } from '../../src/database/prisma'
 import { tokenDeRol } from '../helpers/tokens'
+import { registroDeToken, TOKEN_SITIO } from '../helpers/sitio'
+
+jest.mock('../../src/database/prisma', () => ({
+    prisma: { tokenAcceso: { findUnique: jest.fn(), update: jest.fn() } },
+}))
+
+const m = prisma as unknown as { tokenAcceso: { findUnique: jest.Mock } }
+const evento = { id: 2, codigo: 'ciisic-viii-2026', estado: 'PUBLICADO' }
+
+beforeEach(() => {
+    jest.clearAllMocks()
+    m.tokenAcceso.findUnique.mockResolvedValue(registroDeToken(evento))
+})
 
 describe('seguridad de rutas administrativas', () => {
     it.each([
@@ -13,6 +27,11 @@ describe('seguridad de rutas administrativas', () => {
         ['get', '/api/v1/events/1/integrations/sports-summary'],
         ['get', '/api/v1/participants'],
         ['get', '/api/v1/inscription'],
+        ['get', '/api/v1/email-credentials'],
+        ['post', '/api/v1/email-credentials/1/test'],
+        ['get', '/api/v1/events/1/access-tokens'],
+        ['post', '/api/v1/events/1/access-tokens'],
+        ['delete', '/api/v1/access-tokens/1'],
     ])('%s %s exige token', async (method, path) => {
         const response = await (request(app) as unknown as Record<string, (p: string) => request.Test>)[method](path)
         expect(response.status).toBe(401)
@@ -26,8 +45,14 @@ describe('seguridad de rutas administrativas', () => {
         expect(response.body.user).not.toHaveProperty('contrasenaHash')
     })
 
-    it('impide que un Admin gestione administradores (solo SuperAdmin)', async () => {
-        const response = await request(app).get('/api/v1/admin').set('Authorization', `Bearer ${tokenDeRol('ADMIN')}`)
+    it.each([
+        ['get', '/api/v1/admin'],
+        ['get', '/api/v1/email-credentials'],
+        ['post', '/api/v1/events/1/access-tokens'],
+        ['delete', '/api/v1/access-tokens/1'],
+    ])('solo SuperAdmin: %s %s responde 403 a un Admin', async (method, path) => {
+        const response = await (request(app) as unknown as Record<string, (p: string) => request.Test>)[method](path)
+            .set('Authorization', `Bearer ${tokenDeRol('ADMIN')}`)
         expect(response.status).toBe(403)
         expect(response.body).toMatchObject({ success: false, code: 'FORBIDDEN' })
     })
@@ -48,7 +73,8 @@ describe('seguridad de rutas administrativas', () => {
 describe('seguridad de uploads', () => {
     it('rechaza contenido que no coincide con el MIME declarado', async () => {
         const response = await request(app)
-            .post('/api/v1/public/events/ciisic-viii-2026/inscriptions')
+            .post('/api/v1/site/inscriptions')
+            .set('X-Api-Key', TOKEN_SITIO)
             .attach('voucher', Buffer.from('not-a-real-png'), { filename: 'voucher.png', contentType: 'image/png' })
         expect(response.status).toBe(422)
         expect(response.body).toMatchObject({ success: false, code: 'INVALID_FILE_CONTENT' })
@@ -64,7 +90,8 @@ describe('seguridad de uploads', () => {
 
     it('rechaza archivos que exceden el límite configurado', async () => {
         const response = await request(app)
-            .post('/api/v1/public/events/ciisic-viii-2026/inscriptions')
+            .post('/api/v1/site/inscriptions')
+            .set('X-Api-Key', TOKEN_SITIO)
             .attach('voucher', Buffer.alloc(5 * 1024 * 1024 + 1), { filename: 'voucher.png', contentType: 'image/png' })
         expect(response.status).toBe(413)
         expect(response.body).toMatchObject({ success: false, code: 'UPLOAD_LIMIT_EXCEEDED' })

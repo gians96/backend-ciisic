@@ -3,17 +3,6 @@ import { prisma } from '../../../database/prisma'
 import { notFound } from '../../../core/http-error'
 import { fechaSoloDia } from '../../../core/fechas'
 
-const ESTADOS_VISIBLES = ['PUBLICADO', 'FINALIZADO'] as const
-
-/** Evento visible al público por su código; 404 si no existe o no está publicado. */
-export async function obtenerEventoPublico(codigo: string): Promise<Evento> {
-    const evento = await prisma.evento.findUnique({ where: { codigo: String(codigo).toLowerCase() } })
-    if (!evento || !(ESTADOS_VISIBLES as readonly string[]).includes(evento.estado)) {
-        throw notFound('EVENT_NOT_FOUND', 'El evento no existe o no está disponible.')
-    }
-    return evento
-}
-
 /** Evento principal (usado por las rutas legacy de la landing actual). */
 export async function obtenerEventoPrincipal(): Promise<Evento> {
     const evento = await prisma.evento.findFirst({ where: { esPrincipal: true }, orderBy: { id: 'asc' } })

@@ -4,10 +4,11 @@ import { ESTADO_POR_ID_LEGACY, type CodigoEstadoInscripcion } from '../../../cor
 import { parsePagination } from '../../../core/pagination'
 import { mimeDeArchivo } from '../../../middlewares/upload'
 import type { AuthenticatedRequest } from '../../../middlewares/auth'
-import { obtenerEventoPorId, obtenerEventoPrincipal, obtenerEventoPublico } from '../../event/services/public-event'
+import { obtenerEventoPorId, obtenerEventoPrincipal } from '../../event/services/public-event'
 import * as service from '../services/inscription'
 import { aCreada, aDetalle, aLegacy } from '../services/mappers'
 import { cambiarEstadoSchema, crearInscripcionSchema, inscripcionLegacySchema, type CrearInscripcionInput } from '../validation'
+import { eventoDelSitio } from '../../../middlewares/sitio'
 
 /** Quita cadenas vacías (multipart) para que yup trate los campos como ausentes. */
 function limpiar(body: Record<string, unknown>): Record<string, unknown> {
@@ -26,7 +27,7 @@ function leerJson(valor: unknown, campo: string): unknown {
 // ─── Público ────────────────────────────────────────────────────────────────
 
 export async function publicCreate(req: Request, res: Response) {
-    const evento = await obtenerEventoPublico(String(req.params.codigo))
+    const evento = eventoDelSitio(req)
     const body = limpiar(req.body ?? {})
     const input = await crearInscripcionSchema.validate(
         { ...body, participante: leerJson(body.participante, 'participante') },

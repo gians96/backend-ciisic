@@ -45,6 +45,8 @@ const campos = {
     remitenteNombre: yup.string().trim().max(120).nullable(),
     asuntoAprobacion: yup.string().trim().max(200).nullable(),
     datosPago: datosPagoSchema,
+    // Credencial de correo del evento (spec 006); null = usar la predeterminada
+    credencialCorreoId: yup.number().integer().positive().nullable(),
 }
 
 function fechasCoherentes(value: { fechaInicio?: string, fechaFin?: string, inscripcionesInicio?: Date | null, inscripcionesFin?: Date | null }) {

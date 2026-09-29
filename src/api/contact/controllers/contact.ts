@@ -1,11 +1,12 @@
 import { Request, Response } from 'express'
 import { idParam } from '../../../core/http-error'
 import { parsePagination } from '../../../core/pagination'
-import { obtenerEventoPorId, obtenerEventoPrincipal, obtenerEventoPublico } from '../../event/services/public-event'
+import { obtenerEventoPorId, obtenerEventoPrincipal } from '../../event/services/public-event'
 import * as service from '../services/contact'
+import { eventoDelSitio } from '../../../middlewares/sitio'
 
 export async function publicCreate(req: Request, res: Response) {
-    const evento = await obtenerEventoPublico(String(req.params.codigo))
+    const evento = eventoDelSitio(req)
     res.status(201).json({ success: true, data: await service.crearMensaje(evento.id, req.body) })
 }
 

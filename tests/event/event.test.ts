@@ -4,12 +4,17 @@ import app from '../../src/app'
 import { prisma } from '../../src/database/prisma'
 import { aEventoPublico, inscripcionesAbiertas } from '../../src/api/event/services/public-event'
 import { tokenDeRol } from '../helpers/tokens'
+import { registroDeToken, TOKEN_SITIO } from '../helpers/sitio'
 
 jest.mock('../../src/database/prisma', () => ({
-    prisma: { evento: { findUnique: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), create: jest.fn(), updateMany: jest.fn() }, $transaction: jest.fn() },
+    prisma: {
+        evento: { findUnique: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), create: jest.fn(), updateMany: jest.fn() },
+        tokenAcceso: { findUnique: jest.fn(), update: jest.fn() },
+        $transaction: jest.fn(),
+    },
 }))
 
-const m = prisma as unknown as { evento: { findUnique: jest.Mock, findFirst: jest.Mock }, $transaction: jest.Mock }
+const m = prisma as unknown as { evento: { findUnique: jest.Mock, findFirst: jest.Mock }, tokenAcceso: { findUnique: jest.Mock }, $transaction: jest.Mock }
 
 const evento = {
     id: 1, codigo: 'ciisic-viii-2026', nombre: 'VIII Congreso', nombreCorto: 'VIII CIISIC 2026', descripcion: null, sede: 'Cañete',
@@ -31,20 +36,21 @@ describe('ventana de inscripciones', () => {
     })
 })
 
-describe('API pública de eventos', () => {
-    it('expone el evento publicado con fechas y datos de pago', async () => {
-        m.evento.findUnique.mockResolvedValue(evento)
-        const response = await request(app).get('/api/v1/public/events/CIISIC-VIII-2026')
+describe('API del sitio: evento', () => {
+    it('expone el evento del token con fechas y datos de pago', async () => {
+        m.tokenAcceso.findUnique.mockResolvedValue(registroDeToken(evento))
+        const response = await request(app).get('/api/v1/site/event').set('X-Api-Key', TOKEN_SITIO)
         expect(response.status).toBe(200)
         expect(response.body.data).toEqual(aEventoPublico(evento) && expect.objectContaining({
             codigo: 'ciisic-viii-2026', fechaInicio: '2026-10-26', fechaFin: '2026-10-30', inscripciones: expect.objectContaining({ abiertas: true }),
         }))
-        expect(m.evento.findUnique).toHaveBeenCalledWith({ where: { codigo: 'ciisic-viii-2026' } })
+        // El evento sale del token: no se consulta por código
+        expect(m.evento.findUnique).not.toHaveBeenCalled()
     })
 
-    it('oculta eventos en borrador', async () => {
-        m.evento.findUnique.mockResolvedValue({ ...evento, estado: 'BORRADOR' })
-        const response = await request(app).get('/api/v1/public/events/ciisic-viii-2026')
+    it('oculta los eventos archivados', async () => {
+        m.tokenAcceso.findUnique.mockResolvedValue(registroDeToken({ ...evento, estado: 'ARCHIVADO' }))
+        const response = await request(app).get('/api/v1/site/event').set('X-Api-Key', TOKEN_SITIO)
         expect(response.status).toBe(404)
         expect(response.body).toMatchObject({ code: 'EVENT_NOT_FOUND' })
     })

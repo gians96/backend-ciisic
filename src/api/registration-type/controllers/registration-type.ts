@@ -1,11 +1,12 @@
 import { Request, Response } from 'express'
 import { idParam } from '../../../core/http-error'
-import { obtenerEventoPrincipal, obtenerEventoPublico } from '../../event/services/public-event'
+import { obtenerEventoPrincipal } from '../../event/services/public-event'
 import * as service from '../services/registration-type'
+import { eventoDelSitio } from '../../../middlewares/sitio'
 
 // Público
 export async function publicList(req: Request, res: Response) {
-    const evento = await obtenerEventoPublico(String(req.params.codigo))
+    const evento = eventoDelSitio(req)
     const categoria = typeof req.query.categoria === 'string' ? req.query.categoria : undefined
     res.json({ success: true, data: await service.tiposPublicos(evento.id, categoria) })
 }

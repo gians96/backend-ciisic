@@ -15,18 +15,11 @@ function respuestaPersona(persona: Awaited<ReturnType<typeof consultarDni>>) {
     }
 }
 
-// Público (landing)
+// API del sitio (landing del evento)
 export async function publicDni(req: Request, res: Response) {
     const persona = await consultarDni(String(req.params.numero), 'LANDING')
     res.setHeader('Cache-Control', 'no-store')
     res.json({ success: true, data: respuestaPersona(persona) })
-}
-
-// Legacy: GET /v1/reniec/dni?number= (forma normalizada anterior)
-export async function legacyReniec(req: Request, res: Response) {
-    const persona = await consultarDni(String(req.query.number ?? ''), 'LANDING')
-    res.setHeader('Cache-Control', 'no-store')
-    res.json({ numero: persona.numero, idTipoDocumento: 'dni', nombres: persona.nombres, apellidos: apellidosDe(persona) })
 }
 
 // Administración

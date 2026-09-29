@@ -3,12 +3,12 @@ import { AppRoute, buildRouter } from '../../../core/routes'
 import { verifyAdminRole } from '../../../middlewares/auth'
 import { validateBody } from '../../../middlewares/validate'
 import { limiteConsultaDocumento } from '../../../middlewares/rate-limit'
+import { requireTokenEvento } from '../../../middlewares/sitio'
 import { actualizarTokenSchema, crearTokenSchema, probarTokenSchema } from '../validation'
 
 const routes: AppRoute[] = [
-    // Público (landing) y legacy
-    { method: 'get', path: '/v1/public/document-lookup/dni/:numero', handler: controller.publicDni, middlewares: [limiteConsultaDocumento] },
-    { method: 'get', path: '/v1/reniec/dni', handler: controller.legacyReniec, middlewares: [limiteConsultaDocumento] },
+    // API del sitio (landing del evento, con su token de acceso): consume el pool de tokens DNI
+    { method: 'get', path: '/v1/site/document-lookup/dni/:numero', handler: controller.publicDni, middlewares: [requireTokenEvento, limiteConsultaDocumento] },
 
     // Administración: consulta manual y pool de tokens
     { method: 'get', path: '/v1/document-lookup/dni/:numero', handler: controller.adminDni, middlewares: [verifyAdminRole] },

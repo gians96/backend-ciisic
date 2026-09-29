@@ -47,7 +47,7 @@ export function uploadedFilePath(filename: string): string {
 }
 
 const MIME_POR_EXTENSION: Record<string, string> = {
-    '.pdf': 'application/pdf', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp',
+    '.pdf': 'application/pdf', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.jfif': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp',
 }
 
 export function mimeDeArchivo(filename: string): string {

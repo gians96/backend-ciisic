@@ -35,6 +35,7 @@ model Administrador {
   activo                 Boolean       @default(true)
   rol                    Rol           @relation(fields: [rolId], references: [id], map: "fk_administradores_rol")
   inscripcionesRevisadas Inscripcion[] @relation("InscripcionRevisor")
+  tokensAccesoCreados    TokenAcceso[]
 
   @@index([rolId], map: "idx_administradores_rol")
   @@map("administradores")
@@ -70,15 +71,19 @@ model Evento {
   asuntoAprobacion      String?                @map("asunto_aprobacion") @db.VarChar(200)
   logoArchivo           String?                @map("logo_archivo") @db.VarChar(255)
   datosPago             Json?                  @map("datos_pago")
+  credencialCorreoId    Int?                   @map("credencial_correo_id")
   creadoEn              DateTime               @default(now()) @map("creado_en")
   actualizadoEn         DateTime               @updatedAt @map("actualizado_en")
+  credencialCorreo      CredencialCorreo?      @relation(fields: [credencialCorreoId], references: [id], onDelete: SetNull, map: "fk_eventos_credencial_correo")
   categorias            CategoriaInscripcion[]
   inscripciones         Inscripcion[]
   actividades           Actividad[]
   ponencias             Ponencia[]
   mensajesContacto      MensajeContacto[]
   integraciones         IntegracionEvento[]
+  tokensAcceso          TokenAcceso[]
 
+  @@index([credencialCorreoId], map: "idx_eventos_credencial_correo")
   @@map("eventos")
 }
 
@@ -392,4 +397,57 @@ model IntegracionEvento {
 
   @@index([eventoId], map: "idx_integraciones_evento_evento")
   @@map("integraciones_evento")
+}
+
+// ─── Correo saliente (spec 006) ──────────────────────────────────────────────
+
+enum ProveedorCorreo {
+  BREVO
+}
+
+/// Credencial de envío de correo (API key cifrada con AES-256-GCM). Cada evento puede elegir
+/// una; si no, se usa la predeterminada.
+model CredencialCorreo {
+  id               Int                @id @default(autoincrement())
+  proveedor        ProveedorCorreo    @default(BREVO)
+  nombre           String             @db.VarChar(120)
+  apiKeyCifrada    String             @map("api_key_cifrada") @db.Text
+  apiKeySufijo     String             @map("api_key_sufijo") @db.VarChar(8)
+  remitenteCorreo  String             @map("remitente_correo") @db.VarChar(191)
+  remitenteNombre  String?            @map("remitente_nombre") @db.VarChar(120)
+  esPredeterminada Boolean            @default(false) @map("es_predeterminada")
+  activo           Boolean            @default(true)
+  ultimoEstado     EstadoIntegracion? @map("ultimo_estado")
+  ultimoError      String?            @map("ultimo_error") @db.VarChar(500)
+  ultimaPruebaEn   DateTime?          @map("ultima_prueba_en")
+  ultimoEnvioEn    DateTime?          @map("ultimo_envio_en")
+  creadoEn         DateTime           @default(now()) @map("creado_en")
+  actualizadoEn    DateTime           @updatedAt @map("actualizado_en")
+  eventos          Evento[]
+
+  @@map("credenciales_correo")
+}
+
+// ─── Tokens de acceso del sitio de cada evento (spec 007) ─────────────────────
+
+/// Token con el que la landing de un evento consume la API del sitio (`/v1/site/*`).
+/// Solo se guarda su hash (HMAC-SHA256); el valor se muestra una única vez al crearlo.
+model TokenAcceso {
+  id            Int            @id @default(autoincrement())
+  eventoId      Int            @map("evento_id")
+  nombre        String         @db.VarChar(120)
+  prefijo       String         @unique(map: "uq_tokens_acceso_prefijo") @db.VarChar(24)
+  tokenHash     String         @unique(map: "uq_tokens_acceso_token_hash") @map("token_hash") @db.Char(64)
+  ultimoUsoEn   DateTime?      @map("ultimo_uso_en")
+  expiraEn      DateTime?      @map("expira_en")
+  revocadoEn    DateTime?      @map("revocado_en")
+  creadoPorId   Int?           @map("creado_por_id")
+  creadoEn      DateTime       @default(now()) @map("creado_en")
+  actualizadoEn DateTime       @updatedAt @map("actualizado_en")
+  evento        Evento         @relation(fields: [eventoId], references: [id], onDelete: Cascade, map: "fk_tokens_acceso_evento")
+  creadoPor     Administrador? @relation(fields: [creadoPorId], references: [id], onDelete: SetNull, map: "fk_tokens_acceso_creado_por")
+
+  @@index([eventoId], map: "idx_tokens_acceso_evento")
+  @@index([creadoPorId], map: "idx_tokens_acceso_creado_por")
+  @@map("tokens_acceso")
 }

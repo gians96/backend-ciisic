@@ -2,10 +2,11 @@ import type { Request, Response } from 'express'
 import { ValidationError } from 'yup'
 import path from 'path'
 import { badRequest, idParam, notFound, unprocessable } from '../../../core/http-error'
-import { obtenerEventoPorId, obtenerEventoPrincipal, obtenerEventoPublico } from '../../event/services/public-event'
+import { obtenerEventoPorId, obtenerEventoPrincipal } from '../../event/services/public-event'
 import { paperSchema } from '../validation'
 import { hasPdfSignature } from '../upload'
 import { createPaper, findPaper, listPapers, papersDirectory, PAPERS_POR_PAGINA } from '../services/papers'
+import { eventoDelSitio } from '../../../middlewares/sitio'
 
 async function registrar(eventoId: number, req: Request) {
     if (!req.file || !hasPdfSignature(req.file.buffer)) throw unprocessable('INVALID_PDF', 'Adjunta un archivo PDF válido y no vacío.')
@@ -22,7 +23,7 @@ async function registrar(eventoId: number, req: Request) {
 }
 
 export async function publicCreate(req: Request, res: Response) {
-    const evento = await obtenerEventoPublico(String(req.params.codigo))
+    const evento = eventoDelSitio(req)
     res.status(201).json({ success: true, data: await registrar(evento.id, req) })
 }
 
