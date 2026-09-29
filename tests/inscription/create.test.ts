@@ -132,10 +132,27 @@ describe('crear inscripción', () => {
     })
 
     it('reutiliza al participante de un evento anterior', async () => {
-        m.participante.findUnique.mockImplementation(({ where }) => Promise.resolve(where.correo ? null : { id: 10 }))
+        m.participante.findUnique.mockImplementation(({ where }) => Promise.resolve(where.correo ? null : { id: 10, correo: '2020123456@undc.edu.pe' }))
         await crearInscripcion(evento, input(), 'v.png')
         expect(m.participante.create).not.toHaveBeenCalled()
-        expect(m.participante.update).toHaveBeenCalled()
+        expect(m.participante.update.mock.calls[0][0].data).not.toHaveProperty('googleSub')
+    })
+
+    it('guarda la evidencia de correo verificado con Google solo si el token coincide', async () => {
+        const { firmarVerificacionCorreo } = await import('../../src/api/google-auth/services/verificacion-correo')
+        const base = { correo: '2020123456@undc.edu.pe', tipoCuenta: 'ESTUDIANTE' as const, hd: 'undc.edu.pe', metodo: 'GOOGLE' as const, verificadoEn: '2026-09-29T20:00:00.000Z' }
+        await crearInscripcion(evento, { ...input(), verificacionCorreoToken: firmarVerificacionCorreo({ ...base, eventoId: evento.id }) }, 'v.png')
+        expect(m.inscripcion.create.mock.calls[0][0].data).toMatchObject({ esCorreoVerificado: true, verificacionCorreo: { metodo: 'GOOGLE', tipoCuenta: 'ESTUDIANTE', hd: 'undc.edu.pe' } })
+
+        m.inscripcion.create.mockClear()
+        await crearInscripcion(evento, { ...input(), verificacionCorreoToken: firmarVerificacionCorreo({ ...base, eventoId: 999 }) }, 'v.png')
+        expect(m.inscripcion.create.mock.calls[0][0].data).toMatchObject({ esCorreoVerificado: false })
+    })
+
+    it('si el participante cambia de correo se deshace su vínculo con Google', async () => {
+        m.participante.findUnique.mockImplementation(({ where }) => Promise.resolve(where.correo ? null : { id: 10, correo: 'anterior@gmail.com', googleSub: 'g-1' }))
+        await crearInscripcion(evento, input(), 'v.png')
+        expect(m.participante.update.mock.calls[0][0].data).toMatchObject({ correo: '2020123456@undc.edu.pe', googleSub: null, googleVinculadoEn: null })
     })
 
     it('rechaza un correo que pertenece a otra persona', async () => {

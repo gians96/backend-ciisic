@@ -1,34 +1,48 @@
 import 'dotenv/config'
+import crypto from 'crypto'
+import { parseArgs } from 'util'
 import bcrypt from 'bcryptjs'
 import { prisma } from './prisma'
 
-/** Crea el SuperAdmin inicial si no existe (no modifica uno existente). */
-async function bootstrapAdmin() {
-    const correo = process.env.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase()
-    const contrasena = process.env.BOOTSTRAP_ADMIN_PASSWORD
-    if (!correo || !contrasena || contrasena.length < 12) {
-        throw new Error('BOOTSTRAP_ADMIN_EMAIL y BOOTSTRAP_ADMIN_PASSWORD (mínimo 12 caracteres) son obligatorios')
+/**
+ * Crea el SuperAdmin inicial si no existe (no modifica uno existente). Se ejecuta una sola vez:
+ *   npm run bootstrap:admin -- --correo admin@undc.edu.pe --nombres "Nombre" --apellidos "Apellidos"
+ * La contraseña temporal se genera y se muestra una única vez; luego se puede entrar con Google
+ * (si el correo es de Google) o cambiarla en Administradores.
+ */
+function argumentos() {
+    const { values } = parseArgs({
+        options: {
+            correo: { type: 'string' },
+            nombres: { type: 'string', default: 'Administrador' },
+            apellidos: { type: 'string', default: 'CIISIC' },
+        },
+        allowPositionals: false,
+    })
+    const correo = values.correo?.trim().toLowerCase()
+    if (!correo || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) {
+        throw new Error('Uso: npm run bootstrap:admin -- --correo admin@undc.edu.pe [--nombres "…"] [--apellidos "…"]')
     }
+    return { correo, nombres: values.nombres?.trim() || 'Administrador', apellidos: values.apellidos?.trim() || 'CIISIC' }
+}
+
+async function bootstrapAdmin() {
+    const { correo, nombres, apellidos } = argumentos()
 
     const existing = await prisma.administrador.findUnique({ where: { correo } })
     if (existing) {
-        console.log('El administrador inicial ya existe; no se modificó su contraseña.')
+        console.log('El administrador ya existe; no se modificó.')
         return
     }
 
     const rol = await prisma.rol.findUnique({ where: { codigo: 'SUPERADMIN' } })
     if (!rol) throw new Error('No existe el rol SUPERADMIN; ejecute primero las migraciones y los seeds')
 
+    const contrasena = crypto.randomBytes(18).toString('base64url')
     await prisma.administrador.create({
-        data: {
-            nombres: process.env.BOOTSTRAP_ADMIN_NAMES || 'Administrador',
-            apellidos: process.env.BOOTSTRAP_ADMIN_SURNAMES || 'CIISIC',
-            correo,
-            contrasenaHash: await bcrypt.hash(contrasena, 12),
-            rolId: rol.id,
-        },
+        data: { nombres, apellidos, correo, contrasenaHash: await bcrypt.hash(contrasena, 12), rolId: rol.id },
     })
-    console.log('Administrador inicial creado correctamente.')
+    console.log(`SuperAdmin ${correo} creado. Contraseña temporal (se muestra una sola vez): ${contrasena}`)
 }
 
 bootstrapAdmin().catch((error) => {

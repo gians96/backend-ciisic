@@ -2,14 +2,14 @@ import * as controller from '../controllers/catalog'
 import { AppRoute, buildRouter } from '../../../core/routes'
 import { verifyAdminRole, verifySuperAdminRole } from '../../../middlewares/auth'
 import { validateBody } from '../../../middlewares/validate'
-import { limiteLecturaPublica } from '../../../middlewares/rate-limit'
+import { limiteLecturaPublica, limiteTokenLectura } from '../../../middlewares/rate-limit'
 import { requireTokenEvento } from '../../../middlewares/sitio'
 import { rutaLegacy } from '../../../middlewares/legacy'
 import { namedSchema, namedUpdateSchema } from '../../sharedValidation'
 
 const routes: AppRoute[] = [
     // API del sitio (landing del evento, con su token de acceso)
-    { method: 'get', path: '/v1/site/catalogs', handler: controller.siteCatalogs, middlewares: [requireTokenEvento, limiteLecturaPublica] },
+    { method: 'get', path: '/v1/site/catalogs', handler: controller.siteCatalogs, middlewares: [requireTokenEvento, limiteLecturaPublica, limiteTokenLectura] },
 
     { method: 'get', path: '/v1/classification', handler: controller.listClassifications, middlewares: [limiteLecturaPublica] },
     { method: 'get', path: '/v1/classification/:id', handler: controller.findClassification, middlewares: [limiteLecturaPublica] },

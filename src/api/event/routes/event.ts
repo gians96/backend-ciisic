@@ -2,13 +2,13 @@ import * as controller from '../controllers/event'
 import { AppRoute, buildRouter } from '../../../core/routes'
 import { verifyAdminRole } from '../../../middlewares/auth'
 import { validateBody } from '../../../middlewares/validate'
-import { limiteLecturaPublica } from '../../../middlewares/rate-limit'
+import { limiteLecturaPublica, limiteTokenLectura } from '../../../middlewares/rate-limit'
 import { requireTokenEvento } from '../../../middlewares/sitio'
 import { actualizarEventoSchema, crearEventoSchema } from '../validation'
 
 const routes: AppRoute[] = [
     // API del sitio (landing del evento, con su token de acceso)
-    { method: 'get', path: '/v1/site/event', handler: controller.publicFind, middlewares: [requireTokenEvento, limiteLecturaPublica] },
+    { method: 'get', path: '/v1/site/event', handler: controller.publicFind, middlewares: [requireTokenEvento, limiteLecturaPublica, limiteTokenLectura] },
 
     // Administración
     { method: 'get', path: '/v1/events', handler: controller.list, middlewares: [verifyAdminRole] },

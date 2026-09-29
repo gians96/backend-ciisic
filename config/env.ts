@@ -1,22 +1,21 @@
 import 'dotenv/config'
 import crypto from 'crypto'
 
+/**
+ * Variables de entorno (spec 008): solo lo que no puede vivir en la base de datos.
+ *   DATABASE_URL            conexión a MySQL
+ *   JWT_SECRET              firma de sesiones (rotarlo cierra las sesiones activas)
+ *   SECRETS_ENCRYPTION_KEY  cifra los secretos guardados en la BD y el hash de los tokens de acceso
+ *   PORT                    opcional (3000)
+ * Todo lo demás (API_UNDC, Google, URL del panel, rutas legacy, credenciales de correo, tokens
+ * DNI) se configura en el panel y se guarda en la BD; los tiempos y límites son constantes.
+ */
 const isTest = process.env.NODE_ENV === 'test'
 const isProduction = process.env.NODE_ENV === 'production'
 
 function required(name: string, testFallback?: string): string {
     const value = process.env[name]?.trim() || (isTest ? testFallback : undefined)
     if (!value) throw new Error(`La variable de entorno ${name} es obligatoria`)
-    return value
-}
-
-function csv(name: string, fallback = ''): string[] {
-    return (process.env[name] || fallback).split(',').map((value) => value.trim()).filter(Boolean)
-}
-
-function entero(name: string, fallback: number, min = 0): number {
-    const value = Number(process.env[name] || fallback)
-    if (!Number.isInteger(value) || value < min) throw new Error(`${name} debe ser un entero mayor o igual a ${min}`)
     return value
 }
 
@@ -32,13 +31,8 @@ const jwtSecret = required('JWT_SECRET', 'test-secret-at-least-32-characters-lon
 if (jwtSecret.length < 16) throw new Error('JWT_SECRET debe tener al menos 16 caracteres (se recomiendan 32 o más)')
 if (jwtSecret.length < 32) advertencias.push('JWT_SECRET tiene menos de 32 caracteres: rótalo por uno aleatorio más largo (las sesiones activas se cerrarán).')
 
-// Orígenes de navegador permitidos (la landing nueva y el panel usan BFF y no los necesitan).
-// Admite comodines de subdominio: `https://*.episundc.pe`.
-const corsOrigins = csv('CORS_ORIGINS', isTest ? 'http://localhost:3000' : '')
-if (isProduction && corsOrigins.length === 0) advertencias.push('CORS_ORIGINS está vacía: ningún navegador podrá llamar a la API directamente (solo servidor a servidor).')
-
 /**
- * Clave AES-256 (32 bytes en base64) para cifrar secretos salientes.
+ * Clave AES-256 (32 bytes en base64) para cifrar secretos guardados en la BD.
  * Obligatoria en producción; en desarrollo/pruebas se deriva de JWT_SECRET.
  */
 function secretsKey(): Buffer {
@@ -52,32 +46,12 @@ function secretsKey(): Buffer {
     return crypto.createHash('sha256').update(`secrets:${jwtSecret}`).digest()
 }
 
-const verificacionSecret = process.env.VERIFICACION_SECRET?.trim()
-    || crypto.createHash('sha256').update(`verificacion:${jwtSecret}`).digest('hex')
-
 export const env = Object.freeze({
     NODE_ENV: process.env.NODE_ENV || 'development',
     PORT: port,
     DATABASE_URL: required('DATABASE_URL', 'mysql://test:test@localhost:3306/ciisic_test'),
     JWT_SECRET: jwtSecret,
-    CORS_ORIGINS: corsOrigins,
-    UPLOADS_DIR: process.env.UPLOADS_DIR || 'uploads',
-    MAX_UPLOAD_BYTES: Number(process.env.MAX_UPLOAD_BYTES || 5 * 1024 * 1024),
     SECRETS_ENCRYPTION_KEY: secretsKey(),
-    // Consultas de documentos (spec 003)
-    DNI_CACHE_TTL_DAYS: entero('DNI_CACHE_TTL_DAYS', 30),
-    DNI_LOOKUP_TIMEOUT_MS: entero('DNI_LOOKUP_TIMEOUT_MS', 8000, 1000),
-    // Verificación de estudiantes (spec 004)
-    UNDC_API_URL: (process.env.UNDC_API_URL || '').replace(/\/+$/, ''),
-    UNDC_API_KEY: process.env.UNDC_API_KEY || '',
-    UNDC_API_TIMEOUT_MS: entero('UNDC_API_TIMEOUT_MS', 8000, 1000),
-    VERIFICACION_SECRET: verificacionSecret,
-    VERIFICACION_TTL_HORAS: entero('VERIFICACION_TTL_HORAS', 24, 1),
-    // Integraciones (spec 005)
-    INTEGRATIONS_ALLOWED_HOSTS: csv('INTEGRATIONS_ALLOWED_HOSTS'),
-    INTEGRATIONS_TIMEOUT_MS: entero('INTEGRATIONS_TIMEOUT_MS', 10000, 1000),
-    BREVO_API_URL: (process.env.BREVO_API_URL || 'https://api.brevo.com/v3').replace(/\/+$/, ''),
-    EMAIL_TIMEOUT_MS: entero('EMAIL_TIMEOUT_MS', 15000, 1000),
-    // Rutas legacy de la landing anterior (spec 002). Desactivar cuando la landing nueva esté en producción.
-    LEGACY_ROUTES_ENABLED: !['false', '0', 'no'].includes((process.env.LEGACY_ROUTES_ENABLED || 'true').trim().toLowerCase()),
+    /** Firma de los tokens de verificación (estudiante y correo); siempre derivada de JWT_SECRET. */
+    VERIFICACION_SECRET: crypto.createHash('sha256').update(`verificacion:${jwtSecret}`).digest('hex'),
 })

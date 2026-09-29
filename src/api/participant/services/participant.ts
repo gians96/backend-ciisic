@@ -12,6 +12,8 @@ export function aParticipante(p: Participante) {
         apellidos: p.apellidos,
         correo: p.correo,
         celular: p.celular,
+        googleVinculado: Boolean(p.googleSub),
+        googleVinculadoEn: p.googleVinculadoEn,
         creadoEn: p.creadoEn,
         actualizadoEn: p.actualizadoEn,
     }
@@ -47,11 +49,22 @@ export async function obtenerParticipante(id: number) {
     }
 }
 
-export async function actualizarParticipante(id: number, data: { nombres?: string, apellidos?: string, correo?: string, celular?: string }) {
-    if (!await prisma.participante.findUnique({ where: { id } })) throw notFound('PARTICIPANT_NOT_FOUND', `Participante con id ${id} no encontrado`)
-    if (data.correo) {
-        const otro = await prisma.participante.findUnique({ where: { correo: data.correo } })
+export async function actualizarParticipante(
+    id: number,
+    input: { nombres?: string, apellidos?: string, correo?: string, celular?: string, desvincularGoogle?: boolean },
+) {
+    const actual = await prisma.participante.findUnique({ where: { id } })
+    if (!actual) throw notFound('PARTICIPANT_NOT_FOUND', `Participante con id ${id} no encontrado`)
+    if (input.correo) {
+        const otro = await prisma.participante.findUnique({ where: { correo: input.correo } })
         if (otro && otro.id !== id) throw conflict('EMAIL_IN_USE', 'El correo ya está registrado por otra persona.')
+    }
+    const { desvincularGoogle, ...datos } = input
+    const cambiaCorreo = input.correo !== undefined && input.correo.toLowerCase() !== actual.correo.toLowerCase()
+    const data: Prisma.ParticipanteUpdateInput = {
+        ...datos,
+        // El vínculo con Google se deshace si cambia el correo o se pide explícitamente
+        ...(cambiaCorreo || desvincularGoogle ? { googleSub: null, googleVinculadoEn: null } : {}),
     }
     return aParticipante(await prisma.participante.update({ where: { id }, data }))
 }

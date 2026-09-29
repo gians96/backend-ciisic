@@ -2,12 +2,12 @@ import multer from 'multer'
 import path from 'path'
 import fs from 'fs'
 import crypto from 'crypto'
-import { env } from '../../config/env'
+import { DIRECTORIO_UPLOADS, MAX_BYTES_VOUCHER } from '../core/almacenamiento'
 import { HttpError } from '../core/http-error'
 import type { NextFunction, Request, Response } from 'express'
 
 // Directorio raíz de archivos subidos (volumen persistente en producción)
-export const uploadsDir = path.resolve(process.cwd(), env.UPLOADS_DIR)
+export const uploadsDir = DIRECTORIO_UPLOADS
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true })
 
 const storage = multer.diskStorage({
@@ -26,7 +26,7 @@ const allowedExtensions = new Set(['.pdf', '.jpg', '.jpeg', '.png', '.webp'])
 
 export const upload = multer({
     storage,
-    limits: { fileSize: env.MAX_UPLOAD_BYTES, files: 1 },
+    limits: { fileSize: MAX_BYTES_VOUCHER, files: 1 },
     fileFilter: (_req, file, cb) => {
         const extension = path.extname(file.originalname).toLowerCase()
         if (!allowedMimeTypes.has(file.mimetype) || !allowedExtensions.has(extension)) {

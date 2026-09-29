@@ -32,6 +32,8 @@ export const crearInscripcionSchema = yup.object({
     numeroOperacion: yup.string().trim().min(3).max(100).required(),
     fechaPago: fechaPago(),
     verificacionToken: yup.string().trim().max(4000).nullable(),
+    /** Token de `/site/google-verification`: el correo se verificó con Google (spec 010). */
+    verificacionCorreoToken: yup.string().trim().max(4000).nullable(),
 }).required()
 
 export type CrearInscripcionInput = yup.InferType<typeof crearInscripcionSchema>

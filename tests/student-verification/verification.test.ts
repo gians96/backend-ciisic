@@ -2,16 +2,23 @@ import type { Evento } from '@prisma/client'
 import { prisma } from '../../src/database/prisma'
 import { aRespuestaPublica, verificarEstudiante } from '../../src/api/student-verification/services/student-verification'
 import { firmarVerificacion, leerVerificacion } from '../../src/api/student-verification/services/verification-token'
+import { cifrar } from '../../src/core/crypto'
+import { reiniciarCacheConfiguracion } from '../../src/core/configuracion-sistema'
 
 jest.mock('../../src/database/prisma', () => ({
     prisma: {
         personaConsultada: { findUnique: jest.fn(), upsert: jest.fn() },
         consultaDocumento: { create: jest.fn() },
         tokenConsulta: { findMany: jest.fn().mockResolvedValue([]), update: jest.fn(), updateMany: jest.fn() },
+        configuracionSistema: { findUnique: jest.fn() },
     },
 }))
 
-const m = prisma as unknown as { personaConsultada: { findUnique: jest.Mock } }
+const m = prisma as unknown as { personaConsultada: { findUnique: jest.Mock }, configuracionSistema: { findUnique: jest.Mock } }
+const configuracionUndc = (cambios: Record<string, unknown> = {}) => ({
+    id: 1, undcApiUrl: 'https://api-undc.test', undcApiKeyCifrada: cifrar('undc_test_key'), undcApiKeySufijo: '_key', undcApiTimeoutMs: 8000,
+    googleClientId: null, urlPanel: null, rutasLegacyActivas: true, ...cambios,
+})
 const evento = { id: 1, dominioInstitucional: 'undc.edu.pe' } as unknown as Evento
 const solicitud = { correo: '2020123456@undc.edu.pe', tipoDocumento: 'dni', numeroDocumento: '12345678' }
 
@@ -22,6 +29,8 @@ const estudiante = { es_estudiante: true, egresado: false, matriculado_semestre_
 
 beforeEach(() => {
     jest.clearAllMocks()
+    reiniciarCacheConfiguracion()
+    m.configuracionSistema.findUnique.mockResolvedValue(configuracionUndc())
     fetchMock = jest.spyOn(global, 'fetch')
     m.personaConsultada.findUnique.mockResolvedValue({ numeroDocumento: '12345678', nombres: 'JUAN CARLOS', apellidoPaterno: 'PEREZ', apellidoMaterno: 'GARCIA' })
 })
@@ -35,6 +44,7 @@ describe('verificación de estudiante UNDC', () => {
         const [url, init] = fetchMock.mock.calls[0]
         expect(url).toBe('https://api-undc.test/externo/estudiantes/verificar')
         expect(init.headers['X-API-Key']).toBe('undc_test_key')
+        expect(init.redirect).toBe('error')
         // Se envían los nombres oficiales (caché RENIEC), no los tipeados por el usuario
         expect(JSON.parse(init.body)).toMatchObject({ email: '2020123456@undc.edu.pe', dni: '12345678', nombres: 'JUAN CARLOS', apellido_paterno: 'PEREZ' })
         expect(aRespuestaPublica(resultado).verificacionToken).toEqual(expect.any(String))
@@ -55,6 +65,12 @@ describe('verificación de estudiante UNDC', () => {
     it('rechaza egresados', async () => {
         fetchMock.mockReturnValue(respuestaUndc({ ...estudiante, es_estudiante: false, egresado: true }))
         expect(await verificarEstudiante(evento, solicitud)).toMatchObject({ esEstudianteUndc: false, motivo: 'EGRESADO' })
+    })
+
+    it('sin API_UNDC configurada en Sistema no llama y responde no disponible', async () => {
+        m.configuracionSistema.findUnique.mockResolvedValue(configuracionUndc({ undcApiUrl: null, undcApiKeyCifrada: null }))
+        expect(await verificarEstudiante(evento, solicitud)).toMatchObject({ esEstudianteUndc: false, motivo: 'SERVICIO_NO_DISPONIBLE' })
+        expect(fetchMock).not.toHaveBeenCalled()
     })
 
     it('no bloquea si API_UNDC no responde', async () => {

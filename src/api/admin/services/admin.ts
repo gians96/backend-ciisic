@@ -1,14 +1,12 @@
 import bcrypt from 'bcryptjs'
-import jwt from 'jsonwebtoken'
 import type { Administrador, Prisma, Rol } from '@prisma/client'
 import { prisma } from '../../../database/prisma'
-import { env } from '../../../../config/env'
 import { conflict, HttpError, notFound } from '../../../core/http-error'
 import type { CodigoRol } from '../../../core/catalogos'
+import { firmarSesionAdmin, SESION_SEGUNDOS, type MetodoSesion } from '../../../core/sesiones'
 import type { UserData } from '../../../middlewares/auth'
 import type { CreateAdminInput, UpdateAdminInput } from '../validation'
 
-const SESION_SEGUNDOS = 60 * 60
 const COSTO_BCRYPT = 12
 
 type AdminConRol = Administrador & { rol: Rol }
@@ -35,13 +33,16 @@ export function aAdminPublico(admin: AdminConRol) {
         rolCodigo: admin.rol.codigo,
         rolNombre: admin.rol.nombre,
         activo: admin.activo,
+        googleVinculado: Boolean(admin.googleSub),
+        googleVinculadoEn: admin.googleVinculadoEn,
         creadoEn: admin.creadoEn,
         actualizadoEn: admin.actualizadoEn,
     }
 }
 
-export function generateToken(admin: AdminConRol): string {
-    return jwt.sign({ user: aUsuarioSesion(admin) }, env.JWT_SECRET, { algorithm: 'HS256', expiresIn: SESION_SEGUNDOS })
+/** JWT de sesión administrativa (audiencia `ciisic-admin`, 1 h). */
+export function generateToken(admin: AdminConRol, metodo: MetodoSesion = 'PASSWORD'): string {
+    return firmarSesionAdmin(aUsuarioSesion(admin), metodo).jwt
 }
 
 let hashFicticio: string | null = null
@@ -94,7 +95,7 @@ export async function createAdmin(input: CreateAdminInput) {
 }
 
 export async function updateAdmin(id: number, input: UpdateAdminInput, actorId?: number) {
-    await obtener(id)
+    const actual = await obtener(id)
     if (actorId === id && (input.activo === false || (input.rolCodigo && input.rolCodigo !== 'SUPERADMIN'))) {
         throw conflict('SELF_UPDATE_FORBIDDEN', 'No puede desactivarse ni quitarse el rol de SuperAdmin a sí mismo.')
     }
@@ -109,6 +110,11 @@ export async function updateAdmin(id: number, input: UpdateAdminInput, actorId?:
     if (input.contrasena !== undefined) data.contrasenaHash = await bcrypt.hash(input.contrasena, COSTO_BCRYPT)
     if (input.rolCodigo !== undefined) data.rolId = (await rolPorCodigo(input.rolCodigo)).id
     if (input.activo !== undefined) data.activo = input.activo
+    // Si cambia el correo o se pide explícitamente, se deshace el vínculo con la cuenta Google
+    if ((input.correo !== undefined && input.correo !== actual.correo) || input.desvincularGoogle) {
+        data.googleSub = null
+        data.googleVinculadoEn = null
+    }
     const admin = await prisma.administrador.update({ where: { id }, data, include: { rol: true } })
     return aAdminPublico(admin)
 }

@@ -83,5 +83,5 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD node --eval "require('http').get('http://localhost:3000/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => { process.exit(1) })"
 
-# Valida la configuración, aplica migraciones pendientes (MIGRATE_ON_START=false para omitir) e inicia
+# Valida la configuración, aplica las migraciones pendientes e inicia
 CMD ["dumb-init", "sh", "./docker-entrypoint.sh"]

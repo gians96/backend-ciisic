@@ -9,6 +9,7 @@ const actualizarParticipanteSchema = yup.object({
     apellidos: yup.string().trim().min(2).max(120),
     correo: yup.string().trim().lowercase().email().max(191),
     celular: yup.string().trim().matches(/^\+?\d{9,15}$/, 'Celular inválido'),
+    desvincularGoogle: yup.boolean(),
 }).required()
 
 const routes: AppRoute[] = [

@@ -26,9 +26,14 @@ export async function remove(req: AuthenticatedRequest, res: Response) {
 export async function login(req: Request, res: Response) {
     const correo = req.body.correo || req.body.correoElectronico
     const { jwt, usuario, expiraEn } = await loginAdmin(correo, req.body.contrasena)
-    res.json({ jwt, usuario, expiraEn })
+    res.json({ jwt, usuario, expiraEn, tipo: 'ADMIN' })
 }
 
+/** Sesión actual: administrador (`user`, forma anterior) o participante del portal. */
 export function session(req: AuthenticatedRequest, res: Response) {
-    res.json({ success: true, user: req.user })
+    if (req.participante) {
+        res.json({ success: true, tipo: 'PARTICIPANTE', participante: req.participante })
+        return
+    }
+    res.json({ success: true, tipo: 'ADMIN', user: req.user })
 }

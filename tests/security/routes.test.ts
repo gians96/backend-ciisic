@@ -32,6 +32,10 @@ describe('seguridad de rutas administrativas', () => {
         ['get', '/api/v1/events/1/access-tokens'],
         ['post', '/api/v1/events/1/access-tokens'],
         ['delete', '/api/v1/access-tokens/1'],
+        ['get', '/api/v1/settings'],
+        ['put', '/api/v1/settings'],
+        ['get', '/api/v1/me'],
+        ['get', '/api/v1/me/inscriptions'],
     ])('%s %s exige token', async (method, path) => {
         const response = await (request(app) as unknown as Record<string, (p: string) => request.Test>)[method](path)
         expect(response.status).toBe(401)
@@ -50,6 +54,8 @@ describe('seguridad de rutas administrativas', () => {
         ['get', '/api/v1/email-credentials'],
         ['post', '/api/v1/events/1/access-tokens'],
         ['delete', '/api/v1/access-tokens/1'],
+        ['get', '/api/v1/settings'],
+        ['post', '/api/v1/settings/undc-api/test'],
     ])('solo SuperAdmin: %s %s responde 403 a un Admin', async (method, path) => {
         const response = await (request(app) as unknown as Record<string, (p: string) => request.Test>)[method](path)
             .set('Authorization', `Bearer ${tokenDeRol('ADMIN')}`)

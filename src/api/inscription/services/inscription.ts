@@ -11,6 +11,7 @@ import { inscripcionesAbiertas } from '../../event/services/public-event'
 import { apellidosDe, nombresOficiales } from '../../document-lookup/services/cache'
 import { leerVerificacion, type ResultadoVerificacion } from '../../student-verification/services/verification-token'
 import { aSnapshot, verificarEstudiante } from '../../student-verification/services/student-verification'
+import { leerVerificacionCorreo } from '../../google-auth/services/verificacion-correo'
 import { generarCredencialPdf, rutaCredencial } from '../utils/generatePdf'
 import { enviarCorreoAprobacion } from '../utils/sendEmail'
 import { calcularPrecio, esCorreoInstitucional } from './pricing'
@@ -77,6 +78,9 @@ export async function crearInscripcion(evento: Evento, input: CrearInscripcionIn
         legacy: opciones.legacy,
     })
 
+    // Evidencia opcional de que el correo se verificó con Google; no cambia el precio (spec 010)
+    const verificacionCorreo = opciones.legacy ? null : leerVerificacionCorreo(input.verificacionCorreoToken, { eventoId: evento.id, correo })
+
     const snapshot = tipo.categoria.esEstudiantil
         ? (verificacion ? aSnapshot(verificacion) : { esEstudianteUndc: false, motivo: 'SIN_VERIFICACION', verificadoEn: new Date().toISOString() })
         : null
@@ -92,9 +96,16 @@ export async function crearInscripcion(evento: Evento, input: CrearInscripcionIn
             if (participante) {
                 const existente = await tx.inscripcion.findUnique({ where: { eventoId_participanteId: { eventoId: evento.id, participanteId: participante.id } } })
                 if (existente) throw conflict('ALREADY_REGISTERED', 'Ya tienes una inscripción registrada en este evento.')
+                const cambiaCorreo = participante.correo.toLowerCase() !== correo
                 participante = await tx.participante.update({
                     where: { id: participante.id },
-                    data: { correo, celular: p.celular, ...(oficiales ? { nombres, apellidos } : {}) },
+                    data: {
+                        correo,
+                        celular: p.celular,
+                        ...(oficiales ? { nombres, apellidos } : {}),
+                        // Un correo nuevo invalida el vínculo con la cuenta Google anterior
+                        ...(cambiaCorreo ? { googleSub: null, googleVinculadoEn: null } : {}),
+                    },
                 })
             } else {
                 participante = await tx.participante.create({
@@ -123,6 +134,10 @@ export async function crearInscripcion(evento: Evento, input: CrearInscripcionIn
                     esEstudianteUndc: verificacion?.esEstudianteUndc ?? false,
                     codigoEstudiante: verificacion?.esEstudianteUndc ? verificacion.codigoEstudiante : null,
                     verificacionEstudiante: snapshot ?? Prisma.JsonNull,
+                    esCorreoVerificado: Boolean(verificacionCorreo),
+                    verificacionCorreo: verificacionCorreo
+                        ? { metodo: verificacionCorreo.metodo, tipoCuenta: verificacionCorreo.tipoCuenta, hd: verificacionCorreo.hd, verificadoEn: verificacionCorreo.verificadoEn }
+                        : Prisma.JsonNull,
                 },
                 include: detalleInclude,
             })
@@ -255,7 +270,7 @@ export function celdaCsv(valor: unknown): string {
 export async function exportarCsv(eventoId: number, filtros: FiltrosInscripcion): Promise<string> {
     const filas = await prisma.inscripcion.findMany({ where: construirFiltro(eventoId, filtros), include: detalleInclude, orderBy: { id: 'asc' } })
     const encabezado = ['ID', 'Fecha registro', 'Tipo doc.', 'N° documento', 'Nombres', 'Apellidos', 'Correo', 'Celular', 'Categoría',
-        'Tipo de inscripción', 'Etiqueta', 'Clasificación', 'Monto', 'Descuento', 'Estudiante UNDC', 'Código estudiante', 'Modalidad',
+        'Tipo de inscripción', 'Etiqueta', 'Clasificación', 'Monto', 'Descuento', 'Estudiante UNDC', 'Código estudiante', 'Correo verificado', 'Modalidad',
         'Banco / billetera', 'N° operación', 'Fecha de pago', 'Estado', 'Revisado', 'Motivo de rechazo']
     const lineas = filas.map((fila) => {
         const d = aDetalle(fila)
@@ -263,7 +278,7 @@ export async function exportarCsv(eventoId: number, filtros: FiltrosInscripcion)
             d.id, fechaLima(d.creadoEn), d.participante.tipoDocumento.toUpperCase(), d.participante.numeroDocumento, d.participante.nombres,
             d.participante.apellidos, d.participante.correo, d.participante.celular, d.tipoInscripcion?.categoria.nombre, d.tipoInscripcion?.nombre,
             d.tipoInscripcion?.etiqueta, d.clasificacion?.nombre, d.pago.monto.toFixed(2), d.pago.descuento.toFixed(2),
-            d.verificacion.esEstudianteUndc ? 'Sí' : 'No', d.verificacion.codigoEstudiante, d.pago.modalidad,
+            d.verificacion.esEstudianteUndc ? 'Sí' : 'No', d.verificacion.codigoEstudiante, d.verificacion.correo.verificado ? 'Sí (Google)' : 'No', d.pago.modalidad,
             d.pago.banco ?? d.pago.billeteraDigital, d.pago.numeroOperacion, d.pago.fechaPago, d.estado.nombre,
             d.revision.revisadoEn ? fechaLima(d.revision.revisadoEn) : '', d.revision.motivoRechazo,
         ].map(celdaCsv).join(';')

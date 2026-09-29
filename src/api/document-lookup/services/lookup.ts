@@ -1,12 +1,14 @@
 import type { OrigenConsulta, ProveedorConsulta, ResultadoConsulta, TokenConsulta } from '@prisma/client'
 import { prisma } from '../../../database/prisma'
-import { env } from '../../../../config/env'
 import { HttpError, notFound, unprocessable } from '../../../core/http-error'
 import { descifrar } from '../../../core/crypto'
 import { proveedores } from '../providers'
 import { FallaProveedor, type PersonaDni, type TipoFalla } from '../providers/types'
 import { guardarCache, leerCache } from './cache'
 import { limiteAlcanzado, siguienteRenovacion } from './renewal'
+
+/** Tiempo máximo de espera de cada proveedor DNI (Decolecta, apiperu). */
+const TIMEOUT_PROVEEDOR_MS = 8000
 
 export const REGEX_DNI = /^\d{8}$/
 
@@ -116,7 +118,7 @@ export interface ResultadoDni extends PersonaDni {
 export async function consultarConToken(token: TokenConsulta, numero: string, origen: OrigenConsulta): Promise<PersonaDni> {
     const inicio = Date.now()
     try {
-        const persona = await proveedores[token.proveedor].consultarDni(numero, descifrar(token.tokenCifrado), env.DNI_LOOKUP_TIMEOUT_MS)
+        const persona = await proveedores[token.proveedor].consultarDni(numero, descifrar(token.tokenCifrado), TIMEOUT_PROVEEDOR_MS)
         await contarUso(token, true)
         await guardarCache({ ...persona, numero }, token.proveedor)
         await registrar({ numero, origen, resultado: 'EXITO', token, codigoHttp: 200, duracionMs: Date.now() - inicio })

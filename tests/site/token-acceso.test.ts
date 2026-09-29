@@ -2,7 +2,6 @@ import type { NextFunction, Response } from 'express'
 import request from 'supertest'
 import app from '../../src/app'
 import { prisma } from '../../src/database/prisma'
-import { origenPermitido } from '../../src/core/cors'
 import { generarTokenAcceso, hashTokenAcceso, tieneFormatoDeTokenAcceso } from '../../src/core/tokens-acceso'
 import { requireTokenEvento, type SitioRequest } from '../../src/middlewares/sitio'
 import { tokenDeRol } from '../helpers/tokens'
@@ -13,6 +12,7 @@ jest.mock('../../src/database/prisma', () => ({
         tokenAcceso: { findUnique: jest.fn(), findMany: jest.fn(), create: jest.fn(), update: jest.fn() },
         evento: { findUnique: jest.fn() },
         categoriaInscripcion: { findMany: jest.fn() },
+        configuracionSistema: { findUnique: jest.fn() },
     },
 }))
 
@@ -20,6 +20,7 @@ const m = prisma as unknown as {
     tokenAcceso: { findUnique: jest.Mock, findMany: jest.Mock, create: jest.Mock, update: jest.Mock }
     evento: { findUnique: jest.Mock }
     categoriaInscripcion: { findMany: jest.Mock }
+    configuracionSistema: { findUnique: jest.Mock }
 }
 const evento = { id: 2, codigo: 'ciisic-viii-2026', estado: 'PUBLICADO' }
 const superAdmin = () => `Bearer ${tokenDeRol('SUPERADMIN', 5)}`
@@ -92,12 +93,14 @@ describe('middleware de la API del sitio', () => {
         expect((await ejecutar()).eventoSitio).toMatchObject({ id: 2 })
     })
 
-    it('no admite la cabecera X-Api-Key desde navegadores (CORS)', async () => {
+    it('CORS abierto: cualquier origen puede usar X-Api-Key (lo protege el token)', async () => {
         const r = await request(app).options('/api/v1/site/event')
-            .set('Origin', 'http://localhost:3000')
+            .set('Origin', 'https://otra-plataforma.example')
             .set('Access-Control-Request-Method', 'GET')
             .set('Access-Control-Request-Headers', 'x-api-key')
-        expect(String(r.headers['access-control-allow-headers'] ?? '').toLowerCase()).not.toContain('x-api-key')
+        expect(r.status).toBe(204)
+        expect(r.headers['access-control-allow-origin']).toBe('*')
+        expect(String(r.headers['access-control-allow-headers']).toLowerCase()).toContain('x-api-key')
     })
 })
 
@@ -147,33 +150,14 @@ describe('administración de tokens de acceso', () => {
     })
 })
 
-describe('orígenes CORS', () => {
-    it('acepta coincidencias exactas y comodines de subdominio sin aceptar dominios parecidos', () => {
-        const permitidos = ['https://*.episundc.pe', 'http://localhost:3000']
-        expect(origenPermitido('https://ciisic-viii.episundc.pe', permitidos)).toBe(true)
-        expect(origenPermitido('https://a.b.episundc.pe', permitidos)).toBe(true)
-        expect(origenPermitido('http://localhost:3000', permitidos)).toBe(true)
-        expect(origenPermitido('https://episundc.pe', permitidos)).toBe(false)
-        expect(origenPermitido('https://evil-episundc.pe', permitidos)).toBe(false)
-        expect(origenPermitido('https://episundc.pe.evil.com', permitidos)).toBe(false)
-        expect(origenPermitido('http://ciisic-viii.episundc.pe', permitidos)).toBe(false)
-        expect(origenPermitido('http://localhost:3001', permitidos)).toBe(false)
-    })
-})
-
 describe('rutas legacy', () => {
-    it('responden 410 cuando LEGACY_ROUTES_ENABLED=false', () => {
-        const anterior = process.env.LEGACY_ROUTES_ENABLED
-        process.env.LEGACY_ROUTES_ENABLED = 'false'
-        jest.isolateModules(() => {
-            const { rutaLegacy } = require('../../src/middlewares/legacy')
-            const res = { status: jest.fn().mockReturnThis(), json: jest.fn() }
-            const next = jest.fn()
-            rutaLegacy({}, res, next)
-            expect(next).not.toHaveBeenCalled()
-            expect(res.status).toHaveBeenCalledWith(410)
-            expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'LEGACY_ROUTE_DISABLED' }))
-        })
-        process.env.LEGACY_ROUTES_ENABLED = anterior
+    it('responden 410 cuando se desactivan en Sistema', async () => {
+        m.configuracionSistema.findUnique.mockResolvedValue({ id: 1, rutasLegacyActivas: false, undcApiTimeoutMs: 8000 })
+        const { reiniciarCacheConfiguracion } = await import('../../src/core/configuracion-sistema')
+        reiniciarCacheConfiguracion()
+        const r = await request(app).get('/api/v1/registration-types')
+        expect(r.status).toBe(410)
+        expect(r.body).toMatchObject({ code: 'LEGACY_ROUTE_DISABLED' })
+        reiniciarCacheConfiguracion()
     })
 })

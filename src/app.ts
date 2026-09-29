@@ -6,7 +6,6 @@ import { errorHandler } from './middlewares/errorHandler'
 import { loadRoutes } from './loaders/routesLoader'
 import { env } from '../config/env'
 import { normalizeErrorResponses } from './middlewares/normalizeResponse'
-import { origenPermitido } from './core/cors'
 
 const app = express()
 
@@ -18,13 +17,14 @@ app.use(normalizeErrorResponses)
 
 if (env.NODE_ENV !== 'test') app.use(morgan(env.NODE_ENV === 'production' ? 'combined' : 'dev'))
 
+// API abierta a cualquier origen (spec 009): la protege el token (JWT de sesión o token de
+// acceso del evento), no una lista de orígenes. Sin cookies ni credenciales de navegador.
 app.use(cors({
-    origin(origin, callback) {
-        if (!origin || origenPermitido(origin, env.CORS_ORIGINS)) return callback(null, true)
-        return callback(Object.assign(new Error('Origen no permitido por CORS'), { status: 403, code: 'CORS_FORBIDDEN' }))
-    },
+    origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Api-Key'],
+    exposedHeaders: ['Content-Disposition', 'Retry-After', 'RateLimit-Limit', 'RateLimit-Remaining', 'RateLimit-Reset', 'RateLimit-Policy'],
+    maxAge: 600,
 }))
 
 loadRoutes(app)

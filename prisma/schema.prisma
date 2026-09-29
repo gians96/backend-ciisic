@@ -24,18 +24,21 @@ model Rol {
 }
 
 model Administrador {
-  id                     Int           @id @default(autoincrement())
-  nombres                String
-  apellidos              String
-  correo                 String        @unique(map: "uq_administradores_correo")
-  contrasenaHash         String        @map("contrasena_hash")
-  creadoEn               DateTime      @default(now()) @map("creado_en")
-  actualizadoEn          DateTime      @updatedAt @map("actualizado_en")
-  rolId                  Int           @map("rol_id")
-  activo                 Boolean       @default(true)
-  rol                    Rol           @relation(fields: [rolId], references: [id], map: "fk_administradores_rol")
-  inscripcionesRevisadas Inscripcion[] @relation("InscripcionRevisor")
-  tokensAccesoCreados    TokenAcceso[]
+  id                      Int                    @id @default(autoincrement())
+  nombres                 String
+  apellidos               String
+  correo                  String                 @unique(map: "uq_administradores_correo")
+  contrasenaHash          String                 @map("contrasena_hash")
+  creadoEn                DateTime               @default(now()) @map("creado_en")
+  actualizadoEn           DateTime               @updatedAt @map("actualizado_en")
+  rolId                   Int                    @map("rol_id")
+  activo                  Boolean                @default(true)
+  googleSub               String?                @unique(map: "uq_administradores_google_sub") @map("google_sub") @db.VarChar(255)
+  googleVinculadoEn       DateTime?              @map("google_vinculado_en")
+  rol                     Rol                    @relation(fields: [rolId], references: [id], map: "fk_administradores_rol")
+  inscripcionesRevisadas  Inscripcion[]          @relation("InscripcionRevisor")
+  tokensAccesoCreados     TokenAcceso[]
+  configuracionesEditadas ConfiguracionSistema[]
 
   @@index([rolId], map: "idx_administradores_rol")
   @@map("administradores")
@@ -99,18 +102,20 @@ model TipoDocumento {
 }
 
 model Participante {
-  id              Int           @id @default(autoincrement())
-  tipoDocumentoId String        @map("tipo_documento_id")
-  numeroDocumento String        @map("numero_documento") @db.VarChar(20)
-  nombres         String
-  apellidos       String
-  correo          String        @unique(map: "uq_participantes_correo")
-  celular         String        @db.VarChar(20)
-  creadoEn        DateTime      @default(now()) @map("creado_en")
-  actualizadoEn   DateTime      @updatedAt @map("actualizado_en")
-  tipoDocumento   TipoDocumento @relation(fields: [tipoDocumentoId], references: [id], map: "fk_participantes_tipo_documento")
-  inscripciones   Inscripcion[]
-  asistencias     Asistencia[]
+  id                Int           @id @default(autoincrement())
+  tipoDocumentoId   String        @map("tipo_documento_id")
+  numeroDocumento   String        @map("numero_documento") @db.VarChar(20)
+  nombres           String
+  apellidos         String
+  correo            String        @unique(map: "uq_participantes_correo")
+  celular           String        @db.VarChar(20)
+  googleSub         String?       @unique(map: "uq_participantes_google_sub") @map("google_sub") @db.VarChar(255)
+  googleVinculadoEn DateTime?     @map("google_vinculado_en")
+  creadoEn          DateTime      @default(now()) @map("creado_en")
+  actualizadoEn     DateTime      @updatedAt @map("actualizado_en")
+  tipoDocumento     TipoDocumento @relation(fields: [tipoDocumentoId], references: [id], map: "fk_participantes_tipo_documento")
+  inscripciones     Inscripcion[]
+  asistencias       Asistencia[]
 
   @@unique([tipoDocumentoId, numeroDocumento], map: "uq_participantes_documento")
   @@map("participantes")
@@ -196,6 +201,8 @@ model Inscripcion {
   esEstudianteUndc       Boolean           @default(false) @map("es_estudiante_undc")
   codigoEstudiante       String?           @map("codigo_estudiante") @db.VarChar(20)
   verificacionEstudiante Json?             @map("verificacion_estudiante")
+  esCorreoVerificado     Boolean           @default(false) @map("es_correo_verificado")
+  verificacionCorreo     Json?             @map("verificacion_correo")
   evento                 Evento            @relation(fields: [eventoId], references: [id], map: "fk_inscripciones_evento")
   participante           Participante      @relation(fields: [participanteId], references: [id], map: "fk_inscripciones_participante")
   tipoInscripcion        TipoInscripcion?  @relation(fields: [tipoInscripcionId], references: [id], onDelete: SetNull, map: "fk_inscripciones_tipo_inscripcion")
@@ -450,4 +457,30 @@ model TokenAcceso {
   @@index([eventoId], map: "idx_tokens_acceso_evento")
   @@index([creadoPorId], map: "idx_tokens_acceso_creado_por")
   @@map("tokens_acceso")
+}
+
+// ─── Configuración del sistema (spec 008) ────────────────────────────────────
+
+/// Configuración global de fila única (id = 1). Reemplaza variables de entorno: API_UNDC
+/// (URL, API key cifrada con AES-256-GCM, timeout), Google (client ID), URL del panel y el
+/// interruptor de las rutas de la landing anterior.
+model ConfiguracionSistema {
+  id                 Int                @id @default(1)
+  undcApiUrl         String?            @map("undc_api_url") @db.VarChar(255)
+  undcApiKeyCifrada  String?            @map("undc_api_key_cifrada") @db.Text
+  undcApiKeySufijo   String?            @map("undc_api_key_sufijo") @db.VarChar(8)
+  undcApiTimeoutMs   Int                @default(8000) @map("undc_api_timeout_ms")
+  undcUltimoEstado   EstadoIntegracion? @map("undc_ultimo_estado")
+  undcUltimoError    String?            @map("undc_ultimo_error") @db.VarChar(500)
+  undcUltimaPruebaEn DateTime?          @map("undc_ultima_prueba_en")
+  googleClientId     String?            @map("google_client_id") @db.VarChar(255)
+  urlPanel           String?            @map("url_panel") @db.VarChar(255)
+  rutasLegacyActivas Boolean            @default(true) @map("rutas_legacy_activas")
+  actualizadoPorId   Int?               @map("actualizado_por_id")
+  creadoEn           DateTime           @default(now()) @map("creado_en")
+  actualizadoEn      DateTime           @updatedAt @map("actualizado_en")
+  actualizadoPor     Administrador?     @relation(fields: [actualizadoPorId], references: [id], onDelete: SetNull, map: "fk_configuracion_sistema_actualizado_por")
+
+  @@index([actualizadoPorId], map: "idx_configuracion_sistema_actualizado_por")
+  @@map("configuracion_sistema")
 }

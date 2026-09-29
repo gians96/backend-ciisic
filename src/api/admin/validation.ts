@@ -26,7 +26,10 @@ export const createAdminSchema = yup.object({
 }).required()
 
 // Sin valores por defecto: una actualización parcial nunca cambia el rol implícitamente
-export const updateAdminSchema = yup.object(campos).required()
+export const updateAdminSchema = yup.object({
+    ...campos,
+    desvincularGoogle: yup.boolean(),
+}).required()
 
 export type CreateAdminInput = yup.InferType<typeof createAdminSchema>
 export type UpdateAdminInput = yup.InferType<typeof updateAdminSchema>

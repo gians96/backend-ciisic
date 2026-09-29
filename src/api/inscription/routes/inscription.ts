@@ -3,7 +3,7 @@ import { AppRoute, buildRouter } from '../../../core/routes'
 import { upload, validateUploadedFileContent } from '../../../middlewares/upload'
 import { verifyAdminRole, verifySuperAdminRole } from '../../../middlewares/auth'
 import { validateBody } from '../../../middlewares/validate'
-import { limiteInscripcion } from '../../../middlewares/rate-limit'
+import { limiteInscripcion, limiteTokenInscripcion } from '../../../middlewares/rate-limit'
 import { requireTokenEvento } from '../../../middlewares/sitio'
 import { rutaLegacy } from '../../../middlewares/legacy'
 import { cambiarEstadoLegacySchema } from '../validation'
@@ -15,7 +15,7 @@ const routes: AppRoute[] = [
         method: 'post',
         path: '/v1/site/inscriptions',
         handler: controller.publicCreate,
-        middlewares: [requireTokenEvento, limiteInscripcion, upload.single('voucher'), validateUploadedFileContent],
+        middlewares: [requireTokenEvento, limiteInscripcion, limiteTokenInscripcion, upload.single('voucher'), validateUploadedFileContent],
     },
 
     // Legacy (landing anterior y herramientas previas; evento principal)

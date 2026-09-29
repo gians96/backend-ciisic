@@ -1,4 +1,5 @@
-import { env } from '../../../../config/env'
+const BREVO_API_URL = 'https://api.brevo.com/v3'
+const TIMEOUT_MS = 15000
 
 /**
  * Cliente mínimo de la API transaccional de Brevo (v3) con `fetch`: la API key va por
@@ -42,7 +43,7 @@ function mensajeDeError(status: number, cuerpo: unknown): string {
 async function llamar<T>(apiKey: string, ruta: string, init: { method?: string, body?: unknown } = {}): Promise<T> {
     let respuesta: globalThis.Response
     try {
-        respuesta = await fetch(`${env.BREVO_API_URL}${ruta}`, {
+        respuesta = await fetch(`${BREVO_API_URL}${ruta}`, {
             method: init.method ?? 'GET',
             headers: {
                 'api-key': apiKey,
@@ -51,7 +52,7 @@ async function llamar<T>(apiKey: string, ruta: string, init: { method?: string, 
             },
             body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
             redirect: 'error',
-            signal: AbortSignal.timeout(env.EMAIL_TIMEOUT_MS),
+            signal: AbortSignal.timeout(TIMEOUT_MS),
         })
     } catch (error) {
         const agotado = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')

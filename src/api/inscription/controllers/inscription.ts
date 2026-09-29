@@ -64,6 +64,7 @@ export async function legacyCreate(req: Request, res: Response) {
         numeroOperacion: legacy.numeroOperacion,
         fechaPago: legacy.fechaPago.toISOString().slice(0, 10),
         verificacionToken: null,
+        verificacionCorreoToken: null,
     }
     // Solo se acepta el archivo subido (nunca un nombre de archivo enviado por el cliente)
     const inscripcion = await service.crearInscripcion(evento, input, req.file?.filename ?? null, { legacy: true })

@@ -1,4 +1,5 @@
-import { env } from '../../../../config/env'
+import { configuracionUndc } from '../../../core/configuracion-sistema'
+import { asegurarDestinoPublico } from '../../../core/url-saliente'
 
 /** Respuesta de API_UNDC `POST /externo/estudiantes/verificar` (contrato 1). */
 export interface VerificacionUndc {
@@ -28,20 +29,26 @@ export class UndcNoDisponible extends Error {
     }
 }
 
-export function undcConfigurado(): boolean {
-    return Boolean(env.UNDC_API_URL && env.UNDC_API_KEY)
+export async function undcConfigurado(): Promise<boolean> {
+    return (await configuracionUndc()) !== null
 }
 
-/** Llama a API_UNDC servidor a servidor con la API key; nunca expone la key al navegador. */
+/**
+ * Llama a API_UNDC servidor a servidor con la API key configurada en el panel (Sistema); nunca
+ * expone la key al navegador. Sin configuración o sin respuesta → `UndcNoDisponible`.
+ */
 export async function verificarEnUndc(consulta: ConsultaUndc): Promise<VerificacionUndc> {
-    if (!undcConfigurado()) throw new UndcNoDisponible('La verificación de estudiantes no está configurada')
+    const configuracion = await configuracionUndc().catch(() => null)
+    if (!configuracion) throw new UndcNoDisponible('La verificación de estudiantes no está configurada')
     let response: Response
     try {
-        response = await fetch(`${env.UNDC_API_URL}/externo/estudiantes/verificar`, {
+        await asegurarDestinoPublico(configuracion.url)
+        response = await fetch(`${configuracion.url}/externo/estudiantes/verificar`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-API-Key': env.UNDC_API_KEY },
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-API-Key': configuracion.apiKey },
             body: JSON.stringify(consulta),
-            signal: AbortSignal.timeout(env.UNDC_API_TIMEOUT_MS),
+            redirect: 'error',
+            signal: AbortSignal.timeout(configuracion.timeoutMs),
         })
     } catch {
         throw new UndcNoDisponible('No se pudo contactar a API_UNDC')

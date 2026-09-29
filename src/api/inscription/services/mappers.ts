@@ -67,6 +67,7 @@ export function aDetalle(i: InscripcionDetalle) {
             esCorreoInstitucional: i.esCorreoInstitucional,
             codigoEstudiante: i.codigoEstudiante,
             detalle: i.verificacionEstudiante ?? null,
+            correo: { verificado: i.esCorreoVerificado, detalle: i.verificacionCorreo ?? null },
         },
         revision: {
             motivoRechazo: i.motivoRechazo,
@@ -93,6 +94,7 @@ export function aFilaLista(i: InscripcionDetalle) {
         fechaPago: d.pago.fechaPago,
         tieneVoucher: d.pago.tieneVoucher,
         esEstudianteUndc: d.verificacion.esEstudianteUndc,
+        esCorreoVerificado: d.verificacion.correo.verificado,
         revisadoEn: d.revision.revisadoEn,
     }
 }
@@ -119,6 +121,7 @@ export function aCreada(i: InscripcionDetalle) {
         precioRegular: d.tipoInscripcion?.precio ?? d.pago.monto,
         descuento: d.pago.descuento,
         esEstudianteUndc: d.verificacion.esEstudianteUndc,
+        esCorreoVerificado: d.verificacion.correo.verificado,
         modalidadPago: d.pago.modalidad,
         banco: d.pago.banco,
         tipoOperacion: d.pago.tipoOperacion,

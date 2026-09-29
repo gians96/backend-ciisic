@@ -2,10 +2,10 @@ import { randomUUID } from 'crypto'
 import { mkdir, writeFile, unlink } from 'fs/promises'
 import path from 'path'
 import { prisma } from '../../../database/prisma'
-import { env } from '../../../../config/env'
+import { DIRECTORIO_UPLOADS } from '../../../core/almacenamiento'
 import type { PaperInput } from '../validation'
 
-export const papersDirectory = path.resolve(process.cwd(), env.UPLOADS_DIR, 'papers')
+export const papersDirectory = path.join(DIRECTORIO_UPLOADS, 'papers')
 export const PAPERS_POR_PAGINA = 50
 
 export async function createPaper(eventoId: number, data: PaperInput, file: { buffer: Buffer; originalname: string; size: number }) {

@@ -2,6 +2,8 @@ import jwt from 'jsonwebtoken'
 import { env } from '../../../../config/env'
 
 const AUDIENCIA = 'verificacion-estudiante'
+/** Vigencia del token de verificación (lo que dura completar el formulario con holgura). */
+const VIGENCIA_HORAS = 24
 
 /** Resultado de la verificación que viaja firmado entre `student-verification` e `inscriptions`. */
 export interface ResultadoVerificacion {
@@ -22,7 +24,7 @@ export function firmarVerificacion(resultado: ResultadoVerificacion): string {
     return jwt.sign({ v: resultado }, env.VERIFICACION_SECRET, {
         algorithm: 'HS256',
         audience: AUDIENCIA,
-        expiresIn: `${env.VERIFICACION_TTL_HORAS}h`,
+        expiresIn: `${VIGENCIA_HORAS}h`,
     })
 }
 

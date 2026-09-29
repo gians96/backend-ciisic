@@ -27,8 +27,6 @@ jobs:
       NODE_ENV: test
       DATABASE_URL: mysql://ciisic:ciisic_test@127.0.0.1:3306/ciisic_test
       JWT_SECRET: ci-test-secret-at-least-32-characters
-      CORS_ORIGINS: http://localhost:3000
-      API_URL: http://localhost:3000
 
     steps:
 
@@ -40,7 +38,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       # 3. Instalar dependencias

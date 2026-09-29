@@ -1,16 +1,17 @@
 import type { ProveedorConsulta } from '@prisma/client'
 import { prisma } from '../../../database/prisma'
-import { env } from '../../../../config/env'
 import type { PersonaDni } from '../providers/types'
 
 const DIA_MS = 24 * 60 * 60 * 1000
+/** Días que una consulta DNI se reutiliza sin volver a gastar una consulta del proveedor. */
+export const DIAS_CACHE_DNI = 30
 
 /** Persona en caché si la consulta es más reciente que el TTL configurado. */
 export async function leerCache(numero: string, ahora = new Date()): Promise<PersonaDni | null> {
     const fila = await prisma.personaConsultada.findUnique({
         where: { tipoDocumento_numeroDocumento: { tipoDocumento: 'dni', numeroDocumento: numero } },
     })
-    if (!fila || ahora.getTime() - fila.consultadoEn.getTime() > env.DNI_CACHE_TTL_DAYS * DIA_MS) return null
+    if (!fila || ahora.getTime() - fila.consultadoEn.getTime() > DIAS_CACHE_DNI * DIA_MS) return null
     return { numero: fila.numeroDocumento, nombres: fila.nombres, apellidoPaterno: fila.apellidoPaterno, apellidoMaterno: fila.apellidoMaterno }
 }
 
