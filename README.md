@@ -6,6 +6,7 @@ de DNI con pool de tokens, verificación de estudiantes UNDC e integración con 
 
 - **Stack**: Node 22 · Express 5 · TypeScript · Prisma 6 · MySQL 8 · yup · Jest
 - **Arquitectura y contratos entre sistemas**: [`docs/arquitectura-ecosistema.md`](docs/arquitectura-ecosistema.md)
+- **Despliegue del ecosistema (orden y variables)**: [`docs/despliegue-ecosistema.md`](docs/despliegue-ecosistema.md)
 - **Especificaciones (SDD con GitHub Spec Kit)**: [`specs/`](specs) y la constitución en
   [`.specify/memory/constitution.md`](.specify/memory/constitution.md)
 
