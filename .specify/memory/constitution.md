@@ -11,10 +11,13 @@ Ingeniería. Los contratos con otros sistemas viven en `docs/arquitectura-ecosis
 Todo dato de negocio (categorías y tipos de inscripción, inscripciones, actividades,
 ponencias, mensajes, integraciones) pertenece a un `Evento`. Ningún código asume un
 evento fijo, un id mágico ni textos de una edición ("VIII CIISIC") embebidos: esos datos
-salen de la fila del evento. Las rutas públicas se direccionan por `eventos.codigo`.
+salen de la fila del evento. La API del sitio (`/api/v1/site/*`) resuelve el evento a partir
+del token de acceso del evento, nunca de un parámetro del cliente.
 
 ### II. Base de datos legible en español
 - Tablas en `snake_case`, en español y en plural (`inscripciones`, `tipos_inscripcion`).
+  Excepción: las tablas de fila única van en singular (`configuracion_sistema`) y fijan su
+  única fila con una restricción `ck_<tabla>_fila_unica`.
 - Columnas en `snake_case`; PK `id`; FK `<entidad_singular>_id`; booleanos `es_*`,
   `tiene_*` o `activo`; marcas de tiempo `creado_en` / `actualizado_en`; dinero `DECIMAL(10,2)`.
 - Nombres de restricciones: `fk_<tabla>_<referencia>`, `uq_<tabla>_<columnas>`,
@@ -26,24 +29,37 @@ salen de la fila del evento. Las rutas públicas se direccionan por `eventos.cod
   producción. `prisma migrate diff` entre migraciones y esquema debe quedar vacío.
 
 ### III. Seguridad por defecto (NO NEGOCIABLE)
-- Toda ruta no pública exige `verifyAdminRole` o `verifySuperAdminRole`.
+- Toda ruta no pública exige una guarda: `verifyAdminRole` / `verifySuperAdminRole`
+  (sesión de administrador, audiencia `ciisic-admin`), `requireParticipante` (portal del
+  inscrito, audiencia `ciisic-participante`) o `requireTokenEvento` (API del sitio). Un
+  token de un perfil nunca abre rutas de otro.
+- La API está abierta a cualquier origen (CORS `*`, sin cookies): la protege el token, no una
+  lista de orígenes. Las rutas del sitio tienen límite por visitante **y** por token.
 - El servidor calcula precios, estados y montos; jamás acepta `estadoId`, `pago`,
   `descuento` ni rutas de archivo enviadas por el cliente.
 - Todo texto de usuario que se inserta en HTML (PDF, correos) se escapa.
-- Secretos salientes (tokens de proveedores, tokens de integraciones) se guardan
-  cifrados (AES-256-GCM con `SECRETS_ENCRYPTION_KEY`) y la API solo expone su sufijo.
+- Secretos salientes (tokens de proveedores, tokens de integraciones, credenciales de
+  correo, API key de API_UNDC) se guardan cifrados (AES-256-GCM con
+  `SECRETS_ENCRYPTION_KEY`) y la API solo expone su sufijo.
+- El entorno solo contiene lo que no puede vivir en la BD: `DATABASE_URL`, `JWT_SECRET` y
+  `SECRETS_ENCRYPTION_KEY` (`PORT` opcional). Toda otra configuración se gestiona en el panel
+  (Sistema, Correo, Consultas DNI) o es una constante del código.
+- Las URLs salientes configuradas por administradores se validan contra SSRF
+  (`src/core/url-saliente.ts`): https y, en producción, nunca destinos internos.
 - Las rutas públicas con costo o abuso posible (consultas DNI, verificación, contacto,
   inscripción, ponencias) tienen rate limit.
 - Las respuestas públicas no exponen datos personales de terceros.
 
 ### IV. Contratos explícitos
-- Rutas nuevas bajo `/api/v1`; las públicas bajo `/api/v1/public/*`.
+- Rutas nuevas bajo `/api/v1`: administración con JWT de admin, `/api/v1/site/*` para la
+  landing de cada evento (token de acceso), `/api/v1/me/*` para el portal del inscrito y
+  `/api/v1/auth/*` para sesiones y configuración pública.
 - Respuestas de éxito nuevas: `{ success: true, data, meta? }`. Errores:
   `{ success: false, code, message, fields? }` (normalizados por `normalizeErrorResponses`).
 - Cualquier cambio de contrato se refleja en `specs/<feature>/contracts/` y, si afecta a
   otro sistema, en `docs/arquitectura-ecosistema.md`.
-- Las rutas legacy que consume la landing actual se mantienen como alias del evento
-  principal hasta que la nueva landing esté desplegada.
+- Las rutas legacy que consume la landing anterior se mantienen como alias del evento
+  principal hasta que se desactiven desde el panel (Sistema → Landing anterior).
 
 ### V. Pruebas como puerta de calidad
 - `npm run lint`, `npx tsc --noEmit` y `npm test` en verde antes de cada commit.
@@ -71,12 +87,16 @@ salen de la fila del evento. Las rutas públicas se direccionan por `eventos.cod
 - Cada cambio empieza con una spec en `specs/NNN-nombre/` (spec → plan → tasks) usando
   Spec Kit; `tasks.md` se marca a medida que se implementa.
 - Ramas `feat/*`; commits pequeños con mensajes convencionales en español.
-- Despliegue: respaldo de BD → `prisma migrate deploy` → nueva imagen → prueba de humo
-  (ver runbook de `specs/001-esquema-bd-espanol/plan.md`).
+- Despliegue: respaldo de BD → nueva imagen (el contenedor valida la configuración y aplica
+  `prisma migrate deploy` al arrancar) → prueba de humo (ver `docs/despliegue-ecosistema.md`).
 
 ## Gobernanza
 
 Esta constitución prevalece sobre prácticas ad-hoc. Enmiendas: se documentan en este
 archivo con fecha y motivo, y se revisan en el PR correspondiente.
 
-**Versión**: 1.0.0 | **Ratificada**: 2026-09-29 | **Última enmienda**: 2026-09-29
+**Versión**: 1.1.0 | **Ratificada**: 2026-09-29 | **Última enmienda**: 2026-09-30
+
+- 1.1.0 (2026-09-30): configuración en la BD y solo tres variables de entorno; API abierta
+  (CORS `*`) protegida por tokens con límites por token; perfiles de sesión (admin,
+  participante) con audiencias JWT; tablas de fila única; validación anti-SSRF.

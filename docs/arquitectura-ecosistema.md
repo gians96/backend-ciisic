@@ -34,8 +34,12 @@ API_UNDC ◄── app-web-sigenet (gestión de Clientes API)      deportes-fi b
 2. **Credenciales entrantes** (API keys de API_UNDC, tokens de evento de deportes-fi) se
    guardan **solo como hash** (HMAC-SHA256 con un pepper de entorno). El valor en claro se
    muestra una única vez al crearlo o rotarlo.
-3. Las llamadas entre sistemas son **servidor a servidor**; ningún token de integración
-   llega a un navegador.
+3. Las llamadas entre sistemas (API_UNDC, deportes-fi) son **servidor a servidor**; esos
+   tokens nunca llegan a un navegador. La API del sitio del congreso está abierta a cualquier
+   origen y la protege el token de acceso del evento (se recomienda usarlo desde el servidor;
+   si se usa en un navegador es público y los límites por token acotan el abuso).
+6. **Configuración sin variables de entorno**: cada sistema deja en el entorno solo lo que no
+   puede vivir en su BD (conexión y claves maestras); el resto se gestiona desde su panel.
 4. Las respuestas de integración devuelven **datos mínimos** (sin teléfonos, correos ni
    DNI de terceros salvo que el contrato lo indique).
 5. Todo repositorio documenta sus cambios de contrato en su propia carpeta `specs/` y en
@@ -244,12 +248,13 @@ Comportamientos adicionales (implementados en deportes-fi, `specs/001-tokens-api
 
 ## Contrato 3 — API del sitio (landing de cada evento)
 
-Definido en `backend-ciisic/specs/007-tokens-acceso-evento/contracts/api-sitio.md`.
-La landing llama desde su servidor Nitro con `X-Api-Key: <token de acceso del evento>` (generado
-en el panel; solo se guarda su hash) y `X-Client-Ip` para los límites por visitante. El evento
-sale del token: `GET /api/v1/site/event`, `/registration-types`, `/catalogs`,
-`POST /inscriptions`, `/student-verification`, `/papers`, `/contact` y
-`GET /document-lookup/dni/:numero`. CORS no admite `X-Api-Key`.
+Definido en `backend-ciisic/specs/007-tokens-acceso-evento/contracts/api-sitio.md` (spec 009).
+El evento sale del token de acceso (`X-Api-Key`, generado en el panel; solo se guarda su hash).
+CORS está abierto a cualquier origen; la landing lo usa desde su servidor Nitro (BFF) y envía
+`X-Client-Ip` para los límites por visitante. Además hay límites por token. Rutas:
+`GET /api/v1/site/event`, `/registration-types`, `/catalogs`, `/config`,
+`GET /document-lookup/dni/:numero`, `POST /inscriptions`, `/student-verification`,
+`/google-verification`, `/papers`, `/contact`.
 
 ## Contrato 4 — API administrativa del congreso (panel)
 
@@ -258,6 +263,17 @@ Definido en `backend-ciisic/specs/002-multi-evento/contracts/api-admin.md` y en 
 `Authorization: Bearer` desde una cookie httpOnly.
 
 ---
+
+
+## Contrato 5 — Acceso con Google y portal del inscrito
+
+Definidos en `backend-ciisic/specs/010-google-sign-in/contracts/api-google.md` y
+`specs/011-portal-participante/contracts/api-portal.md`. El panel obtiene el client ID de
+`GET /api/v1/auth/config`, emite un `nonce` desde su servidor y envía el ID token de Google a
+`POST /api/v1/auth/google`: entra como administrador (cuenta de un admin activo) o como
+participante (portal `/api/v1/me/*`). Las sesiones llevan audiencia `ciisic-admin` o
+`ciisic-participante`. La landing verifica opcionalmente el correo con
+`POST /api/v1/site/google-verification` y envía el token resultante con la inscripción.
 
 ## Entornos locales de desarrollo
 

@@ -1,13 +1,14 @@
 # Contrato — API del sitio (landing de cada evento)
 
-Base: `/api/v1/site`. **Solo servidor a servidor**: la landing la llama desde su BFF (Nitro) con
+Base: `/api/v1/site`. Se recomienda llamarla desde el servidor de la landing (BFF), con
 
 | Cabecera | Obligatoria | Uso |
 |---|---|---|
 | `X-Api-Key` | sí | Token de acceso del evento (`ciisic_…`, generado en el panel). Define el evento. |
-| `X-Client-Ip` | recomendada | IP del visitante; con un token válido se usa para los límites por visitante. |
+| `X-Client-Ip` | recomendada (BFF) | IP del visitante; con un token válido se usa para los límites por visitante. |
 
-CORS no admite `X-Api-Key`: un navegador no puede usar el token aunque lo conozca.
+CORS está abierto a cualquier origen (spec 009): otra plataforma puede usarla también desde el
+navegador, pero entonces el token es público; si hay abuso se revoca en el panel.
 Respuestas de éxito `{ "success": true, "data": … }`; errores `{ "success": false, "code", "message", "fields"? }`.
 
 Errores comunes a todas las rutas: `401 EVENT_TOKEN_REQUIRED` (falta la cabecera),
@@ -15,7 +16,17 @@ Errores comunes a todas las rutas: `401 EVENT_TOKEN_REQUIRED` (falta la cabecera
 `429 RATE_LIMITED`.
 
 Rate limits por visitante: lectura 120/min; `inscriptions` 10/15 min; `student-verification` 20/min;
-`document-lookup` 10/min; `papers` 10/15 min; `contact` 5/15 min.
+`document-lookup` 10/min; `papers` 10/15 min; `contact` 5/15 min; `google-verification` 20/min.
+Por token: lectura 3000/min; `document-lookup` 60/min y 1500/día; `student-verification` 50/min;
+`google-verification` 300/min; `inscriptions` 150/15 min; `papers` y `contact` 60/15 min.
+
+## GET `/config`
+
+`{ "google": { "clientId": "…" | null }, "urlPanel": "https://admin…" | null }` (spec 008).
+
+## POST `/google-verification`
+
+Ver spec 010 (`contracts/api-google.md`).
 
 ## GET `/event`
 
