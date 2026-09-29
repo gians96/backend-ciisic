@@ -138,6 +138,12 @@ FROM `tipos_inscripcion` t
 JOIN `categorias_inscripcion` anterior ON anterior.`id` = t.`categoria_id` AND anterior.`evento_id` = 1
 JOIN `categorias_inscripcion` nueva ON nueva.`evento_id` = 2 AND nueva.`codigo` = anterior.`codigo`
 ORDER BY t.`id`;
+-- Precio vigente del VIII publicado en la landing el 2026-09-29: "Estudiantes sin kit" cuesta
+-- S/ 40 también para externos (en el VII era S/ 60 regular y S/ 40 UNDC).
+UPDATE `tipos_inscripcion` t
+JOIN `categorias_inscripcion` c ON c.`id` = t.`categoria_id` AND c.`evento_id` = 2 AND c.`codigo` = 'ESTUDIANTES'
+SET t.`precio` = 40.00
+WHERE t.`codigo` = 'estudiantes_sin_kit';
 
 -- 4) inscripciones: evento + datos de revisión
 ALTER TABLE `inscripciones`
