@@ -11,10 +11,14 @@ el backend antes que la nueva landing. Se corrigen las fallas de seguridad detec
 
 ## Migración `20260929120100_multi_evento`
 
-- Crea `eventos` e inserta **VIII CIISIC 2026** (id 1, `es_principal = true`, datos de pago
+- Crea `eventos`. Los datos existentes son del congreso anterior: se crea **VII CIISIC 2025**
+  (id 1, `FINALIZADO`, 21–23 oct 2025, ventana de inscripción tomada de los datos) solo si la BD
+  ya tenía datos, y **VIII CIISIC 2026** (id 2, `PUBLICADO`, `es_principal = true`, datos de pago
   de la landing actual).
-- Backfill `evento_id = 1` en `categorias_inscripcion`, `inscripciones`, `actividades`,
-  `ponencias` y `mensajes_contacto`; agrega `codigo`/`es_estudiantil`/`orden` a categorías,
+- Backfill `evento_id = 1` (VII) en `categorias_inscripcion`, `inscripciones`, `actividades`,
+  `ponencias` y `mensajes_contacto`. El VIII recibe una **copia** de las categorías y tipos del
+  VII (mismos códigos y precios); las inscripciones del VII siguen apuntando a los tipos del VII.
+- Agrega `codigo`/`es_estudiantil`/`orden` a categorías,
   `orden` y `codigo` obligatorio a tipos, columnas de revisión a inscripciones, `leido` a
   mensajes y `activo` a administradores.
 - `UNIQUE(evento_id, participante_id)` en inscripciones y `UNIQUE(evento_id, codigo)` en categorías.

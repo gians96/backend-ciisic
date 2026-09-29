@@ -123,6 +123,8 @@ mismas formas de respuesta.
 
 ## Assumptions
 
-- El evento principal inicial es "VIII CIISIC 2026" (creado por la migración).
+- Los datos existentes en producción son del VII CIISIC 2025 (inscripciones del 29-sep al
+  22-oct-2025); la migración los asigna a ese evento (FINALIZADO) y crea el VIII CIISIC 2026
+  como evento principal con la misma configuración de categorías y tipos.
 - La categoría general mantiene el precio institucional por dominio de correo (limitación
   conocida: no verifica propiedad del correo).

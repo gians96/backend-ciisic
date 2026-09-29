@@ -12,7 +12,7 @@ UNION ALL SELECT 'mensajes_contacto (Contact)', COUNT(*) FROM mensajes_contacto
 UNION ALL SELECT 'actividades (Evento)', COUNT(*) FROM actividades
 UNION ALL SELECT 'asistencias (Asistencia)', COUNT(*) FROM asistencias
 UNION ALL SELECT 'ponencias (PaperSubmission)', COUNT(*) FROM ponencias
-UNION ALL SELECT 'eventos (nuevo, debe ser 1)', COUNT(*) FROM eventos;
+UNION ALL SELECT 'eventos (nuevo: VII + VIII = 2)', COUNT(*) FROM eventos;
 
 -- Integridad del backfill multi-evento: todo debe pertenecer a un evento
 SELECT 'inscripciones_sin_evento' AS verificacion, COUNT(*) FROM inscripciones WHERE evento_id IS NULL;

@@ -10,5 +10,5 @@
 - [x] T008 Actualizar servicios, controladores y tipos a los modelos nuevos
 - [x] T009 Seeds idempotentes (upsert por código; sin `deleteMany` ni `ALTER TABLE`)
 - [x] T010 Actualizar pruebas y dejar lint/tsc/jest en verde
-- [ ] T011 Ensayar con el respaldo real de producción (pendiente: dump de `ciisic_vii`)
-- [ ] T012 Ejecutar el runbook en producción (responsable: equipo, con ventana acordada)
+- [x] T011 Ensayar con el respaldo real de producción: preflight, imagen Docker migrando al arrancar, conteos idénticos y `migrate diff` vacío (2026-09-29)
+- [ ] T012 Ejecutar el runbook en producción (desplegar la imagen en Dokploy; la BD se migra al arrancar)

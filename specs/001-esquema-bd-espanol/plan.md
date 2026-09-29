@@ -43,26 +43,29 @@ actualizar el esquema Prisma (modelos singulares con `@@map`/`@map`) y todo el c
 - Conteos idénticos (preflight vs `conteos-despues.sql`).
 - Ensayo realizado el 2026-09-29 sobre una BD sintética con el esquema de producción
   (30 participantes, 28 inscripciones, 16 asistencias, 3 ponencias): 0 filas perdidas,
-  diff vacío. **Pendiente**: repetir con el respaldo real de producción.
+  diff vacío.
+- **Ensayo con el respaldo real de producción** (2026-09-29, `mysqldump` de solo lectura de
+  `ciisic_vii`, MySQL 8.0.33): preflight sin bloqueantes (FKs 9/9, índices 19/20 porque
+  `PaperSubmission` no existía, 1 participante con `numero` vacío que conserva su `dni`); la
+  imagen Docker aplicó las 8 migraciones pendientes al arrancar; conteos idénticos (11
+  administradores, 308 participantes, 308 inscripciones —307 aprobadas, S/ 18 800—, 585
+  asistencias, 4 actividades); los datos quedaron en el evento VII CIISIC 2025 y el VIII se
+  creó como principal con copia de categorías y tipos; `migrate diff` contra la BD migrada vacío.
 
 ## Runbook de producción
 
-1. **Anunciar ventana** (≈10 min) y detener el backend (`backend-ciisic-vii` en Dokploy).
-2. **Respaldo**:
-   `mysqldump --single-transaction --routines --triggers -h <host> -u <user> -p ciisic_vii > ciisic_vii_$(date +%F_%H%M).sql`
-3. **Preflight**: `mysql … ciisic_vii < prisma/preflight/verificar-esquema.sql`. Todas las
-   verificaciones `[BLOQUEANTE]` deben estar en 0 (FKs 9/9, índices 20/20 o 19/20 si
-   `PaperSubmission` aún no existe). Guardar la salida (conteos de referencia).
-4. **Migrar**: desplegar la nueva imagen sin iniciarla o ejecutar desde un contenedor
-   efímero con `DATABASE_URL` de producción: `npx prisma migrate deploy`.
-   Se aplican en orden: `20260928000000_paper_submissions` (si faltaba),
-   `20260929120000_esquema_bd_espanol`, `20260929120100_multi_evento`,
-   `20260929120200_consultas_dni`, `20260929120300_verificacion_estudiante`,
-   `20260929120400_integraciones_evento`.
-5. **Verificar**: `mysql … ciisic_vii < prisma/preflight/conteos-despues.sql` y comparar
-   con el paso 3.
-6. **Iniciar** el backend nuevo y probar: `GET /health`, `GET /api/v1/public/events/ciisic-viii-2026`,
-   `GET /api/v1/registration-types` (legacy) y login del panel.
-7. **Rollback** (si algo falla en 4–6): detener el backend, `DROP DATABASE ciisic_vii;
-   CREATE DATABASE ciisic_vii;`, restaurar el respaldo del paso 2 y volver a desplegar la
-   imagen anterior. No intentar "arreglar a mano" una migración a medias.
+La imagen Docker (`docker-entrypoint.sh`) valida la configuración, ejecuta
+`prisma migrate deploy` y recién entonces inicia la API. Así la BD se migra en el mismo
+momento en que arranca la versión nueva, sin una ventana con la BD migrada y el código viejo.
+
+1. **Respaldo**: `mysqldump --single-transaction --routines --triggers --no-tablespaces
+   --set-gtid-purged=OFF -h <host> -u <user> -p ciisic_vii > ciisic_vii_$(date +%F_%H%M).sql`
+2. **Preflight** (opcional, ya ensayado): `mysql … ciisic_vii < prisma/preflight/verificar-esquema.sql`.
+3. **Variables** en Dokploy: ver `docs/despliegue-ecosistema.md` (sección backend-ciisic).
+4. **Desplegar** la imagen de `feat/multi-evento-sdd`. En el log deben verse las migraciones
+   aplicadas, los avisos de importación de credenciales y `🚀 Server corriendo…`.
+5. **Verificar**: `GET /health`, `GET /api/v1/registration-types` (legacy, 4 tipos del VIII) y
+   `mysql … ciisic_vii < prisma/preflight/conteos-despues.sql` (mismos conteos del paso 2).
+6. **Rollback** (si algo falla en 4–5): volver a desplegar la imagen anterior, `DROP DATABASE
+   ciisic_vii; CREATE DATABASE ciisic_vii;` y restaurar el respaldo del paso 1. No intentar
+   "arreglar a mano" una migración a medias.

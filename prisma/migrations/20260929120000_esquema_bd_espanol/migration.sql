@@ -61,13 +61,15 @@ ALTER TABLE `participantes`
     RENAME COLUMN `actualizadoEn` TO `actualizado_en`,
     RENAME COLUMN `idTipoDocumentoId` TO `tipo_documento_id`,
     RENAME COLUMN `numero` TO `numero_documento`;
-UPDATE `participantes` SET `numero_documento` = `dni`;
-UPDATE `participantes` SET `tipo_documento_id` = 'dni' WHERE `tipo_documento_id` IS NULL OR `tipo_documento_id` = '';
+-- Los índices únicos antiguos se quitan antes de copiar `dni`: en producción hay filas con
+-- `numero` vacío y la copia no debe chocar con ellos a mitad del UPDATE.
 ALTER TABLE `participantes`
     DROP INDEX `Usuario_dni_key`,
     DROP INDEX `Usuario_numero_key`,
-    DROP INDEX `Usuario_idTipoDocumentoId_fkey`,
-    DROP COLUMN `dni`;
+    DROP INDEX `Usuario_idTipoDocumentoId_fkey`;
+UPDATE `participantes` SET `numero_documento` = `dni`;
+UPDATE `participantes` SET `tipo_documento_id` = 'dni' WHERE `tipo_documento_id` IS NULL OR `tipo_documento_id` = '';
+ALTER TABLE `participantes` DROP COLUMN `dni`;
 ALTER TABLE `participantes`
     MODIFY `tipo_documento_id` VARCHAR(191) NOT NULL,
     MODIFY `numero_documento` VARCHAR(20) NOT NULL,

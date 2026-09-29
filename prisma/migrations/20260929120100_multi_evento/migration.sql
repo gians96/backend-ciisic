@@ -1,8 +1,10 @@
 -- ============================================================================
 -- Spec 002 · Multi-evento
 -- ----------------------------------------------------------------------------
--- Crea `eventos`, registra el evento en curso (VIII CIISIC 2026) como evento principal
--- y asigna a él todos los datos existentes (backfill). No borra datos.
+-- Crea `eventos`. Los datos existentes pertenecen al VII CIISIC 2025 (id 1, FINALIZADO): se
+-- crea ese evento solo si la BD ya tenía datos y se le asignan todos (backfill). El evento en
+-- curso, VIII CIISIC 2026 (id 2), queda como principal y arranca con una copia de las
+-- categorías y tipos de inscripción del VII (mismos códigos y precios). No borra datos.
 -- ============================================================================
 
 -- 1) Eventos (ediciones del congreso u otros eventos)
@@ -34,12 +36,44 @@ CREATE TABLE `eventos` (
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
+-- VII CIISIC 2025 (21–23 oct 2025): edición histórica a la que pertenecen los datos existentes.
+-- En una BD nueva (sin datos) no se crea.
+INSERT INTO `eventos` (
+    `id`, `codigo`, `nombre`, `nombre_corto`, `fecha_inicio`, `fecha_fin`,
+    `inscripciones_inicio`, `inscripciones_fin`, `inscripciones_abiertas`, `estado`, `es_principal`,
+    `dominio_institucional`, `remitente_nombre`, `asunto_aprobacion`, `actualizado_en`
+)
+SELECT
+    1,
+    'ciisic-vii-2025',
+    'VII Congreso Internacional de Ingeniería de Sistemas e Investigación Científica',
+    'VII CIISIC 2025',
+    '2025-10-21',
+    '2025-10-23',
+    (SELECT MIN(`creado_en`) FROM `inscripciones`),
+    (SELECT MAX(`creado_en`) FROM `inscripciones`),
+    false,
+    'FINALIZADO',
+    false,
+    'undc.edu.pe',
+    'Inscripción al congreso',
+    '✅ Tu inscripción ha sido aprobada',
+    CURRENT_TIMESTAMP(3)
+FROM DUAL
+WHERE EXISTS (SELECT 1 FROM `inscripciones`)
+   OR EXISTS (SELECT 1 FROM `categorias_inscripcion`)
+   OR EXISTS (SELECT 1 FROM `actividades`)
+   OR EXISTS (SELECT 1 FROM `ponencias`)
+   OR EXISTS (SELECT 1 FROM `mensajes_contacto`);
+
+-- VIII CIISIC 2026 (26–30 oct 2026): evento en curso y principal (rutas legacy de la landing).
+-- El remitente del correo se toma de la credencial de correo (spec 006) salvo que se defina aquí.
 INSERT INTO `eventos` (
     `id`, `codigo`, `nombre`, `nombre_corto`, `descripcion`, `sede`, `fecha_inicio`, `fecha_fin`,
     `inscripciones_abiertas`, `estado`, `es_principal`, `dominio_institucional`, `correo_contacto`,
-    `telefono_contacto`, `remitente_nombre`, `asunto_aprobacion`, `datos_pago`, `actualizado_en`
+    `telefono_contacto`, `asunto_aprobacion`, `datos_pago`, `actualizado_en`
 ) VALUES (
-    1,
+    2,
     'ciisic-viii-2026',
     'VIII Congreso Internacional de Ingeniería de Sistemas e Investigación Científica',
     'VIII CIISIC 2026',
@@ -53,8 +87,7 @@ INSERT INTO `eventos` (
     'undc.edu.pe',
     'congreso@undc.edu.pe',
     '+51 949 026 908',
-    'VIII CIISIC',
-    'Inscripción aprobada',
+    '✅ Tu inscripción ha sido aprobada',
     JSON_OBJECT(
         'titular', 'Jhon Ismael Santiago Rojas',
         'bancos', JSON_ARRAY(JSON_OBJECT('codigo', 'bcp', 'nombre', 'BCP', 'numeroCuenta', '25519777007010', 'cci', '00225511977700701083')),
@@ -91,6 +124,20 @@ UPDATE `tipos_inscripcion` SET `orden` = `id`;
 ALTER TABLE `tipos_inscripcion` MODIFY `codigo` VARCHAR(80) NOT NULL;
 ALTER TABLE `tipos_inscripcion` ADD UNIQUE INDEX `uq_tipos_inscripcion_categoria_codigo` (`categoria_id`, `codigo`);
 ALTER TABLE `tipos_inscripcion` DROP INDEX `idx_tipos_inscripcion_categoria`;
+
+-- 3b) El VIII arranca con la configuración del VII (categorías y tipos con los mismos códigos
+--     y precios). Las inscripciones del VII siguen apuntando a los tipos del VII.
+INSERT INTO `categorias_inscripcion` (`evento_id`, `codigo`, `nombre`, `descripcion`, `caracteristicas`, `precio_desde`, `es_estudiantil`, `orden`)
+SELECT 2, `codigo`, `nombre`, `descripcion`, `caracteristicas`, `precio_desde`, `es_estudiantil`, `orden`
+FROM `categorias_inscripcion`
+WHERE `evento_id` = 1
+ORDER BY `id`;
+INSERT INTO `tipos_inscripcion` (`categoria_id`, `codigo`, `nombre`, `etiqueta`, `descripcion`, `caracteristicas`, `precio`, `precio_institucional`, `activo`, `orden`)
+SELECT nueva.`id`, t.`codigo`, t.`nombre`, t.`etiqueta`, t.`descripcion`, t.`caracteristicas`, t.`precio`, t.`precio_institucional`, t.`activo`, t.`orden`
+FROM `tipos_inscripcion` t
+JOIN `categorias_inscripcion` anterior ON anterior.`id` = t.`categoria_id` AND anterior.`evento_id` = 1
+JOIN `categorias_inscripcion` nueva ON nueva.`evento_id` = 2 AND nueva.`codigo` = anterior.`codigo`
+ORDER BY t.`id`;
 
 -- 4) inscripciones: evento + datos de revisión
 ALTER TABLE `inscripciones`

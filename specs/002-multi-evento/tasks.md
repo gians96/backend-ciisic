@@ -29,4 +29,6 @@
 - [x] T018 Ignorar `estadoId`/`pago`/`descuento`/`file` del cliente; escape HTML en PDF y correo; plantillas por evento
 - [x] T019 Pruebas (Jest) de precios, creación, seguridad, eventos, ponencias
 - [x] T020 Prueba de humo contra BD migrada
-- [ ] T021 Retirar las rutas legacy cuando la nueva landing esté en producción
+- [ ] T021 Retirar las rutas legacy cuando la nueva landing esté en producción (`LEGACY_ROUTES_ENABLED=false`)
+- [x] T022 Los datos existentes pertenecen al VII CIISIC 2025 (FINALIZADO); el VIII CIISIC 2026 se crea como principal con copia de categorías y tipos (ensayado con el respaldo real)
+- [x] T023 La API pública por código se reemplaza por la API del sitio con token por evento (spec 007)
