@@ -119,6 +119,26 @@ Response `200` (siempre 200 si la solicitud es válida, exista o no el estudiant
 
 `400 { "msg": "SOLICITUD_INVALIDA", "success": false, "error": "..." }` si faltan `email` y `codigo` o los formatos son inválidos.
 
+Comportamientos adicionales (implementados en API_UNDC, `specs/002-verificacion-estudiante-externa`):
+
+- `429 { "msg": "LIMITE_EXCEDIDO", "success": false }` con `Retry-After`: 60 solicitudes por
+  minuto (ventana deslizante) por cliente y por proceso.
+- `503 { "msg": "SERVICIO_NO_DISPONIBLE" }` si no se puede validar la API key; `500 ERROR_INTERNO`
+  ante errores inesperados. El congreso trata cualquier respuesta no 2xx como
+  "servicio no disponible" (precio regular).
+- Si se envían `codigo` y `email`, prevalece `codigo` (8–12 dígitos); `dni` acepta 8–12 caracteres alfanuméricos.
+- Cruce por nombres: cada palabra del nombre SIVIRENO se usa una sola vez; faltan apellidos
+  o nombres ⇒ no coincide. Estudiante inexistente ⇒ `coincide_identidad: false` si se
+  enviaron datos, `null` si no.
+- `matriculado_semestre_activo` es `null` si no hay semestre activo o no hay matrículas sincronizadas.
+- Si SIVIRENO no responde en una consulta sin caché, responde 200 con `es_estudiante: false`
+  y `fuente: "CACHE"` (indistinguible de "no existe"). `carrera` suele venir `null` porque la
+  búsqueda pública de SIVIRENO no la devuelve.
+- La API key se crea desde app-web-sigenet (Configuraciones → Integraciones → Clientes API)
+  o con `npm run api-client:create -- --nombre "Backend CIISIC" --scopes estudiantes:verificar`.
+  Se guarda como HMAC-SHA256 (clave derivada de `INTEGRATION_SECRET_KEY`); cambiar esa
+  variable invalida todas las keys.
+
 ### Regla de negocio en el congreso
 
 `esEstudianteUndc = es_estudiante && !egresado && coincide_identidad === true`.
@@ -200,6 +220,25 @@ El backend del congreso envía siempre los nombres que obtuvo **él mismo** de R
 ```
 
 Ninguna respuesta incluye correos, DNI, códigos de estudiante ni URLs de vouchers.
+
+Comportamientos adicionales (implementados en deportes-fi, `specs/001-tokens-api-por-evento`):
+
+- `400` (formato estándar de NestJS, mensajes en español) si `status` no es válido, `page < 1`
+  o `pageSize` fuera de 1–100 (no se recorta).
+- `503` en operaciones con tokens si en producción falta `API_TOKEN_PEPPER` (cambiarla
+  invalida todos los tokens emitidos).
+- Orden: pagos por `uploadedAt` descendente y equipos por `createdAt` descendente (`id` como desempate).
+- `operationNumber` puede ser `null`; `description` es HTML saneado o `null`; montos con
+  hasta 2 decimales sumados con Decimal.
+- `participants.total` cuenta a todos los participantes de todos los equipos; `byDiscipline`
+  incluye todas las disciplinas del evento (aunque no tengan equipos); `byParticipantType`
+  siempre trae `STUDENT` y `OTHER`.
+- Los pagos se clasifican **solo por el estado del voucher**: si se rechaza un equipo cuyo
+  voucher estaba `VALIDATED`, ese monto sigue contando como recaudado (a revisar con el
+  equipo de deportes).
+- Aplica el rate limit global por IP de deportes-fi (120 solicitudes/minuto por defecto).
+- Los tokens se generan en el panel de deportes-fi (Eventos → «Tokens API»); formato
+  `dfi_` + 43 caracteres base64url; se muestran una sola vez.
 
 ---
 

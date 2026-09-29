@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { fechaSoloDia } from '../../../core/fechas'
 import { monto } from '../../../core/catalogos'
+import { mimeDeArchivo } from '../../../middlewares/upload'
 
 /** Relaciones que se cargan para mostrar una inscripción completa. */
 export const detalleInclude = {
@@ -59,6 +60,7 @@ export function aDetalle(i: InscripcionDetalle) {
             numeroOperacion: i.numeroOperacion,
             fechaPago: fechaSoloDia(i.fechaPago),
             tieneVoucher: Boolean(i.voucherArchivo),
+            voucherMime: i.voucherArchivo ? mimeDeArchivo(i.voucherArchivo) : null,
         },
         verificacion: {
             esEstudianteUndc: i.esEstudianteUndc,

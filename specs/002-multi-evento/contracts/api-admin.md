@@ -73,7 +73,7 @@ Detalle de inscripción:
   "clasificacion": { "id": 4, "nombre": "…" },
   "estado": { "id": 1, "codigo": "PENDIENTE", "nombre": "Pendiente" },
   "pago": { "monto": 100, "descuento": 20, "tieneDescuento": true, "modalidad": "banco", "banco": "bcp", "tipoOperacion": "directo",
-            "billeteraDigital": null, "numeroOperacion": "…", "fechaPago": "2026-09-20", "tieneVoucher": true },
+            "billeteraDigital": null, "numeroOperacion": "…", "fechaPago": "2026-09-20", "tieneVoucher": true, "voucherMime": "image/png" },
   "verificacion": { "esEstudianteUndc": true, "esCorreoInstitucional": true, "codigoEstudiante": "…", "detalle": { … } },
   "revision": { "motivoRechazo": null, "revisadoPor": { "id": 1, "nombres": "…" }, "revisadoEn": "…", "credencialEnviadaEn": "…" }
 }
