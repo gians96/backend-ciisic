@@ -8,4 +8,4 @@
 - [x] T006 Precio UNDC solo con token válido; instantánea en la inscripción (pruebas)
 - [x] T007 Migración `20260929120300_verificacion_estudiante`
 - [ ] T008 Configurar `UNDC_API_URL`/`UNDC_API_KEY` en producción (tras desplegar API_UNDC)
-- [ ] T009 Prueba integrada contra API_UNDC local (se ejecuta al terminar la feature en API_UNDC)
+- [x] T009 Prueba integrada contra API_UNDC local: verificado (token + S/ 100), identidad que no coincide → IDENTIDAD_NO_COINCIDE, correo inexistente → NO_ES_ESTUDIANTE, externo → S/ 120 (2026-09-29)
