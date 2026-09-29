@@ -3,7 +3,8 @@ import * as yup from 'yup'
 const campos = {
     tipo: yup.string().oneOf(['DEPORTES_FI']),
     nombre: yup.string().trim().min(2).max(120),
-    urlBase: yup.string().trim().url('Debe ser una URL válida').max(255),
+    // El formato y el protocolo los valida `validarUrlBase` (anti-SSRF); yup rechazaría localhost
+    urlBase: yup.string().trim().max(255),
     token: yup.string().trim().min(8).max(2000),
     activo: yup.boolean(),
 }
