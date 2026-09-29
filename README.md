@@ -5,6 +5,8 @@ eventos, inscripciones, tipos de inscripción, actividades y asistencia, ponenci
 de DNI con pool de tokens, verificación de estudiantes UNDC e integración con deportes-fi.
 
 - **Stack**: Node 22 · Express 5 · TypeScript · Prisma 6 · MySQL 8 · yup · Jest
+- **Documentación** (visión general, configuración, API, datos, operación): [`docs/`](docs/README.md)
+- **Guía para agentes de IA y forma de trabajar**: [`AGENTS.md`](AGENTS.md)
 - **Arquitectura y contratos entre sistemas**: [`docs/arquitectura-ecosistema.md`](docs/arquitectura-ecosistema.md)
 - **Despliegue del ecosistema (orden y variables)**: [`docs/despliegue-ecosistema.md`](docs/despliegue-ecosistema.md)
 - **Especificaciones (SDD con GitHub Spec Kit)**: [`specs/`](specs) y la constitución en
