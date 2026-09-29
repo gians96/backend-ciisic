@@ -6,12 +6,14 @@ Todo despliegue va precedido de un respaldo de su base de datos.
 
 ## 0. Antes de empezar
 
-- [ ] Ensayar la migración del congreso con el **dump real** de `ciisic_vii` en un MySQL 8
-      local (`specs/001-esquema-bd-espanol/plan.md`, pasos 2–5).
+- [x] Ensayo de la migración del congreso con el **respaldo real** de `ciisic_vii` (2026-09-29):
+      la imagen Docker migró al arrancar, conteos idénticos, `migrate diff` vacío.
 - [ ] En API_UNDC, revisar `_prisma_migrations`: el respaldo del 27-ago tenía
       `20260827170000_sivireno_api_cache_integrations` como **fallida**; si sigue así,
       `prisma migrate deploy` se detendrá al iniciar el contenedor.
-- [ ] Acordar una ventana corta para el backend del congreso (≈10 min).
+- [ ] Credenciales externas vigentes: la API key de Brevo actual responde "API Key is not
+      enabled" y el token de Decolecta "Apikey Required / Limit Exceeded" (verificado el
+      2026-09-29). Generar una API key nueva en Brevo y un token nuevo (Decolecta o apiperu).
 
 ## 1. API_UNDC (rama `feat/clientes-api`)
 
@@ -35,30 +37,37 @@ Todo despliegue va precedido de un respaldo de su base de datos.
 
 ## 3. backend-ciisic (rama `feat/multi-evento-sdd`)
 
-Runbook completo: `specs/001-esquema-bd-espanol/plan.md`.
+Runbook: `specs/001-esquema-bd-espanol/plan.md`. Producción corre hoy
+`PIEROLS15/inscripcion-congreso-backend` (VII); la app de Dokploy debe pasar a construir
+`gians96/backend-ciisic` (rama `feat/multi-evento-sdd` o `main` tras fusionarla) **en la misma
+app**, para conservar el volumen de `/app/uploads` (vouchers).
 
-1. Detener el backend, `mysqldump` de `ciisic_vii`, ejecutar
-   `prisma/preflight/verificar-esquema.sql` (bloqueantes en 0).
-2. `npx prisma migrate deploy` (aplica `paper_submissions` si faltaba y las 5 migraciones
-   nuevas), luego `prisma/preflight/conteos-despues.sql`.
-3. Variables nuevas:
+1. Respaldo: `mysqldump` de `ciisic_vii` (ver runbook).
+2. Variables de entorno de la app:
 
-   | Variable | Valor |
-   |---|---|
-   | `SECRETS_ENCRYPTION_KEY` | **obligatoria**: `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"` |
-   | `UNDC_API_URL` | `https://api-jp.episundc.pe` |
-   | `UNDC_API_KEY` | key del paso 1.3 |
-   | `INTEGRATIONS_ALLOWED_HOSTS` | host de la API de deportes-fi (p. ej. `api.deportes-fi.undc.edu.pe`) |
-   | `CORS_ORIGINS` | incluir el dominio de la landing (p. ej. `https://ciisic-viii.episundc.pe`) |
-   | `BREVO_SENDER_NAME` | opcional: ahora se toma del evento (`remitente_nombre`) |
+   | Variable | Acción | Valor |
+   |---|---|---|
+   | `PORT`, `DATABASE_URL` | se mantienen | |
+   | `JWT_SECRET` | se mantiene (rotar después) | con menos de 32 caracteres arranca con aviso; al rotarlo las sesiones se cierran |
+   | `SECRETS_ENCRYPTION_KEY` | **nueva, obligatoria** | `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`; no cambiarla después (cifra las credenciales y firma los tokens de acceso) |
+   | `CORS_ORIGINS` | **nueva** | `https://ciisic-viii.episundc.pe` (landing actual; admite `https://*.episundc.pe`) |
+   | `BREVO_API_KEY`, `BREVO_SENDER`, `BREVO_SENDER_NAME` | solo el primer arranque | se importan a la BD (Correo) si la tabla está vacía; después se quitan |
+   | `DECOLECTA_TOKEN` | solo el primer arranque | se importa al pool de consultas DNI; después se quita |
+   | `UNDC_API_URL`, `UNDC_API_KEY` | nuevas (cuando API_UNDC esté desplegada) | `https://api-jp.episundc.pe` y la key del paso 1.3 |
+   | `INTEGRATIONS_ALLOWED_HOSTS` | opcional | host de la API de deportes-fi |
+   | `NUBETEC_TOKEN`, `API_RENIEC_DNI`, `API_URL`, `BREVO_SENDER_SUBJECT`, `SHADOW_DATABASE_URL` | **se eliminan** | el asunto ahora es por evento; la shadow DB solo se usa en desarrollo |
 
-   Se eliminan: `RENIEC_PROVIDER`, `RENIEC_TOKEN`, `API_RENIEC_DNI`, `NUBETEC_TOKEN`,
-   `DECOLECTA_TOKEN`, `API_URL`.
-4. Iniciar la nueva imagen y probar: `GET /health`,
-   `GET /api/v1/public/events/ciisic-viii-2026`, `GET /api/v1/registration-types` (legacy).
-5. Los administradores existentes conservan su contraseña; deben volver a iniciar sesión
-   (el JWT ahora lleva el código de rol).
-6. La landing **actual** sigue funcionando: las rutas legacy apuntan al evento principal.
+   `NODE_ENV=production` lo fija la imagen.
+3. Desplegar. El contenedor valida la configuración, aplica `prisma migrate deploy`
+   (8 migraciones: `paper_submissions` y las 7 nuevas) e inicia. En el log: las migraciones,
+   los avisos de importación ("se importó…", "ya no se usa: quítala") y `🚀 Server corriendo`.
+4. Probar: `GET /health`, `GET /api/v1/registration-types` (legacy: 4 tipos del VIII) y
+   `prisma/preflight/conteos-despues.sql` (11 administradores, 308 inscripciones, 585 asistencias,
+   2 eventos).
+5. Quitar del entorno las variables importadas y las obsoletas; redeplegar (sin migraciones pendientes).
+6. Los administradores existentes conservan su contraseña; deben volver a iniciar sesión.
+7. La landing **actual** sigue funcionando con las rutas legacy (evento principal = VIII) hasta
+   que se publique la nueva; entonces `LEGACY_ROUTES_ENABLED=false` y se quita `CORS_ORIGINS`.
 
 ## 4. administrator-ciisic-frontend (ramas `main` + `feat/panel-admin`)
 
@@ -66,23 +75,29 @@ Runbook completo: `specs/001-esquema-bd-espanol/plan.md`.
    p. ej. `admin-ciisic.episundc.pe`.
 2. Variables: `NUXT_BACKEND_BASE_URL` (URL interna o pública del backend, sin `/api/v1`),
    `NUXT_SESSION_MAX_AGE=3600`, `NUXT_PUBLIC_LANDING_URL`.
-3. En el panel:
-   - **Consultas DNI** → registrar los tokens de Decolecta y apiperu (límite, renovación, prioridad).
-   - **Eventos → VIII CIISIC 2026 → Integraciones** → pegar la URL de la API de deportes-fi
-     y el token del paso 2.2; **Probar**.
-   - Revisar **Datos de pago** y **Categorías y tipos**.
+3. En el panel (SuperAdmin):
+   - **Correo** → revisar la credencial importada; **reemplazar la API key** por una vigente,
+     **Probar** (cuenta y créditos) y **Enviar prueba**.
+   - **Consultas DNI** → reemplazar el token de Decolecta o agregar uno de apiperu (límite,
+     renovación, prioridad) y **Probar**.
+   - **Eventos → VIII CIISIC 2026 → Acceso** → **Generar token** para la landing (se muestra una vez).
+   - **Eventos → VIII CIISIC 2026 → Integraciones** → URL de la API de deportes-fi y token del
+     paso 2.2; **Probar**.
+   - Revisar **Datos de pago** y **Categorías y tipos** del VIII.
 
 ## 5. ciisic-undc-web (rama `feat/multi-evento-sdd`)
 
-1. Variables: `NUXT_PUBLIC_EVENTO_CODIGO=ciisic-viii-2026`, `NUXT_PUBLIC_API_BASE_URL`,
-   `NUXT_BACKEND_BASE_URL` (lecturas SSR cacheadas), `NUXT_PUBLIC_ADMIN_URL`.
-   Se eliminan `NUXT_X_API_TOKEN` y `NUXT_X_API_URL`.
+1. Variables: `NUXT_BACKEND_BASE_URL` (backend, solo servidor), `NUXT_BACKEND_EVENT_TOKEN`
+   (token de acceso del paso 4.3, **solo servidor**), `NUXT_PUBLIC_ADMIN_URL`.
+   Se eliminan `NUXT_X_API_TOKEN`, `NUXT_X_API_URL` y `NUXT_PUBLIC_API_BASE_URL`.
 2. Desplegar y hacer una inscripción de prueba completa (DNI, verificación, voucher) y
    aprobarla en el panel.
-3. La rama de producción documentada era `rama-beni`: su commit `1297af2 update hero` no
+3. En el backend: `LEGACY_ROUTES_ENABLED=false` y quitar `CORS_ORIGINS`.
+4. La rama de producción documentada era `rama-beni`: su commit `1297af2 update hero` no
    está en `main` y choca en `Landing2026.vue`; decidir qué versión del hero se publica.
 
 ## 6. Después del lanzamiento
 
 - Retirar las rutas legacy del backend (spec 002, T021) cuando no haya tráfico hacia ellas.
-- Rotar/retirar el token de NubeTec que usaba la landing anterior.
+- Rotar las credenciales compartidas por chat: contraseña de la BD, `JWT_SECRET`, Brevo y
+  Decolecta; el token de NubeTec ya no se usa (su endpoint responde 404).

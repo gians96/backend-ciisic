@@ -33,6 +33,9 @@ RUN npx prisma generate
 # Compilar TypeScript
 RUN npm run build
 
+# Script de arranque con finales de línea LF aunque se haya clonado en Windows
+RUN sed -i 's/\r$//' docker-entrypoint.sh
+
 
 # =======================
 # Etapa de producción
@@ -57,6 +60,7 @@ RUN adduser -S nodejs -u 1001
 WORKDIR /app
 RUN mkdir -p uploads && chown nodejs:nodejs /app uploads
 
+ENV NODE_ENV=production
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
@@ -72,10 +76,12 @@ COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
 # Copiar las plantillas HTML necesarias (no son compilados por TypeScript)
 COPY --from=builder --chown=nodejs:nodejs /app/src/api/inscription/utils/templates ./dist/src/api/inscription/utils/templates
 COPY --from=builder --chown=nodejs:nodejs /app/public ./public
+COPY --from=builder --chown=nodejs:nodejs /app/docker-entrypoint.sh ./docker-entrypoint.sh
 
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD node --eval "require('http').get('http://localhost:3000/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => { process.exit(1) })"
 
-CMD ["dumb-init", "node", "dist/src/server.js"]
+# Valida la configuración, aplica migraciones pendientes (MIGRATE_ON_START=false para omitir) e inicia
+CMD ["dumb-init", "sh", "./docker-entrypoint.sh"]

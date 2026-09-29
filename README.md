@@ -17,6 +17,8 @@ de DNI con pool de tokens, verificación de estudiantes UNDC e integración con 
 | [003](specs/003-consultas-dni) | Consultas DNI (Decolecta, apiperu) con rotación de tokens |
 | [004](specs/004-verificacion-estudiante) | Verificación de estudiantes con API_UNDC |
 | [005](specs/005-integracion-deportes) | Integración con deportes-fi (Semana Sistémica) |
+| [006](specs/006-credenciales-correo) | Credenciales de correo (Brevo) cifradas en BD, por evento |
+| [007](specs/007-tokens-acceso-evento) | Token de acceso por evento y API del sitio (`/api/v1/site`) para la landing |
 
 ## Desarrollo local
 
@@ -43,12 +45,13 @@ src/middlewares/              auth por rol, validación, uploads, rate limits, e
 src/api/<módulo>/             controllers · routes · services · validation
   event · registration-type · inscription · activity · participant · papers · contact
   document-lookup · student-verification · integration · admin · catalog
+  email-credential · access-token
 tests/                        Jest (*.test.ts)
 ```
 
 ## Despliegue
 
-Ver el runbook de `specs/001-esquema-bd-espanol/plan.md`: respaldo → preflight →
-`npx prisma migrate deploy` → conteos → iniciar la nueva versión. Variables nuevas
-obligatorias en producción: `SECRETS_ENCRYPTION_KEY`; recomendadas: `UNDC_API_URL`,
-`UNDC_API_KEY`, `INTEGRATIONS_ALLOWED_HOSTS`.
+Guía completa (orden, variables y verificación): [`docs/despliegue-ecosistema.md`](docs/despliegue-ecosistema.md).
+La imagen Docker valida la configuración, aplica `prisma migrate deploy` e inicia la API
+(`docker-entrypoint.sh`; `MIGRATE_ON_START=false` para omitir la migración).
+Obligatorias en producción: `DATABASE_URL`, `JWT_SECRET`, `SECRETS_ENCRYPTION_KEY`.

@@ -19,7 +19,7 @@ actualizar este documento.
 | Deportes FI (frontend) | `gians96/derportes-fi-frontend` | Nuxt 4 + Tailwind 4 | Gestión de tokens por evento |
 
 ```
-ciisic-undc-web ──(REST /api/v1/public/*)──► backend-ciisic ◄──(BFF Nitro, cookie httpOnly)── administrator-ciisic-frontend
+ciisic-undc-web ──(BFF Nitro · X-Api-Key del evento · /api/v1/site/*)──► backend-ciisic ◄──(BFF Nitro, cookie httpOnly)── administrator-ciisic-frontend
                                               │  ├─► Decolecta / apiperu  (pool de tokens rotativo, caché, bitácora)
                                               │  ├─► API_UNDC  POST /externo/estudiantes/verificar  (X-API-Key)
                                               │  └─► deportes-fi GET /api/v1/integrations/event/*   (X-Api-Key por evento)
@@ -242,12 +242,14 @@ Comportamientos adicionales (implementados en deportes-fi, `specs/001-tokens-api
 
 ---
 
-## Contrato 3 — API pública del congreso (landing)
+## Contrato 3 — API del sitio (landing de cada evento)
 
-Definido en `backend-ciisic/specs/002-multi-evento/contracts/api-publica.md`.
-Resumen: `GET /api/v1/public/events/:codigo`, `GET …/registration-types`,
-`POST …/inscriptions`, `POST …/student-verification`, `POST …/papers`, `POST …/contact`,
-`GET /api/v1/public/document-lookup/dni/:numero`.
+Definido en `backend-ciisic/specs/007-tokens-acceso-evento/contracts/api-sitio.md`.
+La landing llama desde su servidor Nitro con `X-Api-Key: <token de acceso del evento>` (generado
+en el panel; solo se guarda su hash) y `X-Client-Ip` para los límites por visitante. El evento
+sale del token: `GET /api/v1/site/event`, `/registration-types`, `/catalogs`,
+`POST /inscriptions`, `/student-verification`, `/papers`, `/contact` y
+`GET /document-lookup/dni/:numero`. CORS no admite `X-Api-Key`.
 
 ## Contrato 4 — API administrativa del congreso (panel)
 
