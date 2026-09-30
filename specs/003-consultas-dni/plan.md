@@ -46,7 +46,7 @@ Decolecta solo documenta `400 {"error":"Invalid request"}`; como el formato se v
 
 | Variable | Default | Uso |
 |---|---|---|
-| `SECRETS_ENCRYPTION_KEY` | derivada de JWT_SECRET fuera de producción | Clave AES (32 bytes base64). **Obligatoria en producción.** Generar: `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"` |
+| ~~`SECRETS_ENCRYPTION_KEY`~~ | eliminada (spec 008, enmienda 2026-09-30) | La clave AES se deriva siempre de `JWT_SECRET` |
 | `DNI_CACHE_TTL_DAYS` | 30 | Vigencia de la caché |
 | `DNI_LOOKUP_TIMEOUT_MS` | 8000 | Timeout por proveedor |
 

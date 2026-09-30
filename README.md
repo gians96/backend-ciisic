@@ -21,7 +21,7 @@ de DNI con pool de tokens, verificación de estudiantes UNDC e integración con 
 | [005](specs/005-integracion-deportes) | Integración con deportes-fi (Semana Sistémica) |
 | [006](specs/006-credenciales-correo) | Credenciales de correo (Brevo) cifradas en BD, por evento |
 | [007](specs/007-tokens-acceso-evento) | Token de acceso por evento y API del sitio (`/api/v1/site`) para la landing |
-| [008](specs/008-configuracion-sistema) | Configuración en la BD (API_UNDC, Google, URL del panel, rutas legacy) y solo 3 variables de entorno |
+| [008](specs/008-configuracion-sistema) | Configuración en la BD (API_UNDC, Google, URL del panel, rutas legacy) y solo 2 variables de entorno |
 | [009](specs/009-api-sitio-abierta) | API abierta (CORS `*`) protegida por tokens, con límites por token |
 | [010](specs/010-google-sign-in) | Acceso con Google: panel (admins e inscritos) y verificación opcional del correo en la landing |
 | [011](specs/011-portal-participante) | Portal del inscrito: "Mis inscripciones" con estado y credencial |
@@ -29,7 +29,7 @@ de DNI con pool de tokens, verificación de estudiantes UNDC e integración con 
 ## Desarrollo local
 
 ```bash
-cp .env.example .env          # DATABASE_URL, JWT_SECRET, SECRETS_ENCRYPTION_KEY (nada más)
+cp .env.example .env          # DATABASE_URL y JWT_SECRET (nada más)
 npm ci
 npx prisma migrate deploy     # o `npx prisma migrate dev` en una BD de desarrollo
 npm run seed                  # catálogos (idempotente); `npm run seed -- --demo` agrega tipos de ejemplo
@@ -59,5 +59,5 @@ tests/                        Jest (*.test.ts)
 
 Guía completa (orden, variables y verificación): [`docs/despliegue-ecosistema.md`](docs/despliegue-ecosistema.md).
 La imagen Docker valida la configuración, aplica `prisma migrate deploy` e inicia la API
-(`docker-entrypoint.sh`). Variables de entorno: solo `DATABASE_URL`, `JWT_SECRET` y
-`SECRETS_ENCRYPTION_KEY`; el resto se configura en el panel (Sistema, Correo, Consultas DNI).
+(`docker-entrypoint.sh`). Variables de entorno: solo `DATABASE_URL` y `JWT_SECRET`; el
+resto se configura en el panel (Sistema, Correo, Consultas DNI).

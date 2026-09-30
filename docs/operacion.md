@@ -31,8 +31,7 @@ Muestra una contraseña temporal una sola vez (en la imagen: `node dist/src/data
 
 | Secreto | Cómo rotar | Efecto |
 |---|---|---|
-| `JWT_SECRET` | Cambiar la variable y redeplegar | Se cierran todas las sesiones y caducan los tokens de verificación |
-| `SECRETS_ENCRYPTION_KEY` | **Evitar.** Si es imprescindible: volver a cargar en el panel todas las API keys y tokens, y regenerar los tokens de acceso | Los secretos cifrados y los tokens de acceso dejan de servir |
+| `JWT_SECRET` | Cambiar la variable y redeplegar; luego volver a guardar en el panel la API key de Brevo, los tokens DNI, la API key de API_UNDC y el token de deportes-fi | Se cierran las sesiones, caducan los tokens de verificación y los secretos guardados no se pueden leer hasta volver a guardarlos. Los tokens de acceso de las landings **siguen sirviendo** |
 | API key de Brevo, tokens DNI, token de deportes-fi, API key de API_UNDC | Editar en el panel (Correo, Consultas DNI, Integraciones, Sistema) | Inmediato |
 | Token de acceso de una landing | Panel → Eventos → Acceso → generar uno nuevo, configurarlo en la landing y revocar el anterior | Inmediato |
 | Contraseña de la BD | Cambiarla en MySQL y en `DATABASE_URL` | Requiere redeplegar |
@@ -41,7 +40,8 @@ Muestra una contraseña temporal una sola vez (en la imagen: `node dist/src/data
 
 | Síntoma | Causa probable | Qué hacer |
 |---|---|---|
-| El contenedor no arranca y el log dice "…es obligatoria" | Falta una variable (p. ej. `SECRETS_ENCRYPTION_KEY`) | Agregarla; la BD no se tocó |
+| El contenedor no arranca y el log dice "…es obligatoria" | Falta una variable (`DATABASE_URL` o `JWT_SECRET`) | Agregarla; la BD no se tocó |
+| Una credencial falla con "No se pudo descifrar un secreto guardado" | Cambió `JWT_SECRET` | Volver a guardarla en el panel (Correo, Consultas DNI, Sistema o Integraciones) |
 | La landing responde `EVENT_TOKEN_REQUIRED` / `INVALID_EVENT_TOKEN` | Token faltante, revocado o expirado | Generar uno nuevo en Eventos → Acceso |
 | Consulta DNI siempre 503 | Sin tokens vigentes | Consultas DNI → agregar o reiniciar tokens y **Probar** |
 | Verificación de estudiante "no disponible" | API_UNDC sin configurar o caída | Sistema → API UNDC → **Probar** |

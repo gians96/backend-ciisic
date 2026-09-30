@@ -7,7 +7,7 @@
 | Archivo | Rol |
 |---|---|
 | `prisma/migrations/20260929120600_tokens_acceso` | Tabla `tokens_acceso` |
-| `src/core/tokens-acceso.ts` | Generación, formato y hash HMAC |
+| `src/core/tokens-acceso.ts` | Generación, formato y hash SHA-256 |
 | `src/middlewares/sitio.ts` | `requireTokenEvento` (evento, IP del visitante, último uso) y `eventoDelSitio(req)` |
 | `src/middlewares/rate-limit.ts` | Clave del límite = IP del visitante (`X-Client-Ip` con token válido) |
 | `src/middlewares/legacy.ts` | `rutaLegacy` (410 con `LEGACY_ROUTES_ENABLED=false`) |

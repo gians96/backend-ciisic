@@ -39,11 +39,11 @@ del token de acceso del evento, nunca de un parámetro del cliente.
   `descuento` ni rutas de archivo enviadas por el cliente.
 - Todo texto de usuario que se inserta en HTML (PDF, correos) se escapa.
 - Secretos salientes (tokens de proveedores, tokens de integraciones, credenciales de
-  correo, API key de API_UNDC) se guardan cifrados (AES-256-GCM con
-  `SECRETS_ENCRYPTION_KEY`) y la API solo expone su sufijo.
-- El entorno solo contiene lo que no puede vivir en la BD: `DATABASE_URL`, `JWT_SECRET` y
-  `SECRETS_ENCRYPTION_KEY` (`PORT` opcional). Toda otra configuración se gestiona en el panel
-  (Sistema, Correo, Consultas DNI) o es una constante del código.
+  correo, API key de API_UNDC) se guardan cifrados (AES-256-GCM con una clave
+  derivada de `JWT_SECRET`) y la API solo expone su sufijo.
+- El entorno solo contiene lo que no puede vivir en la BD: `DATABASE_URL` y `JWT_SECRET`
+  (`PORT` opcional). Toda otra configuración se gestiona en el panel (Sistema, Correo,
+  Consultas DNI) o es una constante del código.
 - Las URLs salientes configuradas por administradores se validan contra SSRF
   (`src/core/url-saliente.ts`): https y, en producción, nunca destinos internos.
 - Las rutas públicas con costo o abuso posible (consultas DNI, verificación, contacto,
@@ -95,7 +95,10 @@ del token de acceso del evento, nunca de un parámetro del cliente.
 Esta constitución prevalece sobre prácticas ad-hoc. Enmiendas: se documentan en este
 archivo con fecha y motivo, y se revisan en el PR correspondiente.
 
-**Versión**: 1.1.0 | **Ratificada**: 2026-09-29 | **Última enmienda**: 2026-09-30
+**Versión**: 1.2.0 | **Ratificada**: 2026-09-29 | **Última enmienda**: 2026-09-30
+
+- 1.2.0 (2026-09-30): el entorno ya no lleva `SECRETS_ENCRYPTION_KEY`; la clave de los
+  secretos se deriva de `JWT_SECRET` (pedido del responsable del despliegue: una variable menos).
 
 - 1.1.0 (2026-09-30): configuración en la BD y solo tres variables de entorno; API abierta
   (CORS `*`) protegida por tokens con límites por token; perfiles de sesión (admin,

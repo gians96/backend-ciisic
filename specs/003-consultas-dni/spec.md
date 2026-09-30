@@ -58,7 +58,7 @@ agotados, errores, caché) sin exponer los DNI completos.
 
 - **FR-001**: Proveedores soportados: `DECOLECTA` (`GET https://api.decolecta.com/v1/reniec/dni?numero=`)
   y `APIPERU` (`POST https://api.apiperu.dev/dni`), ambos con `Authorization: Bearer`.
-- **FR-002**: Los tokens se guardan cifrados (AES-256-GCM, `SECRETS_ENCRYPTION_KEY`) y nunca
+- **FR-002**: Los tokens se guardan cifrados (AES-256-GCM, clave derivada de `JWT_SECRET`) y nunca
   se devuelven completos.
 - **FR-003**: Selección por `prioridad` ascendente entre tokens `activo` + `ACTIVO` y bajo su límite.
 - **FR-004**: Renovación perezosa según `periodo_renovacion` (DIARIO, MENSUAL, ANUAL, NINGUNO).

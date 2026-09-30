@@ -18,7 +18,7 @@ renombrado desde el esquema anterior: [`specs/001-esquema-bd-espanol/data-model.
 | `tokens_consulta`, `consultas_documento`, `personas_consultadas` | Pool DNI, bitácora enmascarada y caché | tokens cifrados |
 | `integraciones_evento` | deportes-fi por evento | token cifrado |
 | `credenciales_correo` | Brevo | API key cifrada; una predeterminada |
-| `tokens_acceso` | Tokens de la API del sitio | solo hash HMAC; prefijo visible; revocación |
+| `tokens_acceso` | Tokens de la API del sitio | solo hash SHA-256; prefijo visible; revocación |
 | `configuracion_sistema` | Configuración global | **fila única** (`ck_configuracion_sistema_fila_unica`) |
 
 Migraciones: [`prisma/migrations/`](../prisma/migrations). Las que tocan datos existentes están

@@ -8,8 +8,7 @@ demás se configura en el panel o es una constante del código.
 | Variable | Obligatoria | Uso |
 |---|---|---|
 | `DATABASE_URL` | sí | Conexión a MySQL |
-| `JWT_SECRET` | sí (≥ 16; se recomiendan ≥ 32) | Firma de sesiones. Rotarlo cierra todas las sesiones |
-| `SECRETS_ENCRYPTION_KEY` | sí en producción | 32 bytes en base64. Cifra los secretos guardados en la BD y el hash de los tokens de acceso. **No debe cambiar** |
+| `JWT_SECRET` | sí (≥ 16; se recomiendan ≥ 32) | Firma de sesiones y, derivada de él, la clave que cifra los secretos guardados en la BD. Rotarlo cierra las sesiones y obliga a volver a guardar las credenciales en el panel (los tokens de acceso de las landings siguen sirviendo) |
 | `PORT` | no (3000) | Puerto HTTP |
 | `SHADOW_DATABASE_URL` | solo desarrollo | BD temporal para `prisma migrate dev` |
 | `PUPPETEER_EXECUTABLE_PATH` | solo desarrollo local | Chrome para generar PDF (la imagen Docker trae Chromium) |

@@ -438,7 +438,7 @@ model CredencialCorreo {
 // ─── Tokens de acceso del sitio de cada evento (spec 007) ─────────────────────
 
 /// Token con el que la landing de un evento consume la API del sitio (`/v1/site/*`).
-/// Solo se guarda su hash (HMAC-SHA256); el valor se muestra una única vez al crearlo.
+/// Solo se guarda su hash (SHA-256); el valor se muestra una única vez al crearlo.
 model TokenAcceso {
   id            Int            @id @default(autoincrement())
   eventoId      Int            @map("evento_id")

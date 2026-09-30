@@ -44,13 +44,12 @@ Runbook: `specs/001-esquema-bd-espanol/plan.md`. Producción corre hoy
 app**, para conservar el volumen de `/app/uploads` (vouchers).
 
 1. Respaldo: `mysqldump` de `ciisic_vii` (ver runbook).
-2. Variables de entorno de la app (spec 008: **solo tres**):
+2. Variables de entorno de la app (spec 008: **solo dos**):
 
    | Variable | Acción | Valor |
    |---|---|---|
    | `DATABASE_URL` | se mantiene | |
-   | `JWT_SECRET` | se mantiene (rotar después) | con menos de 32 caracteres arranca con aviso; al rotarlo las sesiones se cierran |
-   | `SECRETS_ENCRYPTION_KEY` | **nueva, obligatoria** | `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`; no cambiarla después (cifra las credenciales y firma los tokens de acceso) |
+   | `JWT_SECRET` | se mantiene; **mejor rotarlo antes del primer arranque** (el actual se compartió por chat) | ≥ 32 caracteres aleatorios (con menos arranca con aviso). De él se deriva la clave que cifra las credenciales: si se rota después, hay que volver a guardarlas en el panel |
    | `PORT` | opcional | 3000 |
    | `BREVO_API_KEY`, `BREVO_SENDER`, `BREVO_SENDER_NAME`, `DECOLECTA_TOKEN` | solo el primer arranque | se importan a la BD (Correo, Consultas DNI) si las tablas están vacías; después se quitan |
    | todo lo demás (`NUBETEC_TOKEN`, `API_RENIEC_DNI`, `API_URL`, `BREVO_SENDER_SUBJECT`, `SHADOW_DATABASE_URL`, `CORS_ORIGINS`, …) | **se elimina** | el log avisa de cada variable que sobre |
@@ -106,5 +105,6 @@ app**, para conservar el volumen de `/app/uploads` (vouchers).
 ## 6. Después del lanzamiento
 
 - Retirar las rutas legacy del backend (spec 002, T021) cuando no haya tráfico hacia ellas.
-- Rotar las credenciales compartidas por chat: contraseña de la BD, `JWT_SECRET`, Brevo y
+- Rotar las credenciales compartidas por chat: contraseña de la BD, `JWT_SECRET` (si no se
+  rotó antes del primer arranque: después hay que volver a guardar las credenciales), Brevo y
   Decolecta; el token de NubeTec ya no se usa (su endpoint responde 404).

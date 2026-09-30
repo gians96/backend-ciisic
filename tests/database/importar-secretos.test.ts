@@ -23,6 +23,7 @@ const VARIABLES = [
     'INTEGRATIONS_TIMEOUT_MS', 'VERIFICACION_SECRET', 'VERIFICACION_TTL_HORAS', 'BREVO_API_URL', 'EMAIL_TIMEOUT_MS', 'UPLOADS_DIR',
     'MAX_UPLOAD_BYTES', 'MIGRATE_ON_START', 'BOOTSTRAP_ADMIN_EMAIL', 'BOOTSTRAP_ADMIN_PASSWORD', 'BOOTSTRAP_ADMIN_NAMES',
     'BOOTSTRAP_ADMIN_SURNAMES', 'UNDC_API_URL', 'UNDC_API_KEY', 'UNDC_API_TIMEOUT_MS', 'GOOGLE_CLIENT_ID', 'LEGACY_ROUTES_ENABLED',
+    'SECRETS_ENCRYPTION_KEY',
 ]
 const filaConfiguracion = (cambios: Record<string, unknown> = {}) => ({
     id: 1, undcApiUrl: null, undcApiKeyCifrada: null, undcApiKeySufijo: null, undcApiTimeoutMs: 8000, googleClientId: null,
@@ -72,6 +73,7 @@ describe('importación de credenciales del entorno anterior', () => {
         process.env.BREVO_SENDER = 'remitente@gmail.com'
         process.env.NUBETEC_TOKEN = 'viejo'
         process.env.API_URL = 'https://api-ciisic-vii.episundc.pe'
+        process.env.SECRETS_ENCRYPTION_KEY = 'clave-que-ya-no-se-usa'
         m.tokenConsulta.count.mockResolvedValue(2)
         m.credencialCorreo.count.mockResolvedValue(1)
 
@@ -84,6 +86,7 @@ describe('importación de credenciales del entorno anterior', () => {
             expect.stringContaining('BREVO_API_KEY/BREVO_SENDER/BREVO_SENDER_NAME ya no se usan'),
             'NUBETEC_TOKEN ya no se usa: quítala del entorno.',
             'API_URL ya no se usa: quítala del entorno.',
+            'SECRETS_ENCRYPTION_KEY ya no se usa: quítala del entorno.',
         ]))
     })
 

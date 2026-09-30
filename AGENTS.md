@@ -13,8 +13,8 @@ y Google. Documentación: [`docs/`](docs/README.md).
 ## Entorno y comandos
 
 - Node 22 + npm. En Windows se puede usar Git Bash o PowerShell (en PowerShell 5.1 encadena con `;`).
-- `.env` local (ver [`.env.example`](.env.example)): solo `DATABASE_URL`, `JWT_SECRET`,
-  `SECRETS_ENCRYPTION_KEY` (+ `SHADOW_DATABASE_URL` y `PUPPETEER_EXECUTABLE_PATH` en desarrollo).
+- `.env` local (ver [`.env.example`](.env.example)): solo `DATABASE_URL` y `JWT_SECRET`
+  (+ `SHADOW_DATABASE_URL` y `PUPPETEER_EXECUTABLE_PATH` en desarrollo).
 - Comandos:
 
   | Tarea | Comando |
@@ -33,7 +33,8 @@ y Google. Documentación: [`docs/`](docs/README.md).
 
 ## Arquitectura
 
-- `config/env.ts`: variables validadas (solo 3 obligatorias).
+- `config/env.ts`: variables validadas (solo 2 obligatorias; la clave de los secretos se deriva
+  de `JWT_SECRET`).
 - `src/core/`: errores (`HttpError`), fechas de Lima, cifrado (`crypto.ts`), sesiones JWT con
   audiencia (`sesiones.ts`), configuración del sistema con caché (`configuracion-sistema.ts`),
   URLs salientes anti-SSRF (`url-saliente.ts`), reglas del correo institucional.
@@ -72,10 +73,11 @@ y Google. Documentación: [`docs/`](docs/README.md).
 
 ## Seguridad
 
-- El entorno solo lleva `DATABASE_URL`, `JWT_SECRET` y `SECRETS_ENCRYPTION_KEY`. Toda otra
-  configuración va a la BD (panel) o es constante: **no agregues variables de entorno nuevas**.
-- Secretos en BD cifrados con `cifrar`/`descifrar` (AES-256-GCM); la API devuelve solo el sufijo.
-  Tokens entrantes (acceso del sitio) solo como hash HMAC.
+- El entorno solo lleva `DATABASE_URL` y `JWT_SECRET`. Toda otra configuración va a la BD
+  (panel) o es constante: **no agregues variables de entorno nuevas**.
+- Secretos en BD cifrados con `cifrar`/`descifrar` (AES-256-GCM, clave derivada de `JWT_SECRET`:
+  rotarlo obliga a volver a guardarlos); la API devuelve solo el sufijo. Tokens entrantes (acceso
+  del sitio) solo como hash SHA-256, que no depende de `JWT_SECRET`.
 - Guardas obligatorias en toda ruta no pública; un token de un perfil nunca abre rutas de otro.
 - CORS abierto (`*`, sin cookies): la seguridad es el token. Toda ruta del sitio lleva límite por
   visitante **y** por token.

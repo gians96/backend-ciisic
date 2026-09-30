@@ -42,10 +42,10 @@ por visitante aunque todas las llamadas lleguen desde el servidor de la landing.
 
 ## Requirements
 
-- **FR-001**: Tabla `tokens_acceso` (evento, nombre, prefijo único, hash HMAC-SHA256 único,
+- **FR-001**: Tabla `tokens_acceso` (evento, nombre, prefijo único, hash SHA-256 único,
   último uso, expiración, revocación, creado por).
-- **FR-002**: Formato `ciisic_` + 32 bytes aleatorios (base64url). Hash con clave derivada de
-  `SECRETS_ENCRYPTION_KEY`.
+- **FR-002**: Formato `ciisic_` + 32 bytes aleatorios (base64url). Hash SHA-256 sin clave (256 bits
+  aleatorios; enmienda 2026-09-30: así rotar `JWT_SECRET` no invalida los tokens).
 - **FR-003**: API del sitio `/api/v1/site/*` (evento, tipos, catálogos, inscripciones,
   verificación de estudiante, consulta DNI, ponencias, contacto): el evento sale solo del token.
 - **FR-004**: El token se valida antes de aceptar archivos (multipart).

@@ -24,12 +24,13 @@ estudiantes), probar la conexión y cambiarlas sin redeplegar.
 
 ### User Story 2 - Menos variables de entorno (Priority: P1)
 
-Como responsable del despliegue quiero configurar solo `DATABASE_URL`, `JWT_SECRET` y
-`SECRETS_ENCRYPTION_KEY`; lo demás se configura en el panel o es constante.
+Como responsable del despliegue quiero configurar solo `DATABASE_URL` y `JWT_SECRET`; lo demás
+se configura en el panel o es constante. (Enmienda 2026-09-30: se quitó `SECRETS_ENCRYPTION_KEY`;
+la clave de los secretos se deriva de `JWT_SECRET`.)
 
 **Acceptance Scenarios**:
 
-1. El backend arranca solo con esas tres variables.
+1. El backend arranca solo con esas dos variables.
 2. Si el entorno aún trae `UNDC_API_*`, `GOOGLE_CLIENT_ID` o `LEGACY_ROUTES_ENABLED`, se
    importan una vez a la configuración (si nunca se editó en el panel) y el log indica que
    ya se pueden quitar; las demás variables antiguas solo generan el aviso.
@@ -60,5 +61,5 @@ Como SuperAdmin quiero desactivar las rutas legacy con un interruptor.
 
 ## Success Criteria
 
-- **SC-001**: `.env.example` con 3 variables.
+- **SC-001**: `.env.example` con 2 variables.
 - **SC-002**: Cambiar la configuración de API_UNDC no requiere redeplegar.

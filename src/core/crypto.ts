@@ -3,13 +3,14 @@ import { env } from '../../config/env'
 
 /**
  * Cifrado simétrico AES-256-GCM para secretos salientes (tokens de proveedores e
- * integraciones). Formato: `v1:<iv b64>:<tag b64>:<datos b64>`.
+ * integraciones). Formato: `v1:<iv b64>:<tag b64>:<datos b64>`. La clave se deriva de
+ * JWT_SECRET: si este cambia, los secretos guardados dejan de poder leerse.
  */
 const ALGORITMO = 'aes-256-gcm'
 const VERSION = 'v1'
 
 function clave(): Buffer {
-    return env.SECRETS_ENCRYPTION_KEY
+    return env.CLAVE_SECRETOS
 }
 
 export function cifrar(texto: string): string {
@@ -23,9 +24,13 @@ export function cifrar(texto: string): string {
 export function descifrar(payload: string): string {
     const [version, iv, tag, datos] = payload.split(':')
     if (version !== VERSION || !iv || !tag || !datos) throw new Error('Formato de secreto cifrado no reconocido')
-    const decipher = crypto.createDecipheriv(ALGORITMO, clave(), Buffer.from(iv, 'base64'))
-    decipher.setAuthTag(Buffer.from(tag, 'base64'))
-    return Buffer.concat([decipher.update(Buffer.from(datos, 'base64')), decipher.final()]).toString('utf8')
+    try {
+        const decipher = crypto.createDecipheriv(ALGORITMO, clave(), Buffer.from(iv, 'base64'))
+        decipher.setAuthTag(Buffer.from(tag, 'base64'))
+        return Buffer.concat([decipher.update(Buffer.from(datos, 'base64')), decipher.final()]).toString('utf8')
+    } catch {
+        throw new Error('No se pudo descifrar un secreto guardado: si cambió JWT_SECRET, vuelve a guardar la credencial en el panel')
+    }
 }
 
 /** Últimos caracteres visibles de un secreto (para mostrar `••••1234`). */

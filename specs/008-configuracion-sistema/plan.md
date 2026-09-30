@@ -15,7 +15,7 @@
 | `src/middlewares/legacy.ts` | Interruptor desde la configuración |
 | `src/database/importarSecretosLegados.ts` | Importación única desde el entorno y avisos |
 | `src/database/bootstrapAdmin.ts` | Argumentos de línea de comandos |
-| `config/env.ts` | Solo `DATABASE_URL`, `JWT_SECRET`, `SECRETS_ENCRYPTION_KEY`, `PORT` |
+| `config/env.ts` | Solo `DATABASE_URL`, `JWT_SECRET`, `PORT`; la clave de los secretos se deriva de `JWT_SECRET` (enmienda 2026-09-30) |
 
 ## Pruebas
 

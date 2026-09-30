@@ -1,21 +1,17 @@
 import crypto from 'crypto'
-import { env } from '../../config/env'
 
 /**
  * Tokens de acceso del sitio de cada evento (spec 007): `ciisic_` + 32 bytes aleatorios en
- * base64url. En BD solo se guarda el HMAC-SHA256 (clave derivada de SECRETS_ENCRYPTION_KEY)
- * y un prefijo visible para reconocerlo en el panel.
+ * base64url. En BD solo se guarda su SHA-256 y un prefijo visible para reconocerlo en el panel.
+ * Con 256 bits aleatorios no hace falta una clave: así rotar JWT_SECRET no invalida los tokens
+ * que usan las landings.
  */
 export const PREFIJO_TOKEN_ACCESO = 'ciisic_'
 const LARGO_PREFIJO_VISIBLE = PREFIJO_TOKEN_ACCESO.length + 8
 const FORMATO = /^ciisic_[A-Za-z0-9_-]{43}$/
 
-function claveHmac(): Buffer {
-    return crypto.createHmac('sha256', env.SECRETS_ENCRYPTION_KEY).update('tokens-acceso:v1').digest()
-}
-
 export function hashTokenAcceso(token: string): string {
-    return crypto.createHmac('sha256', claveHmac()).update(token).digest('hex')
+    return crypto.createHash('sha256').update(`tokens-acceso:v2:${token}`).digest('hex')
 }
 
 export function generarTokenAcceso(): { token: string, prefijo: string, hash: string } {
