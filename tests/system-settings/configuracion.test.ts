@@ -93,13 +93,25 @@ describe('configuración del sistema (SuperAdmin)', () => {
         expect(ok.body.data).toMatchObject({ ok: true, codigoHttp: 200, configuracion: { undcApi: { ultimoEstado: 'OK' } } })
         const [url, init] = fetchMock.mock.calls[0]
         expect(url).toBe('https://api-jp.episundc.pe/externo/estudiantes/verificar')
-        expect(init).toMatchObject({ method: 'POST', redirect: 'error' })
+        expect(init).toMatchObject({ method: 'POST', redirect: 'manual' })
         expect(init.headers['X-API-Key']).toBe('undc_clave_secreta_9f3a')
 
         fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ msg: 'SCOPE_INSUFICIENTE' }), { status: 403 }))
         const sinPermiso = await request(app).post('/api/v1/settings/undc-api/test').set('Authorization', superAdmin())
         expect(sinPermiso.body.data).toMatchObject({ ok: false, codigoHttp: 403, mensaje: expect.stringContaining('estudiantes:verificar') })
         expect(fila.undcUltimoEstado).toBe('ERROR')
+    })
+
+    it('si la URL redirige (la de un sitio web, no la de la API) lo explica sin seguir la redirección', async () => {
+        const { cifrar } = await import('../../src/core/crypto')
+        fila = nuevaFila({ undcApiUrl: 'https://jp.episundc.pe', undcApiKeyCifrada: cifrar('undc_clave_secreta_9f3a'), undcApiKeySufijo: '9f3a' })
+        fetchMock.mockResolvedValueOnce(new Response(null, { status: 302, headers: { location: '/' } }))
+
+        const r = await request(app).post('/api/v1/settings/undc-api/test').set('Authorization', superAdmin())
+
+        expect(r.body.data).toMatchObject({ ok: false, codigoHttp: 302, mensaje: expect.stringContaining('https://api-jp.episundc.pe') })
+        expect(fetchMock).toHaveBeenCalledTimes(1)
+        expect(fila.undcUltimoError).toContain('redirige')
     })
 
     it('sin configurar, la prueba responde 409', async () => {

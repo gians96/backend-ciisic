@@ -11,6 +11,8 @@ type FilaConEditor = ConfiguracionSistema & { actualizadoPor: { id: number, nomb
 
 /** Correo de prueba: API_UNDC no consulta SIVIRENO si la parte local no es un código numérico. */
 const CORREO_PRUEBA = 'prueba-conexion@undc.edu.pe'
+/** Se sugiere cuando la URL guardada redirige (suele ser la de un sitio web, no la de la API). */
+const URL_API_UNDC_EJEMPLO = 'https://api-jp.episundc.pe'
 
 export function aConfiguracion(fila: FilaConEditor) {
     return {
@@ -105,13 +107,18 @@ export async function probarUndc() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-API-Key': descifrar(fila.undcApiKeyCifrada) },
             body: JSON.stringify({ email: CORREO_PRUEBA }),
-            redirect: 'error',
+            // Nunca se siguen redirecciones; con 'manual' se puede explicar en vez de fallar a ciegas
+            redirect: 'manual',
             signal: AbortSignal.timeout(fila.undcApiTimeoutMs),
         })
         codigoHttp = respuesta.status
-        const cuerpo = await respuesta.json().catch(() => null) as { data?: { es_estudiante?: unknown } } | null
-        ok = respuesta.ok && typeof cuerpo?.data?.es_estudiante === 'boolean'
-        mensaje = ok ? 'Conexión correcta: API_UNDC respondió con la API key configurada.' : (respuesta.ok ? 'API_UNDC respondió en un formato no reconocido.' : mensajePorEstado(respuesta.status))
+        if (respuesta.status >= 300 && respuesta.status < 400) {
+            mensaje = `La URL redirige a otra página (HTTP ${respuesta.status}): no es la de la API. Usa la URL base de API_UNDC, p. ej. ${URL_API_UNDC_EJEMPLO}.`
+        } else {
+            const cuerpo = await respuesta.json().catch(() => null) as { data?: { es_estudiante?: unknown } } | null
+            ok = respuesta.ok && typeof cuerpo?.data?.es_estudiante === 'boolean'
+            mensaje = ok ? 'Conexión correcta: API_UNDC respondió con la API key configurada.' : (respuesta.ok ? 'API_UNDC respondió en un formato no reconocido.' : mensajePorEstado(respuesta.status))
+        }
     } catch (error) {
         const agotado = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')
         mensaje = error instanceof Error && error.name === 'HttpError'
