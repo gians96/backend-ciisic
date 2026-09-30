@@ -26,6 +26,7 @@ de DNI con pool de tokens, verificación de estudiantes UNDC e integración con 
 | [010](specs/010-google-sign-in) | Acceso con Google: panel (admins e inscritos) y verificación opcional del correo en la landing |
 | [011](specs/011-portal-participante) | Portal del inscrito: "Mis inscripciones" con estado y credencial |
 | [012](specs/012-qr-billeteras) | Imagen del QR de las billeteras: subida desde el panel y entrega a la landing |
+| [013](specs/013-roles-permisos) | Roles (Owner, Administrador del sistema, Tesorero, Comisión), permisos por ruta y alcance por evento |
 
 ## Desarrollo local
 
@@ -34,7 +35,7 @@ cp .env.example .env          # DATABASE_URL y JWT_SECRET (nada más)
 npm ci
 npx prisma migrate deploy     # o `npx prisma migrate dev` en una BD de desarrollo
 npm run seed                  # catálogos (idempotente); `npm run seed -- --demo` agrega tipos de ejemplo
-npm run bootstrap:admin:dev -- --correo tu@undc.edu.pe   # SuperAdmin inicial (muestra una contraseña temporal)
+npm run bootstrap:admin:dev -- --correo tu@undc.edu.pe   # Owner inicial (muestra una contraseña temporal)
 npm run dev
 ```
 
@@ -48,7 +49,7 @@ prisma/schema.prisma          modelos en español (@@map / @map)
 prisma/migrations/            migraciones (las de renombrado están escritas a mano)
 prisma/preflight/             verificaciones previas y conteos para producción
 src/core/                     errores, fechas (Lima), cifrado, plantillas, paginación
-src/middlewares/              auth por rol, validación, uploads, rate limits, errores
+src/middlewares/              auth por permisos, validación, uploads, rate limits, errores
 src/api/<módulo>/             controllers · routes · services · validation
   event · registration-type · inscription · activity · participant · papers · contact
   document-lookup · student-verification · integration · admin · catalog

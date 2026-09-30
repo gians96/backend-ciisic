@@ -26,7 +26,7 @@ y Google. Documentación: [`docs/`](docs/README.md).
   | Migraciones (dev / deploy) | `npx prisma migrate dev` · `npx prisma migrate deploy` |
   | Verificar que no hay drift | `npx prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --shadow-database-url <shadow> --exit-code` |
   | Catálogos (idempotente) | `npm run seed` (`-- --demo` agrega tipos de ejemplo) |
-  | Primer SuperAdmin | `npm run bootstrap:admin:dev -- --correo tu@undc.edu.pe` |
+  | Primer Owner | `npm run bootstrap:admin:dev -- --correo tu@undc.edu.pe` |
 
 - BD local: MySQL 8.4 en Docker (`ciisic-mysql`, puerto 3310). **Nunca** apuntes a producción
   desde desarrollo.
@@ -37,10 +37,12 @@ y Google. Documentación: [`docs/`](docs/README.md).
   de `JWT_SECRET`).
 - `src/core/`: errores (`HttpError`), fechas de Lima, cifrado (`crypto.ts`), sesiones JWT con
   audiencia (`sesiones.ts`), configuración del sistema con caché (`configuracion-sistema.ts`),
-  URLs salientes anti-SSRF (`url-saliente.ts`), reglas del correo institucional.
-- `src/middlewares/`: `auth.ts` (`verifyAdminRole`, `verifySuperAdminRole`, `requireParticipante`,
-  `requireSesion`), `sitio.ts` (`requireTokenEvento`), `rate-limit.ts` (por IP, token o
-  participante), `legacy.ts`, `upload.ts`, `validate.ts`.
+  URLs salientes anti-SSRF (`url-saliente.ts`), reglas del correo institucional; roles y permisos
+  del staff (`catalogos.ts`, `permisos.ts`), la cuenta leída de la BD (`actor.ts`) y los
+  resolutores del evento de cada recurso (`resolutores-evento.ts`).
+- `src/middlewares/`: `auth.ts` (`requirePermiso`, `requireActor`, `requireParticipante`,
+  `requireSesion`), `sitio.ts` (`requireTokenEvento`), `rate-limit.ts` (por IP, token,
+  participante o cuenta de staff), `legacy.ts`, `upload.ts`, `validate.ts`.
 - `src/api/<módulo>/{controllers,routes,services}` + `validation.ts`; las rutas se autocargan
   (`src/loaders/routesLoader.ts`) con `buildRouter(AppRoute[])`.
 - Prisma 6 (`prisma/schema.prisma`, modelos en español con `@@map`); migraciones en
@@ -65,8 +67,11 @@ y Google. Documentación: [`docs/`](docs/README.md).
   de archivo enviadas por el cliente. Precio UNDC en la categoría estudiantil solo con un token
   de verificación de estudiante válido y coincidente.
 - Aprobar genera la credencial y envía el correo; si el correo falla, la aprobación se mantiene.
-- Google en la landing es **opcional** y no cambia precios; en el panel entra un admin activo
-  (cualquier dominio) o un participante inscrito (portal).
+- Google en la landing es **opcional** y no cambia precios; en el panel entra una cuenta de staff
+  activa (cualquier dominio) o un participante inscrito (portal).
+- Staff (spec 013): Owner (`SUPERADMIN`) y Administrador del sistema (`ADMIN`) son globales;
+  Tesorero y Comisión solo operan en sus eventos. Solo el Owner configura Sistema y gestiona Owners
+  y Administradores. Sin `pagos.ver` no salen montos ni datos de pago (van en `null`).
 - Reglas del dominio institucional fijas en `src/core/correo-institucional.ts` (`undc.edu.pe`,
   parte local numérica = estudiante).
 - Las rutas legacy existen para la landing anterior y se apagan desde el panel (Sistema).
@@ -79,6 +84,14 @@ y Google. Documentación: [`docs/`](docs/README.md).
   rotarlo obliga a volver a guardarlos); la API devuelve solo el sufijo. Tokens entrantes (acceso
   del sitio) solo como hash SHA-256, que no depende de `JWT_SECRET`.
 - Guardas obligatorias en toda ruta no pública; un token de un perfil nunca abre rutas de otro.
+  Staff: `requirePermiso(permiso, { evento })` con un permiso de `src/core/permisos.ts` (los
+  permisos por evento necesitan un resolutor de `resolutores-evento.ts`) o `requireActor`; la guarda
+  va primera (tras `rutaLegacy`), antes de `upload` y `validateBody`. Los roles se nombran con
+  `ROL.OWNER`/`ROL.ADMINISTRADOR`, nunca con los literales `'SUPERADMIN'`/`'ADMIN'` (el
+  `tipo: 'ADMIN'` de las respuestas de sesión es otra cosa y se mantiene).
+- Sesiones del staff: el JWT lleva la huella de las credenciales (`huellaCredenciales`: correo,
+  contraseña y cuenta Google) y el inicio de la sesión. Cambiar esas credenciales cierra las sesiones
+  abiertas; `POST /v1/auth/refresh` conserva el inicio y se corta a las 12 h.
 - CORS abierto (`*`, sin cookies): la seguridad es el token. Toda ruta del sitio lleva límite por
   visitante **y** por token.
 - URLs salientes configurables: `validarUrlSaliente` + `asegurarDestinoPublico`.
@@ -119,7 +132,7 @@ con ambos sistemas levantados.
 
 Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Cada cambio
 empieza en `specs/NNN-nombre/` (spec → plan → tasks → contracts) y se marcan las tasks al
-implementar. Specs actuales: 001–012 (ver [README](README.md)).
+implementar. Specs actuales: 001–013 (ver [README](README.md)).
 
 ## Antes de dar por terminado
 

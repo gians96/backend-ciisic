@@ -29,10 +29,16 @@ del token de acceso del evento, nunca de un parámetro del cliente.
   producción. `prisma migrate diff` entre migraciones y esquema debe quedar vacío.
 
 ### III. Seguridad por defecto (NO NEGOCIABLE)
-- Toda ruta no pública exige una guarda: `verifyAdminRole` / `verifySuperAdminRole`
-  (sesión de administrador, audiencia `ciisic-admin`), `requireParticipante` (portal del
-  inscrito, audiencia `ciisic-participante`) o `requireTokenEvento` (API del sitio). Un
-  token de un perfil nunca abre rutas de otro.
+- Toda ruta no pública exige una guarda: `requirePermiso` / `requireActor` (staff,
+  audiencia `ciisic-admin`), `requireParticipante` (portal del inscrito, audiencia
+  `ciisic-participante`) o `requireTokenEvento` (API del sitio). Un token de un perfil nunca
+  abre rutas de otro.
+- La autorización del staff es por permisos: cada ruta declara los permisos que acepta
+  (catálogo `src/core/permisos.ts`) y la cuenta (rol, estado, eventos asignados y permisos) se
+  lee de la BD en cada petición, nunca del JWT; un cambio o una desactivación aplica en la
+  siguiente petición. Las cuentas con alcance por evento solo operan en sus eventos: el evento
+  se resuelve del recurso y, si no se puede, la guarda falla cerrada. Sin `pagos.ver` ninguna
+  respuesta lleva montos ni datos de pago.
 - La API está abierta a cualquier origen (CORS `*`, sin cookies): la protege el token, no una
   lista de orígenes. Las rutas del sitio tienen límite por visitante **y** por token.
 - El servidor calcula precios, estados y montos; jamás acepta `estadoId`, `pago`,
@@ -95,7 +101,13 @@ del token de acceso del evento, nunca de un parámetro del cliente.
 Esta constitución prevalece sobre prácticas ad-hoc. Enmiendas: se documentan en este
 archivo con fecha y motivo, y se revisan en el PR correspondiente.
 
-**Versión**: 1.2.0 | **Ratificada**: 2026-09-29 | **Última enmienda**: 2026-09-30
+**Versión**: 1.3.0 | **Ratificada**: 2026-09-29 | **Última enmienda**: 2026-09-30
+
+- 1.3.0 (2026-09-30): principio III, autorización del staff por permisos (`requirePermiso` /
+  `requireActor`) con la cuenta leída de la BD en cada petición, en lugar de roles fijos leídos
+  del JWT (`verifyAdminRole` / `verifySuperAdminRole`). Motivo: roles Tesorero y Comisión
+  tecnológica con alcance por evento y delegación del equipo (spec 013), y que un cambio de
+  rol, de permisos o una desactivación aplique al instante.
 
 - 1.2.0 (2026-09-30): el entorno ya no lleva `SECRETS_ENCRYPTION_KEY`; la clave de los
   secretos se deriva de `JWT_SECRET` (pedido del responsable del despliegue: una variable menos).

@@ -259,9 +259,41 @@ spec 012; la landing la sirve desde su BFF), `POST /inscriptions`, `/student-ver
 
 ## Contrato 4 — API administrativa del congreso (panel)
 
-Definido en `backend-ciisic/specs/002-multi-evento/contracts/api-admin.md` y en las specs
-003–005. El panel la consume solo a través de su BFF (`/api/backend/**`), que agrega el
+Definido en `backend-ciisic/specs/002-multi-evento/contracts/api-admin.md`, en las specs
+003–012 y, para la autorización, en `specs/013-roles-permisos/contracts/api-roles-permisos.md`.
+El panel la consume solo a través de su BFF (`/api/backend/**`), que agrega el
 `Authorization: Bearer` desde una cookie httpOnly.
+
+### Roles y permisos (spec 013)
+
+- Cuatro roles de staff: **Owner** (`SUPERADMIN`) y **Administrador del sistema** (`ADMIN`),
+  globales; **Tesorero** (`TESORERO`) y **Comisión tecnológica** (`COMISION`), solo en los eventos
+  asignados. `SUPERADMIN` y `ADMIN` conservan su código hasta después del 30-oct-2026; solo cambia
+  el nombre visible (`rolNombre`).
+- Cada ruta exige un permiso del catálogo `src/core/permisos.ts`; la cuenta se lee de la BD en cada
+  petición. El backend es la autoridad: el panel solo oculta lo que el usuario no puede usar.
+- `POST /api/v1/auth/login`, `POST /api/v1/auth/google`, `GET /api/v1/auth/session` y
+  `POST /api/v1/auth/refresh` devuelven el usuario con
+  `acceso: { alcance: "GLOBAL"|"EVENTO", permisos: string[], eventoIds: number[]|null, perfilParticipante: boolean }`.
+  `acceso` no va en el JWT; el panel arma menús, páginas y botones con `acceso.permisos`.
+- `POST /api/v1/auth/refresh` (sin cuerpo) renueva el JWT de 1 h antes de que caduque y conserva el
+  método de ingreso y el inicio de la sesión: `{ success, data: { jwt, expiraEn, usuario } }`. A las
+  12 h del ingreso responde `401 SESSION_EXPIRED` (volver a ingresar).
+- Cambiar el correo, la contraseña o el vínculo con Google de una cuenta cierra sus sesiones
+  abiertas (`401 SESSION_INVALIDATED` en la siguiente petición), también la de quien se cambia su
+  propia contraseña.
+- Errores que el panel debe manejar: `401 SESSION_INVALIDATED` y `401 SESSION_EXPIRED` (cerrar la
+  sesión; solo ante un 401, no ante un 5xx);
+  `403 FORBIDDEN` y `403 EVENT_NOT_ASSIGNED` (refrescar el acceso y la lista de eventos);
+  `403 STATUS_NOT_ALLOWED` (cancelar sin `inscripciones.cancelar`); los de la gestión del equipo
+  (`ROLE_NOT_ASSIGNABLE`, `ADMIN_NOT_MANAGEABLE`, `LAST_OWNER`, `ADMIN_CHANGED`, `EVENTS_REQUIRED`,
+  `EVENT_NOT_FOUND`, `PERMISSIONS_REQUIRED`, `PERMISSION_NOT_ELIGIBLE`) y los de asistencia
+  (`OUT_OF_HOURS_NOT_ALLOWED`, `AMBIGUOUS_DOCUMENT`, `PARTICIPANT_NOT_FOUND`).
+- Sin `pagos.ver` las respuestas conservan las claves con montos, precios y datos de pago en
+  `null`; `GET /api/v1/events` sin `eventos.configurar` devuelve solo los eventos asignados en una
+  vista reducida. El panel debe tolerar ambos.
+- Compatibilidad: para Owner y Administrador el panel anterior recibe los mismos campos (lo nuevo son
+  claves agregadas) y `PUT /api/v1/admin/:id` sigue aceptando `rolCodigo`.
 
 ---
 
