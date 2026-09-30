@@ -12,7 +12,7 @@ renombrado desde el esquema anterior: [`specs/001-esquema-bd-espanol/data-model.
 | `participantes` | Personas | únicos `(tipo_documento_id, numero_documento)` y `correo`; `google_sub` único (vínculo con Google) |
 | `inscripciones` | Inscripción de un participante a un evento | único `(evento_id, participante_id)`; `numero_operacion` único; estado por código; monto calculado por el servidor; evidencia de verificación de estudiante y de correo (Google) |
 | `estados_inscripcion`, `tipos_documento`, `clasificaciones`, `roles` | Catálogos | se referencian por `codigo` |
-| `administradores` | Usuarios del panel | `correo` único; `activo`; `google_sub` único |
+| `administradores` | Usuarios del panel | `correo` único; `activo`; `google_sub` único; `contrasena_hash` NULL = entra solo con Google |
 | `actividades` / `asistencias` | Asistencia por actividad | única `(participante_id, actividad_id)` |
 | `ponencias`, `mensajes_contacto` | Por evento | |
 | `tokens_consulta`, `consultas_documento`, `personas_consultadas` | Pool DNI, bitácora enmascarada y caché | tokens cifrados |

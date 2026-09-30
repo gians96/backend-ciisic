@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import bcrypt from 'bcryptjs'
 import type { Administrador, Prisma, Rol } from '@prisma/client'
 import { prisma } from '../../../database/prisma'
@@ -33,6 +34,7 @@ export function aAdminPublico(admin: AdminConRol) {
         rolCodigo: admin.rol.codigo,
         rolNombre: admin.rol.nombre,
         activo: admin.activo,
+        tieneContrasena: Boolean(admin.contrasenaHash),
         googleVinculado: Boolean(admin.googleSub),
         googleVinculadoEn: admin.googleVinculadoEn,
         creadoEn: admin.creadoEn,
@@ -49,10 +51,12 @@ let hashFicticio: string | null = null
 
 export async function loginAdmin(correo: string, contrasena: string) {
     const admin = await prisma.administrador.findUnique({ where: { correo }, include: { rol: true } })
-    // Se compara siempre para no revelar por tiempo de respuesta si el correo existe
-    hashFicticio ??= await bcrypt.hash('contrasena-ficticia-para-comparar', COSTO_BCRYPT)
+    // Se compara siempre (también sin cuenta o sin contraseña) para no revelar por tiempo de
+    // respuesta si el correo existe. El hash ficticio es de un valor aleatorio que nadie conoce.
+    hashFicticio ??= await bcrypt.hash(randomBytes(32).toString('hex'), COSTO_BCRYPT)
     const valida = await bcrypt.compare(contrasena, admin?.contrasenaHash ?? hashFicticio)
-    if (!admin || !valida || !admin.activo) throw new HttpError(401, 'INVALID_CREDENTIALS', 'Credenciales incorrectas')
+    // Sin contraseña el administrador entra solo con Google
+    if (!admin?.contrasenaHash || !valida || !admin.activo) throw new HttpError(401, 'INVALID_CREDENTIALS', 'Credenciales incorrectas')
     return { jwt: generateToken(admin), usuario: aUsuarioSesion(admin), expiraEn: SESION_SEGUNDOS }
 }
 
@@ -85,7 +89,7 @@ export async function createAdmin(input: CreateAdminInput) {
             nombres: input.nombres,
             apellidos: input.apellidos,
             correo: input.correo,
-            contrasenaHash: await bcrypt.hash(input.contrasena, COSTO_BCRYPT),
+            contrasenaHash: input.contrasena ? await bcrypt.hash(input.contrasena, COSTO_BCRYPT) : null,
             rolId: rol.id,
             activo: input.activo ?? true,
         },
@@ -99,6 +103,11 @@ export async function updateAdmin(id: number, input: UpdateAdminInput, actorId?:
     if (actorId === id && (input.activo === false || (input.rolCodigo && input.rolCodigo !== 'SUPERADMIN'))) {
         throw conflict('SELF_UPDATE_FORBIDDEN', 'No puede desactivarse ni quitarse el rol de SuperAdmin a sí mismo.')
     }
+    const cambiaCorreo = input.correo !== undefined && input.correo !== actual.correo
+    // Quitar la propia contraseña solo si Google ya funciona para esa cuenta: si no, quedaría sin acceso
+    if (actorId === id && input.quitarContrasena && (!actual.googleSub || cambiaCorreo || input.desvincularGoogle)) {
+        throw conflict('SELF_UPDATE_FORBIDDEN', 'Para quitar tu propia contraseña, primero entra una vez con Google usando este correo.')
+    }
     if (input.correo) {
         const otro = await prisma.administrador.findUnique({ where: { correo: input.correo } })
         if (otro && otro.id !== id) throw conflict('EMAIL_IN_USE', 'Ya existe un administrador con ese correo.')
@@ -108,10 +117,11 @@ export async function updateAdmin(id: number, input: UpdateAdminInput, actorId?:
     if (input.apellidos !== undefined) data.apellidos = input.apellidos
     if (input.correo !== undefined) data.correo = input.correo
     if (input.contrasena !== undefined) data.contrasenaHash = await bcrypt.hash(input.contrasena, COSTO_BCRYPT)
+    else if (input.quitarContrasena) data.contrasenaHash = null
     if (input.rolCodigo !== undefined) data.rolId = (await rolPorCodigo(input.rolCodigo)).id
     if (input.activo !== undefined) data.activo = input.activo
     // Si cambia el correo o se pide explícitamente, se deshace el vínculo con la cuenta Google
-    if ((input.correo !== undefined && input.correo !== actual.correo) || input.desvincularGoogle) {
+    if (cambiaCorreo || input.desvincularGoogle) {
         data.googleSub = null
         data.googleVinculadoEn = null
     }

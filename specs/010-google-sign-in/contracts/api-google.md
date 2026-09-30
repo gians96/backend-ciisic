@@ -32,5 +32,13 @@ evento y correo) y responde `esCorreoVerificado`.
 
 - `PUT /api/v1/admin/:id` y `PUT /api/v1/participants/:id` aceptan `desvincularGoogle: true`;
   las respuestas incluyen `googleVinculado` y `googleVinculadoEn`.
+- Administradores solo con Google:
+  - `POST /api/v1/admin`: `contrasena` es opcional (mínimo 12 caracteres si se envía); sin ella
+    la cuenta entra solo con Google.
+  - `PUT /api/v1/admin/:id` acepta `quitarContrasena: true` (junto con `contrasena` → `422`).
+    Quitarse la propia sin Google vinculado → `409 SELF_UPDATE_FORBIDDEN`.
+  - Las respuestas incluyen `tieneContrasena`.
+  - `POST /api/v1/auth/login` con una cuenta sin contraseña → `401 INVALID_CREDENTIALS`, igual
+    que unas credenciales incorrectas (no revela si el correo existe).
 - Inscripciones: `verificacion.correo = { verificado, detalle: { metodo, tipoCuenta, hd, verificadoEn } | null }`,
   filas con `esCorreoVerificado`, columna "Correo verificado" en el CSV.

@@ -16,6 +16,8 @@
 2. **Given** otra cuenta Google con el mismo correo (correo reasignado), **Then** `403 GOOGLE_ACCOUNT_MISMATCH`.
 3. **Given** un correo que no es administrador ni inscrito, **Then** `403 GOOGLE_ACCOUNT_NOT_REGISTERED`.
 4. La contraseña sigue funcionando.
+5. **Given** un administrador creado sin contraseña ("Solo Google"), **Then** entra solo con
+   Google; el inicio de sesión con contraseña responde `401 INVALID_CREDENTIALS`.
 
 ### User Story 2 - Correo verificado en la inscripción (Priority: P2)
 
@@ -37,6 +39,9 @@
 - **FR-004**: Sesiones con audiencia: `ciisic-admin` o `ciisic-participante`.
 - **FR-005**: Reglas fijas del dominio (`undc.edu.pe`; parte local numérica = estudiante).
 - **FR-006**: La inscripción guarda `es_correo_verificado` y la instantánea `verificacion_correo`.
+- **FR-007**: La contraseña del administrador es opcional (`contrasena_hash` NULL = solo Google).
+  Un SuperAdmin puede ponerla o quitarla; nadie puede quitarse la propia sin tener Google
+  vinculado (quedaría sin acceso).
 
 ## Success Criteria
 

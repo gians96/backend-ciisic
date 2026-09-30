@@ -9,3 +9,6 @@
 - [x] T007 Pruebas
 - [ ] T008 Crear el client ID en Google Cloud (orígenes del panel y de cada landing) y guardarlo en Sistema
 - [ ] T009 Prueba integrada con una cuenta real de estudiante y otra de personal UNDC (claim `hd`)
+- [x] T010 Administradores solo con Google: migración `20260930140000_administradores_solo_google`
+      (`contrasena_hash` opcional), alta sin contraseña, `quitarContrasena`, `tieneContrasena`,
+      login que rechaza cuentas sin contraseña y pruebas (`tests/admin/administradores.test.ts`)

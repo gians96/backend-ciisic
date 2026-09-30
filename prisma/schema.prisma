@@ -28,7 +28,8 @@ model Administrador {
   nombres                 String
   apellidos               String
   correo                  String                 @unique(map: "uq_administradores_correo")
-  contrasenaHash          String                 @map("contrasena_hash")
+  // Sin contraseña (NULL) el administrador entra solo con Google
+  contrasenaHash          String?                @map("contrasena_hash")
   creadoEn                DateTime               @default(now()) @map("creado_en")
   actualizadoEn           DateTime               @updatedAt @map("actualizado_en")
   rolId                   Int                    @map("rol_id")
