@@ -119,7 +119,7 @@ con ambos sistemas levantados.
 
 Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Cada cambio
 empieza en `specs/NNN-nombre/` (spec → plan → tasks → contracts) y se marcan las tasks al
-implementar. Specs actuales: 001–011 (ver [README](README.md)).
+implementar. Specs actuales: 001–012 (ver [README](README.md)).
 
 ## Antes de dar por terminado
 

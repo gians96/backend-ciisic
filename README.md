@@ -25,6 +25,7 @@ de DNI con pool de tokens, verificación de estudiantes UNDC e integración con 
 | [009](specs/009-api-sitio-abierta) | API abierta (CORS `*`) protegida por tokens, con límites por token |
 | [010](specs/010-google-sign-in) | Acceso con Google: panel (admins e inscritos) y verificación opcional del correo en la landing |
 | [011](specs/011-portal-participante) | Portal del inscrito: "Mis inscripciones" con estado y credencial |
+| [012](specs/012-qr-billeteras) | Imagen del QR de las billeteras: subida desde el panel y entrega a la landing |
 
 ## Desarrollo local
 

@@ -253,7 +253,8 @@ El evento sale del token de acceso (`X-Api-Key`, generado en el panel; solo se g
 CORS está abierto a cualquier origen; la landing lo usa desde su servidor Nitro (BFF) y envía
 `X-Client-Ip` para los límites por visitante. Además hay límites por token. Rutas:
 `GET /api/v1/site/event`, `/registration-types`, `/catalogs`, `/config`,
-`GET /document-lookup/dni/:numero`, `POST /inscriptions`, `/student-verification`,
+`GET /document-lookup/dni/:numero`, `GET /payment-qr/:archivo` (imagen del QR de una billetera,
+spec 012; la landing la sirve desde su BFF), `POST /inscriptions`, `/student-verification`,
 `/google-verification`, `/papers`, `/contact`.
 
 ## Contrato 4 — API administrativa del congreso (panel)

@@ -1,4 +1,5 @@
 import * as yup from 'yup'
+import { REGEX_ARCHIVO_QR } from '../../core/almacenamiento'
 import { REGEX_FECHA } from '../../core/fechas'
 
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
@@ -16,6 +17,8 @@ const billeteraSchema = yup.object({
     nombre: yup.string().trim().max(80).required(),
     telefono: yup.string().trim().max(20).required(),
     qrUrl: yup.string().trim().max(255).nullable(),
+    // Imagen subida con POST /v1/payment-qr (tiene prioridad sobre `qrUrl`)
+    qrArchivo: yup.string().trim().matches(REGEX_ARCHIVO_QR, 'Vuelve a subir la imagen del QR').nullable(),
 })
 
 export const datosPagoSchema = yup.object({

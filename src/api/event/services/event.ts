@@ -5,6 +5,7 @@ import { conflict, unprocessable } from '../../../core/http-error'
 import { aColumnaFecha, fechaLima, fechaSoloDia } from '../../../core/fechas'
 import { monto } from '../../../core/catalogos'
 import { obtenerEventoPorId } from './public-event'
+import { limpiarQrs, qrsDe, verificarQrs } from '../../payment-qr/services/payment-qr'
 import type { ActualizarEventoInput, CrearEventoInput } from '../validation'
 
 type CredencialResumen = { id: number, nombre: string, remitenteCorreo: string }
@@ -95,6 +96,7 @@ export async function obtenerEvento(id: number) {
 export async function crearEvento(input: CrearEventoInput) {
     await verificarCodigoLibre(input.codigo)
     await verificarCredencialCorreo(input.credencialCorreoId)
+    if (input.datosPago) await verificarQrs(input.datosPago)
     const origen = input.copiarDeEventoId
         ? await prisma.evento.findUnique({
             where: { id: input.copiarDeEventoId },
@@ -159,15 +161,18 @@ export async function actualizarEvento(id: number, input: ActualizarEventoInput)
     const inicio = input.fechaInicio ?? fechaSoloDia(actual.fechaInicio)
     const fin = input.fechaFin ?? fechaSoloDia(actual.fechaFin)
     if (inicio && fin && fin < inicio) throw conflict('INVALID_DATES', 'La fecha de fin debe ser posterior a la de inicio.')
+    if (input.datosPago) await verificarQrs(input.datosPago)
     const evento = await prisma.$transaction(async (tx) => {
         if (input.esPrincipal) await tx.evento.updateMany({ where: { id: { not: id } }, data: { esPrincipal: false } })
         return tx.evento.update({ where: { id }, data: datosEvento(input) })
     })
+    // Los QR reemplazados o quitados ya no se usan (salvo en otro evento)
+    if (input.datosPago !== undefined) await limpiarQrs(qrsDe(actual.datosPago), qrsDe(input.datosPago))
     return obtenerEvento(evento.id)
 }
 
 export async function eliminarEvento(id: number) {
-    await obtenerEventoPorId(id)
+    const evento = await obtenerEventoPorId(id)
     const [inscripciones, ponencias, asistencias] = await Promise.all([
         prisma.inscripcion.count({ where: { eventoId: id } }),
         prisma.ponencia.count({ where: { eventoId: id } }),
@@ -182,6 +187,7 @@ export async function eliminarEvento(id: number) {
         prisma.actividad.deleteMany({ where: { eventoId: id } }),
         prisma.evento.delete({ where: { id } }),
     ])
+    await limpiarQrs(qrsDe(evento.datosPago), new Set())
 }
 
 /** KPIs del evento para el panel. */

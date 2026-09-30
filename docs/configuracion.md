@@ -56,4 +56,5 @@ numérica de 8–12 dígitos = estudiante; otra parte local = personal (docente 
 | Vigencia de los tokens de verificación | 24 h | `verification-token.ts`, `verificacion-correo.ts` |
 | Sesiones | 1 h | `src/core/sesiones.ts` |
 | Carpeta de archivos / voucher máximo | `<cwd>/uploads` / 5 MB | `src/core/almacenamiento.ts` |
+| QR de las billeteras / máximo | `<cwd>/uploads/qr` / 2 MB (PNG, JPG o WebP) | `src/core/almacenamiento.ts` |
 | Límites por visitante y por token | ver `src/middlewares/rate-limit.ts` | |

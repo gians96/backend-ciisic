@@ -41,7 +41,7 @@ Todo despliegue va precedido de un respaldo de su base de datos.
 Runbook: `specs/001-esquema-bd-espanol/plan.md`. Producción corre hoy
 `PIEROLS15/inscripcion-congreso-backend` (VII); la app de Dokploy debe pasar a construir
 `gians96/backend-ciisic` (rama `feat/multi-evento-sdd` o `main` tras fusionarla) **en la misma
-app**, para conservar el volumen de `/app/uploads` (vouchers).
+app**, para conservar el volumen de `/app/uploads` (vouchers, credenciales, ponencias y QR de pago).
 
 1. Respaldo: `mysqldump` de `ciisic_vii` (ver runbook).
 2. Variables de entorno de la app (spec 008: **solo dos**):
