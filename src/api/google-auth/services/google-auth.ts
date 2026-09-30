@@ -3,8 +3,9 @@ import type { Evento } from '@prisma/client'
 import { prisma } from '../../../database/prisma'
 import { conflict, HttpError } from '../../../core/http-error'
 import { tipoCuentaUndc } from '../../../core/correo-institucional'
-import { firmarSesionAdmin, firmarSesionParticipante } from '../../../core/sesiones'
-import { aUsuarioSesion } from '../../admin/services/admin'
+import { firmarSesionAdmin, firmarSesionParticipante, huellaCredenciales } from '../../../core/sesiones'
+import { actorDesdeFila, usuarioDeActor } from '../../../core/actor'
+import { INCLUIR_ACTOR, usuarioConAcceso } from '../../admin/services/admin'
 import { verificarIdTokenGoogle, type IdentidadGoogle } from './google-verifier'
 import { firmarVerificacionCorreo } from './verificacion-correo'
 
@@ -36,17 +37,21 @@ async function vincular(tabla: 'administrador' | 'participante', registro: Vincu
 /**
  * Inicio de sesión con Google (panel): un administrador activo con ese correo entra como
  * administrador (cualquier dominio, también Gmail); si no, un participante inscrito entra al
- * portal "Mis inscripciones".
+ * portal "Mis inscripciones". El usuario del staff lleva su `acceso` (spec 013).
  */
 export async function iniciarSesionConGoogle(idToken: string, nonce: string) {
     const identidad = await verificarIdTokenGoogle(idToken, { nonce })
 
-    const admin = await prisma.administrador.findUnique({ where: { correo: identidad.correo }, include: { rol: true } })
+    const admin = await prisma.administrador.findUnique({ where: { correo: identidad.correo }, include: INCLUIR_ACTOR })
     if (admin?.activo) {
+        // Un rol desconocido no entra (su sesión no pasaría ninguna guarda) ni cae al portal: la
+        // precedencia administrador > participante no cambia
+        const actor = actorDesdeFila(admin)
+        if (!actor) throw new HttpError(403, 'ACCOUNT_DISABLED', 'Tu cuenta de administrador está desactivada.')
         await vincular('administrador', admin, identidad)
-        const usuario = aUsuarioSesion(admin)
-        const sesion = firmarSesionAdmin(usuario, 'GOOGLE')
-        return { jwt: sesion.jwt, tipo: 'ADMIN' as const, usuario, expiraEn: sesion.expiraEn }
+        // La huella se calcula con la cuenta Google ya vinculada
+        const sesion = firmarSesionAdmin(usuarioDeActor(actor), { metodo: 'GOOGLE', huella: huellaCredenciales({ ...admin, googleSub: identidad.sub }) })
+        return { jwt: sesion.jwt, tipo: 'ADMIN' as const, usuario: await usuarioConAcceso(actor), expiraEn: sesion.expiraEn }
     }
 
     const participante = await prisma.participante.findUnique({ where: { correo: identidad.correo } })

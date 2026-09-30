@@ -5,6 +5,7 @@ import request from 'supertest'
 import app from '../../src/app'
 import { prisma } from '../../src/database/prisma'
 import { DIRECTORIO_QR, REGEX_ARCHIVO_QR } from '../../src/core/almacenamiento'
+import { PERMISOS_ELEGIBLES_COMISION } from '../../src/core/permisos'
 import { tokenDeRol } from '../helpers/tokens'
 import { registroDeToken, TOKEN_SITIO } from '../helpers/sitio'
 
@@ -55,6 +56,38 @@ beforeEach(() => {
     jest.clearAllMocks()
     m.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => fn(prisma))
     m.inscripcion.count.mockResolvedValue(0)
+})
+
+describe('acceso a los QR del panel (spec 013)', () => {
+    const tesorero = () => tokenDeRol('TESORERO', 30, { eventoIds: [2] })
+    const comision = () => tokenDeRol('COMISION', 40, { eventoIds: [2], permisos: [...PERMISOS_ELEGIBLES_COMISION] })
+
+    it('el Owner también sube y ve los QR', async () => {
+        const owner = `Bearer ${tokenDeRol('SUPERADMIN')}`
+        const subida = await request(app).post('/api/v1/payment-qr').set('Authorization', owner).attach('file', PNG, { filename: 'qr.png', contentType: 'image/png' })
+        expect(subida.status).toBe(201)
+        expect((await request(app).get(`/api/v1/payment-qr/${subida.body.data.archivo}`).set('Authorization', owner)).status).toBe(200)
+    })
+
+    it('el Tesorero y la Comisión no suben QR (403 antes de leer el archivo)', async () => {
+        const antes = archivosEnDisco()
+        for (const token of [tesorero(), comision()]) {
+            const res = await request(app).post('/api/v1/payment-qr').set('Authorization', `Bearer ${token}`)
+                .attach('file', PNG, { filename: 'qr.png', contentType: 'image/png' })
+            expect(res.status).toBe(403)
+            expect(res.body).toMatchObject({ success: false, code: 'FORBIDDEN' })
+        }
+        expect(archivosEnDisco()).toBe(antes)
+    })
+
+    it('el Tesorero y la Comisión no ven la imagen desde el panel', async () => {
+        const archivo = qrEnDisco()
+        for (const token of [tesorero(), comision()]) {
+            const res = await request(app).get(`/api/v1/payment-qr/${archivo}`).set('Authorization', `Bearer ${token}`)
+            expect(res.status).toBe(403)
+            expect(res.body).toMatchObject({ success: false, code: 'FORBIDDEN' })
+        }
+    })
 })
 
 describe('subida del QR (panel)', () => {

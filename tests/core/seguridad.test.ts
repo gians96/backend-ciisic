@@ -2,7 +2,7 @@ import express from 'express'
 import request from 'supertest'
 import { asegurarDestinoPublico, esDireccionInterna, validarUrlSaliente } from '../../src/core/url-saliente'
 import { tipoCuentaUndc } from '../../src/core/correo-institucional'
-import { limitador } from '../../src/middlewares/rate-limit'
+import { esCuentaGlobal, limitador } from '../../src/middlewares/rate-limit'
 
 describe('URLs salientes (anti-SSRF sin lista de hosts)', () => {
     it('acepta https público y localhost por http solo fuera de producción', () => {
@@ -61,5 +61,26 @@ describe('límite por token de acceso', () => {
         expect(estados).toEqual([200, 200, 429])
         expect(avisos).toHaveBeenCalledWith(expect.stringContaining('token 7'))
         avisos.mockRestore()
+    })
+})
+
+describe('límite por cuenta de staff (spec 013)', () => {
+    it('corta a una cuenta por evento y exime a las cuentas globales', async () => {
+        const app = express()
+        app.use((req, _res, next) => {
+            Object.assign(req, { actor: { id: Number(req.headers['x-actor']), alcance: req.headers['x-alcance'] } })
+            next()
+        })
+        app.get('/x', limitador(60_000, 2, 'límite', { clave: 'actor', omitirEnPruebas: false, exenta: esCuentaGlobal }), (_req, res) => { res.json({ ok: true }) })
+        const llamar = (actor: number, alcance: string) => request(app).get('/x').set('X-Actor', String(actor)).set('X-Alcance', alcance)
+        const estados = async (actor: number, alcance: string) => {
+            const lista = []
+            for (let i = 0; i < 3; i++) lista.push((await llamar(actor, alcance)).status)
+            return lista
+        }
+        expect(await estados(40, 'EVENTO')).toEqual([200, 200, 429])
+        // Otra cuenta tiene su propio cupo; una global no tiene tope
+        expect(await estados(41, 'EVENTO')).toEqual([200, 200, 429])
+        expect(await estados(2, 'GLOBAL')).toEqual([200, 200, 200])
     })
 })

@@ -108,8 +108,44 @@ async function resumenConCache(integracion: IntegracionEvento): Promise<ResumenD
     return resumen
 }
 
-/** Resumen "Semana Sistémica": congreso (aprobado) + deportes (vouchers validados). */
-export async function resumenSemanaSistemica(eventoId: number) {
+/**
+ * Resumen de deportes-fi con los importes en null (mismas claves, conserva los conteos). Se arma con
+ * una lista blanca de campos: un campo nuevo de deportes-fi (quizá un importe) no llega a quien no
+ * tiene «pagos.ver» hasta que se agregue aquí.
+ */
+export function resumenDeportesSinImportes(resumen: ResumenDeportes) {
+    const sinImporte = (pago?: { count: number }) => ({ count: pago?.count ?? 0, amount: null })
+    const { event, teams, participants } = resumen
+    return {
+        event: event && { id: event.id, name: event.name, startDate: event.startDate, endDate: event.endDate },
+        currency: resumen.currency,
+        teams: teams && { total: teams.total, pending: teams.pending, approved: teams.approved, rejected: teams.rejected, cancelled: teams.cancelled },
+        participants: participants && { total: participants.total },
+        payments: {
+            validated: sinImporte(resumen.payments?.validated),
+            pending: sinImporte(resumen.payments?.pending),
+            rejected: sinImporte(resumen.payments?.rejected),
+        },
+        byDiscipline: (resumen.byDiscipline ?? []).map((d) => ({
+            disciplineId: d.disciplineId,
+            name: d.name,
+            participantType: d.participantType,
+            isPaid: d.isPaid,
+            cost: null,
+            teams: d.teams && { total: d.teams.total, approved: d.teams.approved, pending: d.teams.pending },
+            validatedAmount: null,
+            pendingAmount: null,
+        })),
+        byParticipantType: (resumen.byParticipantType ?? []).map((t) => ({ participantType: t.participantType, teams: t.teams, validatedAmount: null, pendingAmount: null })),
+        generatedAt: resumen.generatedAt,
+    }
+}
+
+/**
+ * Resumen "Semana Sistémica": congreso (aprobado) + deportes (vouchers validados). Sin `conPago`
+ * (cuentas sin «pagos.ver») los montos e importes van en null con las mismas claves.
+ */
+export async function resumenSemanaSistemica(eventoId: number, conPago = true) {
     const evento = await obtenerEventoPorId(eventoId)
     const [aprobado, pendiente, totalInscripciones, integraciones] = await Promise.all([
         prisma.inscripcion.aggregate({ where: { eventoId, estado: { codigo: 'APROBADO' } }, _sum: { monto: true }, _count: { _all: true } }),
@@ -134,21 +170,22 @@ export async function resumenSemanaSistemica(eventoId: number) {
     const recaudadoDeportes = deportes.reduce((suma, d) => suma + (d.resumen?.payments.validated.amount ?? 0), 0)
     const pendienteDeportes = deportes.reduce((suma, d) => suma + (d.resumen?.payments.pending.amount ?? 0), 0)
     const redondear = (valor: number) => Math.round(valor * 100) / 100
+    const importe = (valor: number) => (conPago ? valor : null)
 
     return {
         evento: { id: evento.id, codigo: evento.codigo, nombreCorto: evento.nombreCorto },
         congreso: {
             inscripcionesTotales: totalInscripciones,
             inscripcionesAprobadas: aprobado._count._all,
-            montoAprobado: recaudadoCongreso,
-            montoPendiente: monto(pendiente._sum.monto),
+            montoAprobado: importe(recaudadoCongreso),
+            montoPendiente: importe(monto(pendiente._sum.monto)),
         },
-        deportes,
+        deportes: conPago ? deportes : deportes.map((d) => ({ ...d, resumen: d.resumen && resumenDeportesSinImportes(d.resumen) })),
         totales: {
-            recaudadoCongreso: redondear(recaudadoCongreso),
-            recaudadoDeportes: redondear(recaudadoDeportes),
-            recaudadoTotal: redondear(recaudadoCongreso + recaudadoDeportes),
-            pendienteDeportes: redondear(pendienteDeportes),
+            recaudadoCongreso: importe(redondear(recaudadoCongreso)),
+            recaudadoDeportes: importe(redondear(recaudadoDeportes)),
+            recaudadoTotal: importe(redondear(recaudadoCongreso + recaudadoDeportes)),
+            pendienteDeportes: importe(redondear(pendienteDeportes)),
         },
     }
 }

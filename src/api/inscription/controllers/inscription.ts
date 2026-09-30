@@ -1,5 +1,5 @@
 import { Request, Response } from 'express'
-import { idParam, unprocessable } from '../../../core/http-error'
+import { HttpError, idParam, unprocessable } from '../../../core/http-error'
 import { ESTADO_POR_ID_LEGACY, type CodigoEstadoInscripcion } from '../../../core/catalogos'
 import { parsePagination } from '../../../core/pagination'
 import { mimeDeArchivo } from '../../../middlewares/upload'
@@ -35,6 +35,20 @@ export async function publicCreate(req: Request, res: Response) {
     )
     const inscripcion = await service.crearInscripcion(evento, input, req.file?.filename ?? null)
     res.status(201).json({ success: true, data: aCreada(inscripcion) })
+}
+
+// ─── Permisos del actor (spec 013) ──────────────────────────────────────────
+
+/** Sin «pagos.ver» (Comisión) las respuestas no llevan montos, precios ni datos de pago. */
+function conPago(req: AuthenticatedRequest): boolean {
+    return req.actor?.permisos.has('pagos.ver') === true
+}
+
+/** Cancelar es más que validar un pago: exige además «inscripciones.cancelar» (el Tesorero no lo tiene). */
+function verificarDestino(req: AuthenticatedRequest, codigo: CodigoEstadoInscripcion) {
+    if (codigo === 'CANCELADO' && !req.actor?.permisos.has('inscripciones.cancelar')) {
+        throw new HttpError(403, 'STATUS_NOT_ALLOWED', 'No tienes permiso para cancelar inscripciones.')
+    }
 }
 
 // ─── Legacy (landing anterior; evento principal) ────────────────────────────
@@ -84,8 +98,9 @@ export async function legacyFind(req: Request, res: Response) {
 export async function legacyUpdateStatus(req: AuthenticatedRequest, res: Response) {
     const codigo = ESTADO_POR_ID_LEGACY[Number(req.body?.estadoId)]
     if (!codigo) throw unprocessable('VALIDATION_ERROR', 'estadoId inválido', { estadoId: 'Debe ser un estado válido (1-5)' })
+    verificarDestino(req, codigo)
     if (codigo === 'RECHAZADO') req.body.motivo = req.body.motivo || 'Rechazado desde herramienta anterior'
-    const { inscripcion } = await service.cambiarEstado(idParam(req.params.id), codigo, req.body.motivo, req.user?.id)
+    const { inscripcion } = await service.cambiarEstado(idParam(req.params.id), codigo, req.body.motivo, req.actor?.id)
     res.json({ success: true, message: 'Estado de inscripción actualizado correctamente', data: aLegacy(inscripcion) })
 }
 
@@ -103,31 +118,31 @@ function filtros(query: Request['query']): service.FiltrosInscripcion {
     }
 }
 
-export async function list(req: Request, res: Response) {
+export async function list(req: AuthenticatedRequest, res: Response) {
     const eventoId = idParam(req.params.eventId, 'eventId')
     await obtenerEventoPorId(eventoId)
-    const resultado = await service.listarInscripciones(eventoId, filtros(req.query), parsePagination(req.query))
+    const resultado = await service.listarInscripciones(eventoId, filtros(req.query), parsePagination(req.query), conPago(req))
     res.json({ success: true, ...resultado })
 }
 
-export async function exportCsv(req: Request, res: Response) {
+export async function exportCsv(req: AuthenticatedRequest, res: Response) {
     const evento = await obtenerEventoPorId(idParam(req.params.eventId, 'eventId'))
-    const csv = await service.exportarCsv(evento.id, filtros(req.query))
+    const csv = await service.exportarCsv(evento.id, filtros(req.query), conPago(req))
     res.setHeader('Content-Type', 'text/csv; charset=utf-8')
     res.setHeader('Content-Disposition', `attachment; filename="inscripciones-${evento.codigo}.csv"`)
     res.send(csv)
 }
 
-export async function find(req: Request, res: Response) {
-    res.json({ success: true, data: aDetalle(await service.obtenerInscripcion(idParam(req.params.id))) })
+export async function find(req: AuthenticatedRequest, res: Response) {
+    res.json({ success: true, data: aDetalle(await service.obtenerInscripcion(idParam(req.params.id)), conPago(req)) })
 }
 
 export async function updateStatus(req: AuthenticatedRequest, res: Response) {
     const body = await cambiarEstadoSchema.validate(req.body, { abortEarly: false, stripUnknown: true })
-    const { inscripcion, credencialEnviada } = await service.cambiarEstado(
-        idParam(req.params.id), body.estado as CodigoEstadoInscripcion, body.motivo, req.user?.id,
-    )
-    res.json({ success: true, data: { ...aDetalle(inscripcion), credencialEnviada } })
+    const codigo = body.estado as CodigoEstadoInscripcion
+    verificarDestino(req, codigo)
+    const { inscripcion, credencialEnviada } = await service.cambiarEstado(idParam(req.params.id), codigo, body.motivo, req.actor?.id)
+    res.json({ success: true, data: { ...aDetalle(inscripcion, conPago(req)), credencialEnviada } })
 }
 
 export async function resendCredential(req: Request, res: Response) {

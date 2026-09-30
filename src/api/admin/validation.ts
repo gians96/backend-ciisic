@@ -15,14 +15,20 @@ const campos = {
     contrasena: yup.string().min(12).max(128),
     rolCodigo: yup.string().oneOf([...ROLES]),
     activo: yup.boolean(),
+    // Spec 013: eventos asignados (Tesorero, Comisión) y permisos elegidos (Comisión). Si se envían,
+    // reemplazan el conjunto completo; en los roles globales se ignoran.
+    eventoIds: yup.array(yup.number().integer().positive().required()).max(50),
+    permisos: yup.array(yup.string().trim().max(60).required()).max(30),
 }
 
-// La contraseña es opcional: sin ella el administrador entra solo con Google
+// La contraseña es opcional: sin ella el administrador entra solo con Google. El rol es
+// obligatorio: con la delegación no hay un rol por defecto.
 export const createAdminSchema = yup.object({
     ...campos,
     nombres: campos.nombres.required(),
     apellidos: campos.apellidos.required(),
     correo: campos.correo.required(),
+    rolCodigo: campos.rolCodigo.required(),
 }).required()
 
 // Sin valores por defecto: una actualización parcial nunca cambia el rol implícitamente

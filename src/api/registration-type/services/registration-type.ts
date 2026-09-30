@@ -102,7 +102,8 @@ export async function tipoLegacy(eventoId: number, id: number) {
 
 // ─── Administración ─────────────────────────────────────────────────────────
 
-export async function categoriasDeEvento(eventoId: number) {
+/** Categorías y tipos del evento para el panel. Sin `conPago` los precios van en null (mismas claves). */
+export async function categoriasDeEvento(eventoId: number, conPago = true) {
     await obtenerEventoPorId(eventoId)
     const [categorias, conteos] = await Promise.all([
         prisma.categoriaInscripcion.findMany({
@@ -115,7 +116,11 @@ export async function categoriasDeEvento(eventoId: number) {
     const totalPorTipo = new Map(conteos.map((fila) => [fila.tipoInscripcionId, fila._count._all]))
     return categorias.map((categoria) => ({
         ...aCategoria(categoria),
-        tipos: categoria.tipos.map((tipo) => aTipo(tipo, totalPorTipo.get(tipo.id) ?? 0)),
+        ...(conPago ? {} : { precioDesde: null }),
+        tipos: categoria.tipos.map((tipo) => ({
+            ...aTipo(tipo, totalPorTipo.get(tipo.id) ?? 0),
+            ...(conPago ? {} : { precio: null, precioInstitucional: null }),
+        })),
     }))
 }
 

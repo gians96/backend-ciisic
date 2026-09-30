@@ -40,9 +40,37 @@ model Administrador {
   inscripcionesRevisadas  Inscripcion[]          @relation("InscripcionRevisor")
   tokensAccesoCreados     TokenAcceso[]
   configuracionesEditadas ConfiguracionSistema[]
+  asignacionesEvento      AsignacionEvento[]
+  permisos                PermisoAdministrador[]
+  asistenciasRegistradas  Asistencia[]           @relation("AsistenciaRegistradaPor")
+  asistenciasAnuladas     Asistencia[]           @relation("AsistenciaAnuladaPor")
 
   @@index([rolId], map: "idx_administradores_rol")
   @@map("administradores")
+}
+
+/// Eventos de una cuenta con alcance por evento (Tesorero, Comisión). Spec 013.
+model AsignacionEvento {
+  administradorId Int           @map("administrador_id")
+  eventoId        Int           @map("evento_id")
+  creadoEn        DateTime      @default(now()) @map("creado_en")
+  administrador   Administrador @relation(fields: [administradorId], references: [id], onDelete: Cascade, map: "fk_asignaciones_evento_administrador")
+  evento          Evento        @relation(fields: [eventoId], references: [id], onDelete: Cascade, map: "fk_asignaciones_evento_evento")
+
+  @@id([administradorId, eventoId])
+  @@index([eventoId], map: "idx_asignaciones_evento_evento")
+  @@map("asignaciones_evento")
+}
+
+/// Permisos elegidos para una cuenta de la Comisión (códigos de src/core/permisos.ts). Spec 013.
+model PermisoAdministrador {
+  administradorId Int           @map("administrador_id")
+  permiso         String        @db.VarChar(60)
+  creadoEn        DateTime      @default(now()) @map("creado_en")
+  administrador   Administrador @relation(fields: [administradorId], references: [id], onDelete: Cascade, map: "fk_permisos_administrador_administrador")
+
+  @@id([administradorId, permiso])
+  @@map("permisos_administrador")
 }
 
 // ─── Eventos ─────────────────────────────────────────────────────────────────
@@ -86,6 +114,7 @@ model Evento {
   mensajesContacto      MensajeContacto[]
   integraciones         IntegracionEvento[]
   tokensAcceso          TokenAcceso[]
+  asignaciones          AsignacionEvento[]
 
   @@index([credencialCorreoId], map: "idx_eventos_credencial_correo")
   @@map("eventos")
@@ -236,16 +265,34 @@ model Actividad {
   @@map("actividades")
 }
 
+/// Cómo se registró una asistencia (spec 013). NULL en las filas anteriores.
+enum MetodoAsistencia {
+  QR
+  QR_LEGADO
+  DOCUMENTO
+  MANUAL
+}
+
+/// Una fila por participante y actividad. La anulación es lógica: volver a marcar reactiva la fila.
 model Asistencia {
-  id             Int          @id @default(autoincrement())
-  registradoEn   DateTime     @default(now()) @map("registrado_en")
-  participanteId Int          @map("participante_id")
-  actividadId    Int          @map("actividad_id")
-  actividad      Actividad    @relation(fields: [actividadId], references: [id], map: "fk_asistencias_actividad")
-  participante   Participante @relation(fields: [participanteId], references: [id], map: "fk_asistencias_participante")
+  id               Int               @id @default(autoincrement())
+  registradoEn     DateTime          @default(now()) @map("registrado_en")
+  participanteId   Int               @map("participante_id")
+  actividadId      Int               @map("actividad_id")
+  metodo           MetodoAsistencia?
+  registradoPorId  Int?              @map("registrado_por_id")
+  esFueraDeHorario Boolean           @default(false) @map("es_fuera_de_horario")
+  anuladoEn        DateTime?         @map("anulado_en")
+  anuladoPorId     Int?              @map("anulado_por_id")
+  actividad        Actividad         @relation(fields: [actividadId], references: [id], map: "fk_asistencias_actividad")
+  participante     Participante      @relation(fields: [participanteId], references: [id], map: "fk_asistencias_participante")
+  registradoPor    Administrador?    @relation("AsistenciaRegistradaPor", fields: [registradoPorId], references: [id], onDelete: SetNull, map: "fk_asistencias_registrado_por")
+  anuladoPor       Administrador?    @relation("AsistenciaAnuladaPor", fields: [anuladoPorId], references: [id], onDelete: SetNull, map: "fk_asistencias_anulado_por")
 
   @@unique([participanteId, actividadId], map: "uq_asistencias_participante_actividad")
   @@index([actividadId], map: "idx_asistencias_actividad")
+  @@index([registradoPorId], map: "idx_asistencias_registrado_por")
+  @@index([anuladoPorId], map: "idx_asistencias_anulado_por")
   @@map("asistencias")
 }
 

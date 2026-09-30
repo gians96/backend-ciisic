@@ -4,28 +4,36 @@ import app from '../../src/app'
 import { prisma } from '../../src/database/prisma'
 import { tokenDeRol } from '../helpers/tokens'
 
-jest.mock('../../src/database/prisma', () => ({
-    prisma: {
+jest.mock('../../src/database/prisma', () => {
+    const mock: Record<string, unknown> = {
         administrador: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
         rol: { findUnique: jest.fn() },
-    },
-}))
+        participante: { findUnique: jest.fn() },
+        $queryRaw: jest.fn(),
+    }
+    mock.$transaction = jest.fn((fn: (tx: unknown) => unknown) => fn(mock))
+    return { prisma: mock }
+})
 
 type Mock = jest.Mock
 const m = prisma as unknown as {
     administrador: { findUnique: Mock, create: Mock, update: Mock }
     rol: { findUnique: Mock }
+    participante: { findUnique: Mock }
 }
 
-const ROL_ADMIN = { id: 2, codigo: 'ADMIN', nombre: 'Admin' }
-const ROL_SUPERADMIN = { id: 1, codigo: 'SUPERADMIN', nombre: 'SuperAdmin' }
+const ROL_ADMIN = { id: 2, codigo: 'ADMIN', nombre: 'Administrador del sistema' }
+const ROL_SUPERADMIN = { id: 1, codigo: 'SUPERADMIN', nombre: 'Owner' }
 const SUPERADMIN = `Bearer ${tokenDeRol('SUPERADMIN', 1)}`
 
 function admin(extra: Record<string, unknown> = {}) {
     return {
         id: 7, nombres: 'Ana', apellidos: 'Ríos', correo: 'ana@undc.edu.pe', contrasenaHash: null as string | null,
         rolId: 2, rol: ROL_ADMIN, activo: true, googleSub: null as string | null, googleVinculadoEn: null as Date | null,
-        creadoEn: new Date('2026-09-30T14:00:00Z'), actualizadoEn: new Date('2026-09-30T14:00:00Z'), ...extra,
+        creadoEn: new Date('2026-09-30T14:00:00Z'), actualizadoEn: new Date('2026-09-30T14:00:00Z'),
+        asignacionesEvento: [] as Array<{ eventoId: number, evento: { id: number, nombreCorto: string } }>,
+        permisos: [] as Array<{ permiso: string }>,
+        ...extra,
     }
 }
 
@@ -39,11 +47,17 @@ beforeEach(() => {
     jest.clearAllMocks()
     m.rol.findUnique.mockResolvedValue(ROL_ADMIN)
     m.administrador.findUnique.mockResolvedValue(null)
-    m.administrador.create.mockImplementation(async ({ data }) => admin(data))
+    // Los roles globales no guardan eventos ni permisos: las escrituras anidadas llegan vacías
+    m.administrador.create.mockImplementation(async ({ data: { asignacionesEvento, permisos, ...data } }) => {
+        expect(asignacionesEvento).toEqual({ create: [] })
+        expect(permisos).toEqual({ create: [] })
+        return admin(data)
+    })
+    m.participante.findUnique.mockResolvedValue(null)
 })
 
 describe('alta de administradores', () => {
-    const datos = { nombres: 'Ana', apellidos: 'Ríos', correo: 'ana@undc.edu.pe' }
+    const datos = { nombres: 'Ana', apellidos: 'Ríos', correo: 'ana@undc.edu.pe', rolCodigo: 'ADMIN' }
 
     it('crea un administrador sin contraseña (entra solo con Google)', async () => {
         const res = await request(app).post('/api/v1/admin').set('Authorization', SUPERADMIN).send(datos)
@@ -81,11 +95,45 @@ describe('inicio de sesión con contraseña', () => {
         expect(res.body).toMatchObject({ success: false, code: 'INVALID_CREDENTIALS' })
     })
 
-    it('con contraseña entra como siempre', async () => {
+    it('con contraseña entra como siempre y recibe su acceso', async () => {
         existente(admin({ contrasenaHash: await bcrypt.hash('una-clave-segura-2026', 4) }))
         const res = await request(app).post('/api/v1/auth/login').send({ correo: 'ana@undc.edu.pe', contrasena: 'una-clave-segura-2026' })
         expect(res.status).toBe(200)
-        expect(res.body).toMatchObject({ tipo: 'ADMIN', usuario: { correo: 'ana@undc.edu.pe' } })
+        expect(res.body).toMatchObject({ tipo: 'ADMIN', expiraEn: 3600, jwt: expect.any(String), usuario: { id: 7, correo: 'ana@undc.edu.pe', rolCodigo: 'ADMIN' } })
+        expect(res.body.usuario.acceso).toEqual({
+            alcance: 'GLOBAL', eventoIds: null, perfilParticipante: false,
+            permisos: expect.arrayContaining(['administradores.gestionar', 'eventos.configurar', 'correo.configurar']),
+        })
+        expect(res.body.usuario.acceso.permisos).not.toContain('sistema.configurar')
+        expect(res.body.usuario).not.toHaveProperty('contrasenaHash')
+        // El login lee las relaciones que deciden el acceso
+        expect(m.administrador.findUnique).toHaveBeenCalledWith(expect.objectContaining({
+            include: expect.objectContaining({ asignacionesEvento: expect.anything(), permisos: expect.anything() }),
+        }))
+    })
+
+    it('una cuenta por evento recibe sus eventos y permisos, y si también es inscrita lo indica', async () => {
+        existente(admin({
+            contrasenaHash: await bcrypt.hash('una-clave-segura-2026', 4), rolId: 3, rol: { id: 3, codigo: 'TESORERO', nombre: 'Tesorero' },
+            asignacionesEvento: [{ eventoId: 3, evento: { id: 3, nombreCorto: 'SS' } }, { eventoId: 2, evento: { id: 2, nombreCorto: 'VIII' } }],
+        }))
+        m.participante.findUnique.mockResolvedValue({ id: 50 })
+        const res = await request(app).post('/api/v1/auth/login').send({ correo: 'ana@undc.edu.pe', contrasena: 'una-clave-segura-2026' })
+        expect(res.status).toBe(200)
+        expect(res.body.usuario.acceso).toMatchObject({ alcance: 'EVENTO', eventoIds: [2, 3], perfilParticipante: true })
+        expect(res.body.usuario.acceso.permisos).toContain('inscripciones.validar')
+        expect(m.participante.findUnique).toHaveBeenCalledWith({ where: { correo: 'ana@undc.edu.pe' }, select: { id: true } })
+    })
+
+    it.each([
+        ['inactiva', { activo: false }],
+        ['con un rol desconocido', { rolId: 9, rol: { id: 9, codigo: 'OWNER', nombre: 'Owner' } }],
+    ])('una cuenta %s no entra aunque la contraseña sea correcta', async (_caso, cambios) => {
+        existente(admin({ contrasenaHash: await bcrypt.hash('una-clave-segura-2026', 4), ...cambios }))
+        const res = await request(app).post('/api/v1/auth/login').send({ correo: 'ana@undc.edu.pe', contrasena: 'una-clave-segura-2026' })
+        expect(res.status).toBe(401)
+        expect(res.body).toMatchObject({ success: false, code: 'INVALID_CREDENTIALS' })
+        expect(res.body).not.toHaveProperty('jwt')
     })
 })
 

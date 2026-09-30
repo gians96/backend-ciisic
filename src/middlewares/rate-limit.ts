@@ -4,7 +4,7 @@ import { env } from '../../config/env'
 import type { SitioRequest } from './sitio'
 import type { AuthenticatedRequest } from './auth'
 
-type Clave = 'ip' | 'token' | 'participante'
+type Clave = 'ip' | 'token' | 'participante' | 'actor'
 
 interface OpcionesLimite {
     /**
@@ -13,15 +13,19 @@ interface OpcionesLimite {
      * - `token`: por token de acceso del evento. Es el tope real si un token se filtra (por
      *   ejemplo, usado desde un navegador), porque un tercero podría variar `X-Client-Ip`.
      * - `participante`: por persona en el portal del inscrito.
+     * - `actor`: por cuenta de staff (va después de la guarda, que deja `req.actor`).
      */
     clave?: Clave
     /** En pruebas los límites se desactivan para no acoplar los tests al orden de ejecución. */
     omitirEnPruebas?: boolean
+    /** Peticiones que no cuentan para el límite. */
+    exenta?: (req: Request) => boolean
 }
 
 function claveDe(req: Request, clave: Clave): string {
     if (clave === 'token' && (req as SitioRequest).tokenAccesoId) return `token:${(req as SitioRequest).tokenAccesoId}`
     if (clave === 'participante' && (req as AuthenticatedRequest).participante) return `participante:${(req as AuthenticatedRequest).participante?.id}`
+    if (clave === 'actor' && (req as AuthenticatedRequest).actor) return `actor:${(req as AuthenticatedRequest).actor?.id}`
     return ipKeyGenerator((req as SitioRequest).clienteIp ?? req.ip ?? '')
 }
 
@@ -35,7 +39,7 @@ export function limitador(windowMs: number, limit: number, message = 'Demasiadas
         // Los encabezados RateLimit-* describen el límite por visitante; el del token no se anuncia
         standardHeaders: clave !== 'token',
         legacyHeaders: false,
-        skip: () => omitir && env.NODE_ENV === 'test',
+        skip: (req) => (omitir && env.NODE_ENV === 'test') || Boolean(opciones.exenta?.(req)),
         keyGenerator: (req) => claveDe(req, clave),
         handler: (req, res, _next, options) => {
             if (clave === 'token') console.warn(`Límite por token alcanzado (${req.method} ${req.path}, token ${(req as SitioRequest).tokenAccesoId})`)
@@ -71,3 +75,14 @@ export const limiteTokenContacto = porToken(15 * MINUTO, 60)
 // Por participante (portal del inscrito)
 export const limitePortal = limitador(MINUTO, 60, undefined, { clave: 'participante' })
 export const limiteCredencialPortal = limitador(MINUTO, 10, 'Demasiadas descargas. Espera un minuto.', { clave: 'participante' })
+
+// Por cuenta de staff (spec 013)
+/**
+ * Las cuentas globales ya ven todas las inscripciones: el límite de marcado frena el sondeo de
+ * documentos desde cuentas por evento y no debe cortar a varias estaciones de entrada que compartan
+ * una cuenta de Owner o Administrador.
+ */
+export const esCuentaGlobal = (req: Request) => (req as AuthenticatedRequest).actor?.alcance === 'GLOBAL'
+export const limiteMarcarAsistencia = limitador(MINUTO, 120, 'Demasiados registros de asistencia seguidos. Espera un momento.', { clave: 'actor', exenta: esCuentaGlobal })
+export const limiteReenvioCredencial = limitador(15 * MINUTO, 20, 'Demasiados reenvíos de credencial. Intenta nuevamente en 15 minutos.', { clave: 'actor' })
+export const limiteRenovacionSesion = limitador(15 * MINUTO, 30, undefined, { clave: 'actor' })

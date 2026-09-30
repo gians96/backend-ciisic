@@ -33,7 +33,8 @@ function ticket(payload: Record<string, unknown>) {
 }
 const admin = (cambios: Record<string, unknown> = {}) => ({
     id: 4, nombres: 'Gabriel', apellidos: 'Arias', correo: 'garias@undc.edu.pe', rolId: 1, activo: true, googleSub: null,
-    rol: { id: 1, codigo: 'SUPERADMIN', nombre: 'SuperAdmin' }, ...cambios,
+    rol: { id: 1, codigo: 'SUPERADMIN', nombre: 'Owner' }, asignacionesEvento: [] as Array<{ eventoId: number }>, permisos: [] as Array<{ permiso: string }>,
+    ...cambios,
 })
 const participante = (cambios: Record<string, unknown> = {}) => ({ id: 50, nombres: 'ANA', apellidos: 'PEREZ', correo: 'ana@gmail.com', googleSub: null, ...cambios })
 const login = (body: Record<string, unknown> = {}) => request(app).post('/api/v1/auth/google').send({ idToken: ID_TOKEN, nonce: NONCE, ...body })
@@ -90,10 +91,43 @@ describe('POST /v1/auth/google (panel)', () => {
         m.administrador.findUnique.mockResolvedValue(admin({ correo: 'admin.ciisic@gmail.com' }))
         const r = await login()
         expect(r.status).toBe(200)
-        expect(r.body.data).toMatchObject({ tipo: 'ADMIN', usuario: { id: 4, rolCodigo: 'SUPERADMIN' }, expiraEn: expect.any(String) })
-        expect(m.administrador.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { correo: 'admin.ciisic@gmail.com' } }))
+        expect(r.body.data).toMatchObject({ tipo: 'ADMIN', usuario: { id: 4, rolCodigo: 'SUPERADMIN', rolNombre: 'Owner' }, expiraEn: expect.any(String) })
+        // Spec 013: el usuario lleva su acceso (el Owner, todos los permisos y todos los eventos)
+        expect(r.body.data.usuario.acceso).toEqual({
+            alcance: 'GLOBAL', eventoIds: null, perfilParticipante: false, permisos: expect.arrayContaining(['sistema.configurar', 'administradores.gestionar']),
+        })
+        expect(m.administrador.findUnique).toHaveBeenCalledWith(expect.objectContaining({
+            where: { correo: 'admin.ciisic@gmail.com' },
+            include: expect.objectContaining({ rol: true, asignacionesEvento: expect.anything(), permisos: expect.anything() }),
+        }))
         expect(m.administrador.update).toHaveBeenCalledWith({ where: { id: 4 }, data: { googleSub: 'google-sub-1', googleVinculadoEn: expect.any(Date) } })
-        expect((jwt.decode(r.body.data.jwt) as jwt.JwtPayload).aud).toBe(AUDIENCIA_ADMIN)
+        const carga = jwt.decode(r.body.data.jwt) as jwt.JwtPayload
+        expect(carga).toMatchObject({ aud: AUDIENCIA_ADMIN, metodo: 'GOOGLE', user: { id: 4, rolCodigo: 'SUPERADMIN' } })
+        expect(carga.user).not.toHaveProperty('acceso')
+    })
+
+    it('un Tesorero que también es inscrito entra como administrador y su acceso lo indica', async () => {
+        verifyIdToken.mockResolvedValueOnce(ticket({ email: 'ana@gmail.com' }))
+        m.administrador.findUnique.mockResolvedValue(admin({
+            correo: 'ana@gmail.com', rolId: 3, rol: { id: 3, codigo: 'TESORERO', nombre: 'Tesorero' }, asignacionesEvento: [{ eventoId: 2 }],
+        }))
+        m.participante.findUnique.mockResolvedValue(participante())
+        const r = await login()
+        expect(r.status).toBe(200)
+        expect(r.body.data).toMatchObject({ tipo: 'ADMIN', usuario: { rolCodigo: 'TESORERO', acceso: { alcance: 'EVENTO', eventoIds: [2], perfilParticipante: true } } })
+        expect(r.body.data.usuario.acceso.permisos).toContain('pagos.ver')
+        expect(r.body.data.usuario.acceso.permisos).not.toContain('eventos.configurar')
+    })
+
+    it('una cuenta activa con un rol desconocido no entra ni cae al portal', async () => {
+        verifyIdToken.mockResolvedValueOnce(ticket({ email: 'ana@gmail.com' }))
+        m.administrador.findUnique.mockResolvedValue(admin({ correo: 'ana@gmail.com', rolId: 9, rol: { id: 9, codigo: 'OWNER', nombre: 'Owner' } }))
+        m.participante.findUnique.mockResolvedValue(participante())
+        const r = await login()
+        expect(r.status).toBe(403)
+        expect(r.body.code).toBe('ACCOUNT_DISABLED')
+        expect(m.administrador.update).not.toHaveBeenCalled()
+        expect(m.participante.update).not.toHaveBeenCalled()
     })
 
     it('rechaza otra cuenta Google para un correo ya vinculado', async () => {

@@ -3,6 +3,7 @@ import app from '../../src/app'
 import { prisma } from '../../src/database/prisma'
 import { descifrar } from '../../src/core/crypto'
 import { configuracionPublica, configuracionUndc, reiniciarCacheConfiguracion } from '../../src/core/configuracion-sistema'
+import { PERMISOS_ELEGIBLES_COMISION } from '../../src/core/permisos'
 import { tokenDeRol } from '../helpers/tokens'
 import { registroDeToken, TOKEN_SITIO } from '../helpers/sitio'
 
@@ -43,11 +44,37 @@ beforeEach(() => {
     m.tokenAcceso.update.mockResolvedValue({})
 })
 
-describe('configuración del sistema (SuperAdmin)', () => {
-    it('solo SuperAdmin la lee o la cambia', async () => {
-        expect((await request(app).get('/api/v1/settings')).status).toBe(401)
-        expect((await request(app).get('/api/v1/settings').set('Authorization', `Bearer ${tokenDeRol('ADMIN')}`)).status).toBe(403)
-        expect((await request(app).put('/api/v1/settings').set('Authorization', `Bearer ${tokenDeRol('ADMIN')}`).send({})).status).toBe(403)
+describe('configuración del sistema (Owner)', () => {
+    const rutas: ['get' | 'put' | 'post', string][] = [
+        ['get', '/api/v1/settings'],
+        ['put', '/api/v1/settings'],
+        ['post', '/api/v1/settings/undc-api/test'],
+    ]
+
+    it.each(rutas)('%s %s exige sesión', async (metodo, ruta) => {
+        expect((await request(app)[metodo](ruta)).status).toBe(401)
+    })
+
+    // 'sistema.configurar' es exclusivo del Owner (spec 013): ni el Administrador del sistema
+    it.each(rutas)('%s %s responde 403 al Administrador, al Tesorero y a la Comisión', async (metodo, ruta) => {
+        const tokens = [
+            tokenDeRol('ADMIN'),
+            tokenDeRol('TESORERO', 30, { eventoIds: [2] }),
+            tokenDeRol('COMISION', 40, { eventoIds: [2], permisos: [...PERMISOS_ELEGIBLES_COMISION] }),
+        ]
+        for (const token of tokens) {
+            const r = await request(app)[metodo](ruta).set('Authorization', `Bearer ${token}`).send({ undcApiTimeoutMs: 5000 })
+            expect(r.status).toBe(403)
+            expect(r.body).toMatchObject({ success: false, code: 'FORBIDDEN' })
+        }
+        for (const mock of Object.values(m.configuracionSistema)) expect(mock).not.toHaveBeenCalled()
+        expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    it('registra al Owner que la cambió', async () => {
+        const r = await request(app).put('/api/v1/settings').set('Authorization', superAdmin()).send({ undcApiTimeoutMs: 5000 })
+        expect(r.status).toBe(200)
+        expect(m.configuracionSistema.upsert.mock.calls[0][0].update).toMatchObject({ actualizadoPorId: 3 })
     })
 
     it('guarda la API key cifrada, la enmascara y actualiza la caché al instante', async () => {

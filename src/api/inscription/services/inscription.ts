@@ -158,7 +158,8 @@ export interface FiltrosInscripcion {
     q?: string
 }
 
-export function construirFiltro(eventoId: number, filtros: FiltrosInscripcion): Prisma.InscripcionWhereInput {
+/** Sin `conPago` la búsqueda libre no mira el número de operación (es un dato de pago). */
+export function construirFiltro(eventoId: number, filtros: FiltrosInscripcion, conPago = true): Prisma.InscripcionWhereInput {
     const q = filtros.q?.trim()
     return {
         eventoId,
@@ -169,7 +170,7 @@ export function construirFiltro(eventoId: number, filtros: FiltrosInscripcion): 
         ...(q
             ? {
                 OR: [
-                    { numeroOperacion: { contains: q } },
+                    ...(conPago ? [{ numeroOperacion: { contains: q } }] : []),
                     { participante: { numeroDocumento: { contains: q } } },
                     { participante: { nombres: { contains: q } } },
                     { participante: { apellidos: { contains: q } } },
@@ -180,13 +181,13 @@ export function construirFiltro(eventoId: number, filtros: FiltrosInscripcion): 
     }
 }
 
-export async function listarInscripciones(eventoId: number, filtros: FiltrosInscripcion, paginacion: Pagination) {
-    const where = construirFiltro(eventoId, filtros)
+export async function listarInscripciones(eventoId: number, filtros: FiltrosInscripcion, paginacion: Pagination, conPago = true) {
+    const where = construirFiltro(eventoId, filtros, conPago)
     const [total, filas] = await Promise.all([
         prisma.inscripcion.count({ where }),
         prisma.inscripcion.findMany({ where, include: detalleInclude, orderBy: { id: 'desc' }, skip: paginacion.skip, take: paginacion.take }),
     ])
-    return { data: filas.map(aFilaLista), meta: pageMeta(paginacion, total) }
+    return { data: filas.map((fila) => aFilaLista(fila, conPago)), meta: pageMeta(paginacion, total) }
 }
 
 export function todasLasInscripciones(eventoId: number): Promise<InscripcionDetalle[]> {
@@ -199,10 +200,35 @@ export async function obtenerInscripcion(id: number): Promise<InscripcionDetalle
     return inscripcion
 }
 
-/** Genera la credencial, la envía y registra la fecha de envío. Nunca lanza. */
-async function emitirCredencial(inscripcion: InscripcionDetalle): Promise<boolean> {
+const instante = (fecha?: Date | null) => fecha?.getTime() ?? 0
+
+/** Si el PDF existe y se generó después de `desde` (ms). */
+function pdfVigente(ruta: string, desde: number): boolean {
     try {
-        const pdf = await generarCredencialPdf(inscripcion)
+        return fs.statSync(ruta).mtimeMs >= desde
+    } catch {
+        return false
+    }
+}
+
+/**
+ * PDF de la credencial ya generado o uno nuevo si no existe o es anterior al último cambio de la
+ * persona o del evento (nombres, documento, logo…). `inscripcion.actualizadoEn` no sirve para esto:
+ * cambia con cada envío.
+ */
+async function pdfDeCredencial(inscripcion: InscripcionDetalle): Promise<string> {
+    const ruta = rutaCredencial(inscripcion)
+    const ultimoCambio = Math.max(instante(inscripcion.participante.actualizadoEn), instante(inscripcion.evento.actualizadoEn))
+    return pdfVigente(ruta, ultimoCambio) ? ruta : generarCredencialPdf(inscripcion)
+}
+
+/**
+ * Envía la credencial y registra la fecha de envío. Nunca lanza. Al aprobar se genera de nuevo (la
+ * fecha de aprobación cambia); al reenviar se reutiliza el PDF ya generado si sigue al día.
+ */
+async function emitirCredencial(inscripcion: InscripcionDetalle, reutilizarPdf = false): Promise<boolean> {
+    try {
+        const pdf = reutilizarPdf ? await pdfDeCredencial(inscripcion) : await generarCredencialPdf(inscripcion)
         const enviado = await enviarCorreoAprobacion(inscripcion, pdf)
         if (enviado) await prisma.inscripcion.update({ where: { id: inscripcion.id }, data: { credencialEnviadaEn: new Date() } })
         return enviado
@@ -232,14 +258,13 @@ export async function cambiarEstado(id: number, codigo: CodigoEstadoInscripcion,
 export async function reenviarCredencial(id: number) {
     const inscripcion = await obtenerInscripcion(id)
     if (inscripcion.estado.codigo !== 'APROBADO') throw conflict('NOT_APPROVED', 'Solo se puede reenviar la credencial de inscripciones aprobadas.')
-    return { credencialEnviada: await emitirCredencial(inscripcion) }
+    return { credencialEnviada: await emitirCredencial(inscripcion, true) }
 }
 
 export async function archivoCredencial(id: number): Promise<string> {
     const inscripcion = await obtenerInscripcion(id)
     if (inscripcion.estado.codigo !== 'APROBADO') throw conflict('NOT_APPROVED', 'La credencial solo existe para inscripciones aprobadas.')
-    const ruta = rutaCredencial(inscripcion)
-    return fs.existsSync(ruta) ? ruta : generarCredencialPdf(inscripcion)
+    return pdfDeCredencial(inscripcion)
 }
 
 export async function archivoVoucher(id: number): Promise<string> {
@@ -267,21 +292,40 @@ export function celdaCsv(valor: unknown): string {
     return /[";\n\r]/.test(texto) ? `"${texto.replace(/"/g, '""')}"` : texto
 }
 
-export async function exportarCsv(eventoId: number, filtros: FiltrosInscripcion): Promise<string> {
-    const filas = await prisma.inscripcion.findMany({ where: construirFiltro(eventoId, filtros), include: detalleInclude, orderBy: { id: 'asc' } })
-    const encabezado = ['ID', 'Fecha registro', 'Tipo doc.', 'N° documento', 'Nombres', 'Apellidos', 'Correo', 'Celular', 'Categoría',
-        'Tipo de inscripción', 'Etiqueta', 'Clasificación', 'Monto', 'Descuento', 'Estudiante UNDC', 'Código estudiante', 'Correo verificado', 'Modalidad',
-        'Banco / billetera', 'N° operación', 'Fecha de pago', 'Estado', 'Revisado', 'Motivo de rechazo']
+/** Columnas del CSV. Las de pago solo salen con `conPago`. */
+const COLUMNAS_CSV: Array<{ titulo: string, pago?: true, valor: (d: ReturnType<typeof aDetalle>) => unknown }> = [
+    { titulo: 'ID', valor: (d) => d.id },
+    { titulo: 'Fecha registro', valor: (d) => fechaLima(d.creadoEn) },
+    { titulo: 'Tipo doc.', valor: (d) => d.participante.tipoDocumento.toUpperCase() },
+    { titulo: 'N° documento', valor: (d) => d.participante.numeroDocumento },
+    { titulo: 'Nombres', valor: (d) => d.participante.nombres },
+    { titulo: 'Apellidos', valor: (d) => d.participante.apellidos },
+    { titulo: 'Correo', valor: (d) => d.participante.correo },
+    { titulo: 'Celular', valor: (d) => d.participante.celular },
+    { titulo: 'Categoría', valor: (d) => d.tipoInscripcion?.categoria.nombre },
+    { titulo: 'Tipo de inscripción', valor: (d) => d.tipoInscripcion?.nombre },
+    { titulo: 'Etiqueta', valor: (d) => d.tipoInscripcion?.etiqueta },
+    { titulo: 'Clasificación', valor: (d) => d.clasificacion?.nombre },
+    { titulo: 'Monto', pago: true, valor: (d) => d.pago.monto?.toFixed(2) },
+    { titulo: 'Descuento', pago: true, valor: (d) => d.pago.descuento?.toFixed(2) },
+    { titulo: 'Estudiante UNDC', valor: (d) => (d.verificacion.esEstudianteUndc ? 'Sí' : 'No') },
+    { titulo: 'Código estudiante', valor: (d) => d.verificacion.codigoEstudiante },
+    { titulo: 'Correo verificado', valor: (d) => (d.verificacion.correo.verificado ? 'Sí (Google)' : 'No') },
+    { titulo: 'Modalidad', pago: true, valor: (d) => d.pago.modalidad },
+    { titulo: 'Banco / billetera', pago: true, valor: (d) => d.pago.banco ?? d.pago.billeteraDigital },
+    { titulo: 'N° operación', pago: true, valor: (d) => d.pago.numeroOperacion },
+    { titulo: 'Fecha de pago', pago: true, valor: (d) => d.pago.fechaPago },
+    { titulo: 'Estado', valor: (d) => d.estado.nombre },
+    { titulo: 'Revisado', valor: (d) => (d.revision.revisadoEn ? fechaLima(d.revision.revisadoEn) : '') },
+    { titulo: 'Motivo de rechazo', valor: (d) => d.revision.motivoRechazo },
+]
+
+export async function exportarCsv(eventoId: number, filtros: FiltrosInscripcion, conPago = true): Promise<string> {
+    const filas = await prisma.inscripcion.findMany({ where: construirFiltro(eventoId, filtros, conPago), include: detalleInclude, orderBy: { id: 'asc' } })
+    const columnas = COLUMNAS_CSV.filter((columna) => conPago || !columna.pago)
     const lineas = filas.map((fila) => {
-        const d = aDetalle(fila)
-        return [
-            d.id, fechaLima(d.creadoEn), d.participante.tipoDocumento.toUpperCase(), d.participante.numeroDocumento, d.participante.nombres,
-            d.participante.apellidos, d.participante.correo, d.participante.celular, d.tipoInscripcion?.categoria.nombre, d.tipoInscripcion?.nombre,
-            d.tipoInscripcion?.etiqueta, d.clasificacion?.nombre, d.pago.monto.toFixed(2), d.pago.descuento.toFixed(2),
-            d.verificacion.esEstudianteUndc ? 'Sí' : 'No', d.verificacion.codigoEstudiante, d.verificacion.correo.verificado ? 'Sí (Google)' : 'No', d.pago.modalidad,
-            d.pago.banco ?? d.pago.billeteraDigital, d.pago.numeroOperacion, d.pago.fechaPago, d.estado.nombre,
-            d.revision.revisadoEn ? fechaLima(d.revision.revisadoEn) : '', d.revision.motivoRechazo,
-        ].map(celdaCsv).join(';')
+        const d = aDetalle(fila, conPago)
+        return columnas.map((columna) => celdaCsv(columna.valor(d))).join(';')
     })
-    return '﻿' + [encabezado.join(';'), ...lineas].join('\r\n')
+    return '﻿' + [columnas.map((columna) => columna.titulo).join(';'), ...lineas].join('\r\n')
 }

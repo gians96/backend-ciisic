@@ -1,11 +1,19 @@
 import { Request, Response } from 'express'
 import { idParam } from '../../../core/http-error'
-import { actualizarEvento, crearEvento, eliminarEvento, listarEventos, obtenerEvento, resumenEvento } from '../services/event'
+import type { AuthenticatedRequest } from '../../../middlewares/auth'
+import { actualizarEvento, crearEvento, eliminarEvento, listarEventos, listarEventosOperativos, obtenerEvento, resumenEvento } from '../services/event'
 import { aEventoPublico } from '../services/public-event'
 import { eventoDelSitio } from '../../../middlewares/sitio'
 
-export async function list(_req: Request, res: Response) {
-    res.json({ success: true, data: await listarEventos() })
+/**
+ * Quien configura eventos recibe la vista completa (sin cambios para el panel actual); el resto del
+ * staff (Tesorero, Comisión) solo sus eventos y con la vista operativa.
+ */
+export async function list(req: AuthenticatedRequest, res: Response) {
+    const actor = req.actor
+    if (!actor) throw new Error('GET /v1/events necesita requireActor')
+    const data = actor.permisos.has('eventos.configurar') ? await listarEventos() : await listarEventosOperativos(actor)
+    res.json({ success: true, data })
 }
 
 export async function find(req: Request, res: Response) {
@@ -25,8 +33,9 @@ export async function remove(req: Request, res: Response) {
     res.json({ success: true, data: null })
 }
 
-export async function summary(req: Request, res: Response) {
-    res.json({ success: true, data: await resumenEvento(idParam(req.params.id)) })
+export async function summary(req: AuthenticatedRequest, res: Response) {
+    // Sin «pagos.ver» (Comisión) los montos salen en null
+    res.json({ success: true, data: await resumenEvento(idParam(req.params.id), req.actor?.permisos.has('pagos.ver') === true) })
 }
 
 export async function publicFind(req: Request, res: Response) {

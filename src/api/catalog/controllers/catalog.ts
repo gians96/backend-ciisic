@@ -1,6 +1,18 @@
 import { Request, Response } from 'express'
+import type { Rol } from '@prisma/client'
 import { prisma } from '../../../database/prisma'
-import { conflict, idParam, notFound } from '../../../core/http-error'
+import { conflict, HttpError, idParam, notFound } from '../../../core/http-error'
+import { esCodigoRol, ROL, type CodigoRol } from '../../../core/catalogos'
+import {
+    alcanceDeRol,
+    DEPENDENCIAS,
+    ETIQUETAS_PERMISO,
+    PERMISOS_COMISION_POR_DEFECTO,
+    PERMISOS_ELEGIBLES_COMISION,
+    PERMISOS_POR_ROL,
+    rolesGestionables,
+} from '../../../core/permisos'
+import type { AuthenticatedRequest } from '../../../middlewares/auth'
 
 /**
  * Catálogos globales: clasificaciones, tipos de documento, estados de inscripción y roles.
@@ -46,9 +58,32 @@ export async function listInscriptionStates(_req: Request, res: Response) {
     res.json(await prisma.estadoInscripcion.findMany({ orderBy: { id: 'asc' } }))
 }
 
-// Roles (solo SuperAdmin)
-export async function listRoles(_req: Request, res: Response) {
-    res.json({ success: true, data: await prisma.rol.findMany({ orderBy: { id: 'asc' } }) })
+// Roles (spec 013): solo los que el actor puede asignar, con los permisos que implica cada uno
+function aRolPublico(rol: Rol, codigo: CodigoRol) {
+    return {
+        id: rol.id,
+        codigo,
+        nombre: rol.nombre,
+        alcance: alcanceDeRol(codigo),
+        // Los de la Comisión se eligen por cuenta: el rol no trae permisos propios
+        permisos: [...PERMISOS_POR_ROL[codigo]],
+        ...(codigo === ROL.COMISION ? {
+            permisosElegibles: PERMISOS_ELEGIBLES_COMISION.map((permiso) => ({
+                codigo: permiso,
+                nombre: ETIQUETAS_PERMISO[permiso],
+                implica: [...(DEPENDENCIAS[permiso] ?? [])],
+            })),
+            permisosPorDefecto: [...PERMISOS_COMISION_POR_DEFECTO],
+        } : {}),
+    }
+}
+
+export async function listRoles(req: AuthenticatedRequest, res: Response) {
+    if (!req.actor) throw new HttpError(401, 'SESSION_INVALIDATED', 'Tu sesión ya no es válida. Ingresa nuevamente.')
+    const asignables = rolesGestionables(req.actor.rolCodigo) as string[]
+    const roles = await prisma.rol.findMany({ where: { codigo: { in: asignables } }, orderBy: { id: 'asc' } })
+    const data = roles.flatMap((rol) => (esCodigoRol(rol.codigo) ? [aRolPublico(rol, rol.codigo)] : []))
+    res.json({ success: true, data })
 }
 
 // API del sitio: catálogos que necesita el formulario de inscripción de la landing

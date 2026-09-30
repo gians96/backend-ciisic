@@ -4,6 +4,7 @@ import app from '../../src/app'
 import { prisma } from '../../src/database/prisma'
 import { generarTokenAcceso, hashTokenAcceso, tieneFormatoDeTokenAcceso } from '../../src/core/tokens-acceso'
 import { requireTokenEvento, type SitioRequest } from '../../src/middlewares/sitio'
+import { PERMISOS_ELEGIBLES_COMISION } from '../../src/core/permisos'
 import { tokenDeRol } from '../helpers/tokens'
 import { registroDeToken, TOKEN_SITIO } from '../helpers/sitio'
 
@@ -147,6 +148,39 @@ describe('administración de tokens de acceso', () => {
         const otraVez = await request(app).delete('/api/v1/access-tokens/11').set('Authorization', superAdmin())
         expect(otraVez.body.data.estado).toBe('REVOCADO')
         expect(m.tokenAcceso.update).not.toHaveBeenCalled()
+    })
+})
+
+describe('acceso a la administración de tokens (spec 013)', () => {
+    const rutas: ['get' | 'post' | 'delete', string][] = [
+        ['get', '/api/v1/events/2/access-tokens'],
+        ['post', '/api/v1/events/2/access-tokens'],
+        ['delete', '/api/v1/access-tokens/11'],
+    ]
+
+    it('el Administrador del sistema crea tokens y queda como autor', async () => {
+        m.evento.findUnique.mockResolvedValue(evento)
+        m.tokenAcceso.create.mockImplementation(({ data }) => Promise.resolve({
+            id: 12, ...data, ultimoUsoEn: null, revocadoEn: null, creadoEn: new Date(), creadoPor: { id: 2, nombres: 'Test', apellidos: 'Administrador del sistema' },
+        }))
+        const r = await request(app).post('/api/v1/events/2/access-tokens').set('Authorization', `Bearer ${tokenDeRol('ADMIN')}`).send({ nombre: 'Landing VIII' })
+        expect(r.status).toBe(201)
+        expect(m.tokenAcceso.create.mock.calls[0][0].data).toMatchObject({ eventoId: 2, creadoPorId: 2 })
+    })
+
+    // Aunque el evento sea suyo: los tokens son configuración del evento, no operación
+    it.each(rutas)('%s %s responde 403 al Tesorero y a la Comisión del evento', async (metodo, ruta) => {
+        const tokens = [
+            tokenDeRol('TESORERO', 30, { eventoIds: [2] }),
+            tokenDeRol('COMISION', 40, { eventoIds: [2], permisos: [...PERMISOS_ELEGIBLES_COMISION] }),
+        ]
+        for (const token of tokens) {
+            const r = await request(app)[metodo](ruta).set('Authorization', `Bearer ${token}`).send({ nombre: 'Landing' })
+            expect(r.status).toBe(403)
+            expect(r.body).toMatchObject({ success: false, code: 'FORBIDDEN' })
+        }
+        expect(m.evento.findUnique).not.toHaveBeenCalled()
+        for (const mock of Object.values(m.tokenAcceso)) expect(mock).not.toHaveBeenCalled()
     })
 })
 

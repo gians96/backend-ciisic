@@ -1,5 +1,6 @@
 import { Request, Response } from 'express'
 import { idParam } from '../../../core/http-error'
+import type { AuthenticatedRequest } from '../../../middlewares/auth'
 import { obtenerEventoPrincipal } from '../../event/services/public-event'
 import * as service from '../services/registration-type'
 import { eventoDelSitio } from '../../../middlewares/sitio'
@@ -23,8 +24,10 @@ export async function legacyFind(req: Request, res: Response) {
 }
 
 // Administración
-export async function listCategories(req: Request, res: Response) {
-    res.json({ success: true, data: await service.categoriasDeEvento(idParam(req.params.eventId, 'eventId')) })
+export async function listCategories(req: AuthenticatedRequest, res: Response) {
+    // Sin «pagos.ver» (Comisión) los precios van en null
+    const conPago = req.actor?.permisos.has('pagos.ver') === true
+    res.json({ success: true, data: await service.categoriasDeEvento(idParam(req.params.eventId, 'eventId'), conPago) })
 }
 
 export async function createCategory(req: Request, res: Response) {

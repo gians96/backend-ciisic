@@ -8,6 +8,7 @@ import { descifrar } from '../../src/core/crypto'
 import { credencialParaEvento } from '../../src/api/email-credential/services/email-credential'
 import { enviarCorreoAprobacion } from '../../src/api/inscription/utils/sendEmail'
 import type { InscripcionDetalle } from '../../src/api/inscription/services/mappers'
+import { PERMISOS_ELEGIBLES_COMISION } from '../../src/core/permisos'
 import { tokenDeRol } from '../helpers/tokens'
 
 jest.mock('../../src/database/prisma', () => {
@@ -40,6 +41,42 @@ afterAll(() => { global.fetch = fetchOriginal })
 beforeEach(() => {
     jest.clearAllMocks()
     m.update.mockResolvedValue({})
+})
+
+describe('acceso a las credenciales de correo (spec 013)', () => {
+    const rutas: ['get' | 'post' | 'put' | 'delete', string][] = [
+        ['get', '/api/v1/email-credentials'],
+        ['post', '/api/v1/email-credentials'],
+        ['put', '/api/v1/email-credentials/1'],
+        ['delete', '/api/v1/email-credentials/1'],
+        ['post', '/api/v1/email-credentials/1/test'],
+        ['post', '/api/v1/email-credentials/1/send-test'],
+    ]
+    const tesorero = () => tokenDeRol('TESORERO', 30, { eventoIds: [2] })
+    const comision = () => tokenDeRol('COMISION', 40, { eventoIds: [2], permisos: [...PERMISOS_ELEGIBLES_COMISION] })
+
+    it('el Administrador del sistema también las gestiona', async () => {
+        m.findMany.mockResolvedValue([credencial()])
+        const r = await request(app).get('/api/v1/email-credentials').set('Authorization', `Bearer ${tokenDeRol('ADMIN')}`)
+        expect(r.status).toBe(200)
+        expect(r.body.data[0]).toMatchObject({ id: 1, apiKeyEnmascarada: '••••abcd' })
+    })
+
+    it.each(rutas)('%s %s responde 403 al Tesorero y a la Comisión sin tocar la BD', async (metodo, ruta) => {
+        for (const token of [tesorero(), comision()]) {
+            const r = await request(app)[metodo](ruta).set('Authorization', `Bearer ${token}`).send({})
+            expect(r.status).toBe(403)
+            expect(r.body).toMatchObject({ success: false, code: 'FORBIDDEN' })
+        }
+        for (const mock of Object.values(m)) expect(mock).not.toHaveBeenCalled()
+        expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    it('una cuenta desactivada pierde el acceso al instante', async () => {
+        const r = await request(app).get('/api/v1/email-credentials').set('Authorization', `Bearer ${tokenDeRol('ADMIN', 12, { activo: false })}`)
+        expect(r.status).toBe(401)
+        expect(r.body.code).toBe('SESSION_INVALIDATED')
+    })
 })
 
 describe('CRUD de credenciales de correo', () => {

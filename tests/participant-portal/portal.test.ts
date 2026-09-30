@@ -62,7 +62,9 @@ describe('portal del inscrito', () => {
         const ruta = path.join(DIRECTORIO_UPLOADS, 'credenciales', 'ciisic-viii-2026', '29.pdf')
         fs.mkdirSync(path.dirname(ruta), { recursive: true })
         fs.writeFileSync(ruta, '%PDF-1.4 credencial')
-        m.inscripcion.findUnique.mockResolvedValueOnce(inscripcion({ estado: { codigo: 'APROBADO', nombre: 'Aprobado' } }))
+        // El PDF es posterior al último cambio de la persona: se entrega el mismo (sin regenerarlo)
+        const participante = { id: 50, actualizadoEn: new Date('2026-09-01T00:00:00Z') }
+        m.inscripcion.findUnique.mockResolvedValueOnce(inscripcion({ estado: { codigo: 'APROBADO', nombre: 'Aprobado' }, participante }))
         const pdf = await request(app).get('/api/v1/me/inscriptions/29/credential').set('Authorization', sesion())
         expect(pdf.status).toBe(200)
         expect(pdf.headers['content-disposition']).toBe('attachment; filename="credencial-ciisic-viii-2026-29.pdf"')

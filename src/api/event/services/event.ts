@@ -4,6 +4,7 @@ import { prisma } from '../../../database/prisma'
 import { conflict, unprocessable } from '../../../core/http-error'
 import { aColumnaFecha, fechaLima, fechaSoloDia } from '../../../core/fechas'
 import { monto } from '../../../core/catalogos'
+import type { Actor } from '../../../core/actor'
 import { obtenerEventoPorId } from './public-event'
 import { limpiarQrs, qrsDe, verificarQrs } from '../../payment-qr/services/payment-qr'
 import type { ActualizarEventoInput, CrearEventoInput } from '../validation'
@@ -37,6 +38,30 @@ export function aEventoAdmin(evento: Evento & { credencialCorreo?: CredencialRes
         creadoEn: evento.creadoEn,
         actualizadoEn: evento.actualizadoEn,
         ...(totalInscripciones !== undefined ? { totalInscripciones } : {}),
+    }
+}
+
+/**
+ * Vista del evento para el staff que no lo configura (Tesorero, Comisión, spec 013): lo que usan
+ * el selector y las pantallas operativas del panel. Nunca lleva la credencial de correo ni la
+ * configuración del evento; los datos de pago solo con `pagos.ver`.
+ */
+export function aEventoOperativo(evento: Evento, conPago: boolean) {
+    return {
+        id: evento.id,
+        codigo: evento.codigo,
+        nombre: evento.nombre,
+        nombreCorto: evento.nombreCorto,
+        sede: evento.sede,
+        fechaInicio: fechaSoloDia(evento.fechaInicio),
+        fechaFin: fechaSoloDia(evento.fechaFin),
+        estado: evento.estado,
+        esPrincipal: evento.esPrincipal,
+        inscripcionesAbiertas: evento.inscripcionesAbiertas,
+        inscripcionesInicio: evento.inscripcionesInicio,
+        inscripcionesFin: evento.inscripcionesFin,
+        logoArchivo: evento.logoArchivo,
+        ...(conPago ? { datosPago: evento.datosPago ?? null } : {}),
     }
 }
 
@@ -82,6 +107,16 @@ export async function listarEventos() {
         include: { _count: { select: { inscripciones: true } }, ...conCredencial },
     })
     return eventos.map((evento) => aEventoAdmin(evento, evento._count.inscripciones))
+}
+
+/** Eventos del actor (los asignados; todos si es una cuenta global), en el mismo orden que `listarEventos`. */
+export async function listarEventosOperativos(actor: Actor) {
+    const eventos = await prisma.evento.findMany({
+        where: actor.alcance === 'GLOBAL' ? {} : { id: { in: [...actor.eventoIds] } },
+        orderBy: [{ fechaInicio: 'desc' }, { id: 'desc' }],
+    })
+    const conPago = actor.permisos.has('pagos.ver')
+    return eventos.map((evento) => aEventoOperativo(evento, conPago))
 }
 
 export async function obtenerEvento(id: number) {
@@ -190,8 +225,8 @@ export async function eliminarEvento(id: number) {
     await limpiarQrs(qrsDe(evento.datosPago), new Set())
 }
 
-/** KPIs del evento para el panel. */
-export async function resumenEvento(id: number) {
+/** KPIs del evento para el panel. Sin `conPago` (Comisión) los montos van en null con las mismas claves. */
+export async function resumenEvento(id: number, conPago = true) {
     await obtenerEventoPorId(id)
     const [estados, porEstado, porTipo, tipos, fechas, estudiantesUndc] = await Promise.all([
         prisma.estadoInscripcion.findMany({ orderBy: { id: 'asc' } }),
@@ -202,6 +237,7 @@ export async function resumenEvento(id: number) {
         prisma.inscripcion.count({ where: { eventoId: id, esEstudianteUndc: true } }),
     ])
 
+    const importe = (valor: number) => (conPago ? valor : null)
     const codigoDeEstado = new Map(estados.map((estado) => [estado.id, estado.codigo]))
     const resumenEstados = estados.map((estado) => {
         const fila = porEstado.find((item) => item.estadoId === estado.id)
@@ -220,7 +256,7 @@ export async function resumenEvento(id: number) {
             categoria: tipo.categoria.codigo,
             total: filas.reduce((suma, item) => suma + item._count._all, 0),
             aprobadas: aprobadas.reduce((suma, item) => suma + item._count._all, 0),
-            montoAprobado: aprobadas.reduce((suma, item) => suma + monto(item._sum.monto), 0),
+            montoAprobado: importe(aprobadas.reduce((suma, item) => suma + monto(item._sum.monto), 0)),
         }
     })
 
@@ -238,11 +274,11 @@ export async function resumenEvento(id: number) {
             aprobadas: total('APROBADO'),
             rechazadas: total('RECHAZADO'),
             canceladas: total('CANCELADO'),
-            montoAprobado: montoDe('APROBADO'),
-            montoPendiente: montoDe('PENDIENTE') + montoDe('EN_REVISION'),
+            montoAprobado: importe(montoDe('APROBADO')),
+            montoPendiente: importe(montoDe('PENDIENTE') + montoDe('EN_REVISION')),
             estudiantesUndc,
         },
-        porEstado: resumenEstados,
+        porEstado: resumenEstados.map((estado) => ({ ...estado, monto: importe(estado.monto) })),
         porTipo: resumenTipos,
         porDia: [...dias.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([fecha, cantidad]) => ({ fecha, total: cantidad })),
     }

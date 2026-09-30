@@ -2,6 +2,7 @@ import type { Request, Response } from 'express'
 import { ValidationError } from 'yup'
 import path from 'path'
 import { badRequest, idParam, notFound, unprocessable } from '../../../core/http-error'
+import { uuidRecepcion } from '../../../core/resolutores-evento'
 import { obtenerEventoPorId, obtenerEventoPrincipal } from '../../event/services/public-event'
 import { paperSchema } from '../validation'
 import { hasPdfSignature } from '../upload'
@@ -55,8 +56,8 @@ export async function list(req: Request, res: Response) {
 }
 
 export async function download(req: Request, res: Response) {
-    const id = String(req.params.id)
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) throw badRequest('INVALID_ID', 'Código de recepción inválido.')
+    // Mismo parseo que el resolutor de la guarda (acepta mayúsculas, como la BD)
+    const id = uuidRecepcion(req.params.id)
     const paper = await findPaper(id)
     if (!paper) throw notFound('PAPER_NOT_FOUND', 'Ponencia no encontrada.')
     res.setHeader('Cache-Control', 'private, no-store')

@@ -69,3 +69,53 @@ describe('registro de ponencias', () => {
         expect(m.ponencia.create).not.toHaveBeenCalled()
     })
 })
+
+describe('ponencias por evento (spec 013)', () => {
+    const UUID = '3f2c1a9e-7b4d-4e21-9a6f-0c8d5e7b1a23'
+    const tesorero = () => tokenDeRol('TESORERO', 30, { eventoIds: [2] })
+
+    it('la ponencia de otro evento responde 403 aunque el código venga en mayúsculas', async () => {
+        // La BD compara sin distinguir mayúsculas: el resolutor debe encontrarla igual
+        m.ponencia.findUnique.mockResolvedValue({ id: UUID, eventoId: 3, archivo: `${UUID}.pdf` })
+        const r = await request(app).get(`/api/v1/papers/${UUID.toUpperCase()}/file`).set('Authorization', `Bearer ${tesorero()}`)
+        expect(r.status).toBe(403)
+        expect(r.body.code).toBe('EVENT_NOT_ASSIGNED')
+        expect(m.ponencia.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { id: UUID.toUpperCase() } }))
+    })
+
+    it('la ponencia de su evento se descarga', async () => {
+        const archivo = `${UUID}.pdf`
+        fs.mkdirSync(papersDirectory, { recursive: true })
+        fs.writeFileSync(path.join(papersDirectory, archivo), pdf)
+        m.ponencia.findUnique.mockResolvedValue({ id: UUID, eventoId: 2, archivo })
+        const r = await request(app).get(`/api/v1/papers/${UUID}/file`).set('Authorization', `Bearer ${tesorero()}`)
+        expect(r.status).toBe(200)
+        expect(r.headers['content-disposition']).toContain('attachment')
+    })
+
+    it('un código de recepción inválido responde 400 y no consulta la BD', async () => {
+        const r = await request(app).get('/api/v1/papers/no-es-uuid/file').set('Authorization', `Bearer ${tesorero()}`)
+        expect(r.status).toBe(400)
+        expect(r.body.code).toBe('INVALID_ID')
+        expect(m.ponencia.findUnique).not.toHaveBeenCalled()
+    })
+
+    it('la lista de otro evento responde 403 y la del suyo, 200', async () => {
+        m.ponencia.count.mockResolvedValue(0)
+        m.ponencia.findMany.mockResolvedValue([])
+        const otro = await request(app).get('/api/v1/events/3/papers').set('Authorization', `Bearer ${tesorero()}`)
+        expect(otro.status).toBe(403)
+        expect(otro.body.code).toBe('EVENT_NOT_ASSIGNED')
+        const suyo = await request(app).get('/api/v1/events/2/papers').set('Authorization', `Bearer ${tesorero()}`)
+        expect(suyo.status).toBe(200)
+    })
+
+    it('sin «ponencias.ver» (Comisión) responde 403; la ruta legacy es solo de las cuentas globales', async () => {
+        const comision = tokenDeRol('COMISION', 40, { eventoIds: [2], permisos: ['asistencia.marcar'] })
+        expect((await request(app).get('/api/v1/events/2/papers').set('Authorization', `Bearer ${comision}`)).status).toBe(403)
+        expect((await request(app).get(`/api/v1/papers/${UUID}/file`).set('Authorization', `Bearer ${comision}`)).status).toBe(403)
+        const legacy = await request(app).get('/api/v1/papers').set('Authorization', `Bearer ${tesorero()}`)
+        expect(legacy.status).toBe(403)
+        expect(legacy.body.code).toBe('FORBIDDEN')
+    })
+})

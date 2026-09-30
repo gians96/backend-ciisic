@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from './prisma'
+import { ROL, ROLES, type CodigoRol } from '../core/catalogos'
 
 /**
  * Seeds idempotentes (upsert por código). Se pueden ejecutar varias veces y en
@@ -8,10 +9,13 @@ import { prisma } from './prisma'
  *   npm run seed -- --demo  → además, categorías y tipos de ejemplo para el evento principal
  */
 
-const ROLES = [
-    { codigo: 'SUPERADMIN', nombre: 'SuperAdmin' },
-    { codigo: 'ADMIN', nombre: 'Admin' },
-]
+// Nombres visibles de los roles del staff (spec 013). Los códigos históricos se conservan.
+const NOMBRES_ROL: Record<CodigoRol, string> = {
+    [ROL.OWNER]: 'Owner',
+    [ROL.ADMINISTRADOR]: 'Administrador del sistema',
+    [ROL.TESORERO]: 'Tesorero',
+    [ROL.COMISION]: 'Comisión tecnológica',
+}
 
 const ESTADOS = [
     { codigo: 'PENDIENTE', nombre: 'Pendiente' },
@@ -30,7 +34,11 @@ const TIPOS_DOCUMENTO = [
 const CICLOS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X']
 
 async function seedCatalogos() {
-    for (const rol of ROLES) await prisma.rol.upsert({ where: { codigo: rol.codigo }, create: rol, update: {} })
+    // El nombre se actualiza para que un seed posterior no deje los nombres anteriores
+    for (const codigo of ROLES) {
+        const nombre = NOMBRES_ROL[codigo]
+        await prisma.rol.upsert({ where: { codigo }, create: { codigo, nombre }, update: { nombre } })
+    }
     for (const estado of ESTADOS) await prisma.estadoInscripcion.upsert({ where: { codigo: estado.codigo }, create: estado, update: {} })
     for (const tipo of TIPOS_DOCUMENTO) await prisma.tipoDocumento.upsert({ where: { id: tipo.id }, create: tipo, update: {} })
     for (const [indice, ciclo] of CICLOS.entries()) {
