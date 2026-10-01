@@ -7,7 +7,7 @@ import { limiteInscripcion, limiteReenvioCredencial, limiteTokenInscripcion } fr
 import { requireTokenEvento } from '../../../middlewares/sitio'
 import { rutaLegacy } from '../../../middlewares/legacy'
 import { eventoDeInscripcion, eventoDelParametro } from '../../../core/resolutores-evento'
-import { cambiarEstadoLegacySchema } from '../validation'
+import { cambiarEstadoLegacySchema, cortesiaSchema } from '../validation'
 
 const routes: AppRoute[] = [
     // API del sitio (landing del evento, con su token de acceso). El token se valida antes de
@@ -40,6 +40,20 @@ const routes: AppRoute[] = [
     },
     { method: 'get', path: '/v1/inscriptions/:id/voucher', handler: controller.voucher, middlewares: [requirePermiso('pagos.ver', { evento: eventoDeInscripcion })] },
     { method: 'get', path: '/v1/inscriptions/:id/credential', handler: controller.credential, middlewares: [requirePermiso('inscripciones.ver', { evento: eventoDeInscripcion })] },
+    // Foto del participante para el escáner de asistencia (spec 014): quien marca asistencia o ve inscritos del evento
+    {
+        method: 'get',
+        path: '/v1/inscriptions/:id/photo',
+        handler: controller.photo,
+        middlewares: [requirePermiso(['asistencia.marcar', 'inscripciones.ver'], { evento: eventoDeInscripcion })],
+    },
+    // Cortesía (spec 014): organizadores, ponentes e invitados; solo cuentas globales
+    {
+        method: 'post',
+        path: '/v1/events/:eventId/courtesy-inscriptions',
+        handler: controller.createCourtesy,
+        middlewares: [requirePermiso('inscripciones.cortesia'), validateBody(cortesiaSchema)],
+    },
     { method: 'delete', path: '/v1/inscriptions/:id', handler: controller.remove, middlewares: [requirePermiso('inscripciones.eliminar')] },
 ]
 

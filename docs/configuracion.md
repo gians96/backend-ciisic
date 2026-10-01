@@ -54,7 +54,10 @@ numérica de 8–12 dígitos = estudiante; otra parte local = personal (docente 
 | Timeout de deportes-fi | 10 s | `src/api/integration/services/sports-client.ts` |
 | API de Brevo / timeout | `https://api.brevo.com/v3` / 15 s | `src/api/email-credential/services/brevo-client.ts` |
 | Vigencia de los tokens de verificación | 24 h | `verification-token.ts`, `verificacion-correo.ts` |
-| Sesiones | 1 h | `src/core/sesiones.ts` |
+| Sesiones | Staff 1 h (renovable hasta 12 h); participante 12 h | `src/core/sesiones.ts` |
 | Carpeta de archivos / voucher máximo | `<cwd>/uploads` / 5 MB | `src/core/almacenamiento.ts` |
 | QR de las billeteras / máximo | `<cwd>/uploads/qr` / 2 MB (PNG, JPG o WebP) | `src/core/almacenamiento.ts` |
+| Fotos del fotocheck / máximo | `<cwd>/uploads/fotos` / 2 MB y 4096 px por lado (PNG o JPG) | `src/core/almacenamiento.ts`, `src/core/imagenes.ts` |
+| Credenciales PDF | `<cwd>/uploads/credenciales/<evento>/<id>-<huella>.pdf`; 2 a la vez, 30 en cola, 30 s por paso de puppeteer | `src/api/inscription/utils/generatePdf.ts` |
+| Código de acceso por correo | 10 min de vida; topes por correo, IP y globales | `src/api/participant-auth/services/participant-auth.ts` |
 | Límites por visitante y por token | ver `src/middlewares/rate-limit.ts` | |

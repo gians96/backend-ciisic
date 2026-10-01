@@ -70,7 +70,10 @@ app**, para conservar el volumen de `/app/uploads` (vouchers, credenciales, pone
 
 1. Nueva app en Dokploy con el `Dockerfile` del repo, detrás de HTTPS (la cookie es `Secure`),
    p. ej. `admin-ciisic.episundc.pe`. Variable única: `NUXT_BACKEND_BASE_URL` (URL del backend
-   sin `/api/v1`; preferible la interna de Docker para que los límites de login usen la IP real).
+   sin `/api/v1`). **Desde la spec 014, la interna de Docker es obligatoria**: los topes por IP del
+   login con Google y del código por correo (200 solicitudes y 50 códigos incorrectos por hora)
+   deben ver la IP de cada visitante, no la del proxy público. Con la 014, el panel 009 se despliega
+   antes que el backend (ver `docs/operacion.md`, migración 014).
 2. Google Cloud (una vez, spec 010): pantalla de consentimiento *External* en estado
    *In production* (scopes `openid email profile`) y credencial "ID de cliente de OAuth" tipo
    **Aplicación web** con **orígenes JavaScript autorizados**: el panel, cada landing y, para

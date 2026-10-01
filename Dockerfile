@@ -75,6 +75,7 @@ COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
 
 # Copiar las plantillas HTML necesarias (no son compilados por TypeScript)
 COPY --from=builder --chown=nodejs:nodejs /app/src/api/inscription/utils/templates ./dist/src/api/inscription/utils/templates
+COPY --from=builder --chown=nodejs:nodejs /app/src/api/participant-auth/templates ./dist/src/api/participant-auth/templates
 COPY --from=builder --chown=nodejs:nodejs /app/public ./public
 COPY --from=builder --chown=nodejs:nodejs /app/docker-entrypoint.sh ./docker-entrypoint.sh
 

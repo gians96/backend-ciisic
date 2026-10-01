@@ -38,7 +38,8 @@ eventos de la Facultad) con sus inscripciones, credenciales, asistencia, ponenci
    inscripción en `PENDIENTE` con el voucher. Si llega un `verificacionCorreoToken` (Google),
    guarda la evidencia sin cambiar el precio.
 2. **Revisión** (panel): un administrador aprueba o rechaza (motivo obligatorio). Al aprobar se
-   genera la credencial PDF (`uploads/credenciales/<evento>/<id>.pdf`) y se envía el correo con
+   genera la credencial PDF (`uploads/credenciales/<evento>/<id>-<huella>.pdf`, con el código de
+   credencial en el QR; spec 014) y se envía el correo con
    la credencial de correo del evento (o la predeterminada); si falla, la aprobación se mantiene
    y el panel permite reenviar.
 3. **Consulta DNI**: caché de 30 días; si no hay, recorre los tokens por prioridad (Decolecta,

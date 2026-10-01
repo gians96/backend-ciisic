@@ -195,6 +195,33 @@
         flex-shrink: 0;
       }
 
+      .codigo-credencial {
+        font-family: Consolas, "Courier New", monospace;
+        font-size: 18px;
+        font-weight: bold;
+        letter-spacing: 2px;
+        color: #1f2937;
+      }
+
+      .persona {
+        display: flex;
+        gap: 16px;
+        align-items: flex-start;
+      }
+
+      .persona .foto {
+        width: 110px;
+        height: 110px;
+        object-fit: cover;
+        border: 2px solid #e5e7eb;
+        border-radius: 8px;
+        flex-shrink: 0;
+      }
+
+      .persona.sin-foto .foto {
+        display: none;
+      }
+
       @media print {
         body {
           background: white;
@@ -253,12 +280,15 @@
 
         <div class="info-box">
           <div class="info-title">Datos personales:</div>
-          <div class="info-content">
-            <h3>{{NOMBRES}} {{APELLIDOS}}</h3>
-            <div class="info-item"><strong>{{TIPO_DOCUMENTO}}:</strong> {{NUMERO_DOCUMENTO}}</div>
-            <div class="info-item"><strong>Celular:</strong> {{CELULAR}}</div>
-            <div class="info-item"><strong>Correo:</strong> {{CORREO}}</div>
-            <div class="info-item"><strong>Inscripción:</strong> {{TIPO_INSCRIPCION}}</div>
+          <div class="persona {{CLASE_FOTO}}">
+            <img class="foto" src="{{FOTO}}" alt="Foto del participante" />
+            <div class="info-content">
+              <h3>{{NOMBRES}} {{APELLIDOS}}</h3>
+              <div class="info-item"><strong>{{TIPO_DOCUMENTO}}:</strong> {{NUMERO_DOCUMENTO}}</div>
+              <div class="info-item"><strong>Celular:</strong> {{CELULAR}}</div>
+              <div class="info-item"><strong>Correo:</strong> {{CORREO}}</div>
+              <div class="info-item"><strong>Inscripción:</strong> {{TIPO_INSCRIPCION}}</div>
+            </div>
           </div>
         </div>
       </div>
@@ -294,6 +324,7 @@
 
         <div class="qr-section">
           <img src="{{QR}}" alt="Código QR" />
+          <div class="codigo-credencial">{{CODIGO}}</div>
         </div>
       </div>
 

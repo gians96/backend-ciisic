@@ -4,22 +4,9 @@ import path from 'path'
 import { prisma } from '../../../database/prisma'
 import { DIRECTORIO_QR, REGEX_ARCHIVO_QR } from '../../../core/almacenamiento'
 import { notFound, unprocessable } from '../../../core/http-error'
-
-type TipoImagen = 'png' | 'jpg' | 'webp'
-
-const TIPO_POR_MIME: Record<string, TipoImagen> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' }
-const MIME_POR_TIPO: Record<TipoImagen, string> = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp' }
-const FIRMA_PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+import { MIME_POR_TIPO, TIPO_POR_MIME, tipoDeImagen, type TipoImagen } from '../../../core/imagenes'
 
 const noExiste = () => notFound('QR_NOT_FOUND', 'La imagen del QR no existe.')
-
-/** Tipo real de la imagen según sus primeros bytes (no según el nombre ni el MIME declarado). */
-export function tipoDeImagen(bytes: Buffer): TipoImagen | null {
-    if (bytes.subarray(0, 8).equals(FIRMA_PNG)) return 'png'
-    if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'jpg'
-    if (bytes.subarray(0, 4).toString('latin1') === 'RIFF' && bytes.subarray(8, 12).toString('latin1') === 'WEBP') return 'webp'
-    return null
-}
 
 /** Guarda la imagen (ya acotada por multer) con un nombre nuevo si su contenido es el declarado. */
 export async function guardarQr(archivo: { buffer: Buffer, mimetype: string }) {

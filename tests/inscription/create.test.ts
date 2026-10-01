@@ -149,10 +149,16 @@ describe('crear inscripción', () => {
         expect(m.inscripcion.create.mock.calls[0][0].data).toMatchObject({ esCorreoVerificado: false })
     })
 
-    it('si el participante cambia de correo se deshace su vínculo con Google', async () => {
+    it('un correo nuevo, aunque venga verificado con Google, no reemplaza al registrado ni deshace su vínculo con Google (spec 014)', async () => {
+        const { firmarVerificacionCorreo } = await import('../../src/api/google-auth/services/verificacion-correo')
+        const verificacionCorreoToken = firmarVerificacionCorreo({
+            correo: '2020123456@undc.edu.pe', tipoCuenta: 'ESTUDIANTE', hd: 'undc.edu.pe', metodo: 'GOOGLE', verificadoEn: '2026-09-29T20:00:00.000Z', eventoId: evento.id,
+        })
         m.participante.findUnique.mockImplementation(({ where }) => Promise.resolve(where.correo ? null : { id: 10, correo: 'anterior@gmail.com', googleSub: 'g-1' }))
-        await crearInscripcion(evento, input(), 'v.png')
-        expect(m.participante.update.mock.calls[0][0].data).toMatchObject({ correo: '2020123456@undc.edu.pe', googleSub: null, googleVinculadoEn: null })
+        const creada = await crearInscripcion(evento, { ...input(), verificacionCorreoToken }, 'v.png')
+        expect(creada.correoConservado).toBe(true)
+        expect(m.participante.update).not.toHaveBeenCalled()
+        expect(m.inscripcion.create.mock.calls[0][0].data).toMatchObject({ esCorreoVerificado: false, esCorreoInstitucional: false })
     })
 
     it('rechaza un correo que pertenece a otra persona', async () => {

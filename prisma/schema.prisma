@@ -132,23 +132,49 @@ model TipoDocumento {
 }
 
 model Participante {
-  id                Int           @id @default(autoincrement())
-  tipoDocumentoId   String        @map("tipo_documento_id")
-  numeroDocumento   String        @map("numero_documento") @db.VarChar(20)
+  id                Int            @id @default(autoincrement())
+  tipoDocumentoId   String         @map("tipo_documento_id")
+  numeroDocumento   String         @map("numero_documento") @db.VarChar(20)
   nombres           String
   apellidos         String
-  correo            String        @unique(map: "uq_participantes_correo")
-  celular           String        @db.VarChar(20)
-  googleSub         String?       @unique(map: "uq_participantes_google_sub") @map("google_sub") @db.VarChar(255)
-  googleVinculadoEn DateTime?     @map("google_vinculado_en")
-  creadoEn          DateTime      @default(now()) @map("creado_en")
-  actualizadoEn     DateTime      @updatedAt @map("actualizado_en")
-  tipoDocumento     TipoDocumento @relation(fields: [tipoDocumentoId], references: [id], map: "fk_participantes_tipo_documento")
+  correo            String         @unique(map: "uq_participantes_correo")
+  celular           String         @db.VarChar(20)
+  googleSub         String?        @unique(map: "uq_participantes_google_sub") @map("google_sub") @db.VarChar(255)
+  googleVinculadoEn DateTime?      @map("google_vinculado_en")
+  /// Foto opcional del fotocheck (spec 014): `foto-<uuid>.(png|jpg)` en uploads/fotos, sin metadatos
+  fotoArchivo       String?        @map("foto_archivo") @db.VarChar(80)
+  fotoActualizadaEn DateTime?      @map("foto_actualizada_en")
+  creadoEn          DateTime       @default(now()) @map("creado_en")
+  actualizadoEn     DateTime       @updatedAt @map("actualizado_en")
+  tipoDocumento     TipoDocumento  @relation(fields: [tipoDocumentoId], references: [id], map: "fk_participantes_tipo_documento")
   inscripciones     Inscripcion[]
   asistencias       Asistencia[]
+  codigosAcceso     CodigoAcceso[]
 
   @@unique([tipoDocumentoId, numeroDocumento], map: "uq_participantes_documento")
   @@map("participantes")
+}
+
+/// Código de acceso al portal enviado por correo (spec 014). Solo se guarda su HMAC-SHA256
+/// (clave derivada de JWT_SECRET). `participanteId` NULL: el correo no corresponde a nadie.
+model CodigoAcceso {
+  id             Int           @id @default(autoincrement())
+  correo         String        @db.VarChar(191)
+  codigoHash     String        @map("codigo_hash") @db.Char(64)
+  participanteId Int?          @map("participante_id")
+  ip             String?       @db.VarChar(45)
+  intentos       Int           @default(0)
+  expiraEn       DateTime      @map("expira_en")
+  usadoEn        DateTime?     @map("usado_en")
+  invalidadoEn   DateTime?     @map("invalidado_en")
+  creadoEn       DateTime      @default(now()) @map("creado_en")
+  participante   Participante? @relation(fields: [participanteId], references: [id], onDelete: Cascade, map: "fk_codigos_acceso_participante")
+
+  @@index([correo, creadoEn], map: "idx_codigos_acceso_correo_creado")
+  @@index([ip, creadoEn], map: "idx_codigos_acceso_ip_creado")
+  @@index([participanteId], map: "idx_codigos_acceso_participante")
+  @@index([creadoEn], map: "idx_codigos_acceso_creado")
+  @@map("codigos_acceso")
 }
 
 model CategoriaInscripcion {
@@ -233,6 +259,11 @@ model Inscripcion {
   verificacionEstudiante Json?             @map("verificacion_estudiante")
   esCorreoVerificado     Boolean           @default(false) @map("es_correo_verificado")
   verificacionCorreo     Json?             @map("verificacion_correo")
+  /// Código aleatorio del QR del fotocheck (spec 014): 10 caracteres base 36 en mayúsculas.
+  /// Admite NULL para convivir con la imagen anterior; `asegurarCodigoCredencial` lo completa.
+  codigoCredencial       String?           @unique(map: "uq_inscripciones_codigo_credencial") @map("codigo_credencial") @db.Char(10)
+  /// Pudo recibir la credencial con el QR anterior (id del participante): ese QR se acepta con aviso.
+  esQrLegado             Boolean           @default(false) @map("es_qr_legado")
   evento                 Evento            @relation(fields: [eventoId], references: [id], map: "fk_inscripciones_evento")
   participante           Participante      @relation(fields: [participanteId], references: [id], map: "fk_inscripciones_participante")
   tipoInscripcion        TipoInscripcion?  @relation(fields: [tipoInscripcionId], references: [id], onDelete: SetNull, map: "fk_inscripciones_tipo_inscripcion")

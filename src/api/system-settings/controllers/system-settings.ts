@@ -1,6 +1,8 @@
 import { Request, Response } from 'express'
 import type { AuthenticatedRequest } from '../../../middlewares/auth'
-import { configuracionPublica } from '../../../core/configuracion-sistema'
+import type { SitioRequest } from '../../../middlewares/sitio'
+import { configuracionPanel, configuracionPublica } from '../../../core/configuracion-sistema'
+import { accesoCodigoDisponible } from '../../participant-auth/services/participant-auth'
 import * as service from '../services/system-settings'
 
 export async function find(_req: Request, res: Response) {
@@ -18,8 +20,13 @@ export async function testUndc(_req: Request, res: Response) {
     res.json({ success: true, data: await service.probarUndc() })
 }
 
-/** Configuración pública (client ID de Google y URL del panel): nada secreto. */
-export async function publicConfig(_req: Request, res: Response) {
+/**
+ * Configuración pública (client ID de Google y URL del panel): nada secreto. La landing
+ * (`/v1/site/config`, con el token del evento) la recibe sin cambios; el panel (`/v1/auth/config`)
+ * además sabe si puede ofrecer el acceso con código por correo (spec 014).
+ */
+export async function publicConfig(req: SitioRequest, res: Response) {
     res.setHeader('Cache-Control', 'public, max-age=60')
-    res.json({ success: true, data: await configuracionPublica() })
+    const data = req.tokenAccesoId ? await configuracionPublica() : await configuracionPanel(accesoCodigoDisponible)
+    res.json({ success: true, data })
 }

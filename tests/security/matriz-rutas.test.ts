@@ -5,7 +5,7 @@ import * as auth from '../../src/middlewares/auth'
 import { requireParticipante, requirePermiso, requireSesion, type GuardaPermiso } from '../../src/middlewares/auth'
 import { requireTokenEvento } from '../../src/middlewares/sitio'
 import { rutaLegacy } from '../../src/middlewares/legacy'
-import { limiteMarcarAsistencia, limiteReenvioCredencial, limiteRenovacionSesion } from '../../src/middlewares/rate-limit'
+import { limiteMarcarAsistencia, limiteReenvioCredencial, limiteRenovacionSesion, limiteSwitch } from '../../src/middlewares/rate-limit'
 import { ALCANCE, type Permiso } from '../../src/core/permisos'
 import {
     eventoDeActividad, eventoDeAsistencia, eventoDeInscripcion, eventoDelParametro, eventoDeMensaje, eventoDePonencia,
@@ -64,6 +64,9 @@ const PUBLICAS: readonly Clave[] = [
     'POST /v1/auth/login',
     'POST /v1/auth/google',
     'GET /v1/auth/config',
+    // Código por correo (spec 014): respuesta idéntica exista o no el correo; topes por correo, IP y globales
+    'POST /v1/auth/participant/code',
+    'POST /v1/auth/participant/code/verify',
     'GET /v1/classification',
     'GET /v1/classification/:id',
     'GET /v1/document-type',
@@ -93,7 +96,11 @@ const SITIO: readonly Clave[] = [
     'GET /v1/site/config',
 ]
 
-const PARTICIPANTE: readonly Clave[] = ['GET /v1/me', 'GET /v1/me/inscriptions', 'GET /v1/me/inscriptions/:id/credential']
+const PARTICIPANTE: readonly Clave[] = [
+    'GET /v1/me', 'GET /v1/me/inscriptions', 'GET /v1/me/inscriptions/:id/credential',
+    // Portal v2 (spec 014)
+    'PATCH /v1/me/profile', 'GET /v1/me/photo', 'PUT /v1/me/photo', 'DELETE /v1/me/photo', 'GET /v1/me/inscriptions/:id/badge', 'GET /v1/me/attendances',
+]
 const SESION: readonly Clave[] = ['GET /v1/auth/session']
 
 interface Esperada { permisos: Permiso[], evento: string | null, filtraPorActor: boolean }
@@ -134,6 +141,8 @@ const MATRIZ: Record<Clave, Esperada> = {
     'PUT /v1/admin/:id': g('administradores.gestionar'),
     'DELETE /v1/admin/:id': g('administradores.gestionar'),
     'POST /v1/auth/refresh': ACTOR,
+    // participant-auth: el staff que entró con Google pasa a su portal (el servicio exige el método)
+    'POST /v1/auth/participant/switch': ACTOR,
 
     // catalog
     'POST /v1/classification': g('catalogos.configurar'),
@@ -188,6 +197,8 @@ const MATRIZ: Record<Clave, Esperada> = {
     'POST /v1/inscriptions/:id/resend-credential': g('credenciales.reenviar', eventoDeInscripcion),
     'GET /v1/inscriptions/:id/voucher': g('pagos.ver', eventoDeInscripcion),
     'GET /v1/inscriptions/:id/credential': g('inscripciones.ver', eventoDeInscripcion),
+    'GET /v1/inscriptions/:id/photo': g(['asistencia.marcar', 'inscripciones.ver'], eventoDeInscripcion),
+    'POST /v1/events/:eventId/courtesy-inscriptions': g('inscripciones.cortesia'),
     'DELETE /v1/inscriptions/:id': g('inscripciones.eliminar'),
 
     // integration
@@ -205,6 +216,7 @@ const MATRIZ: Record<Clave, Esperada> = {
 
     // participant
     'GET /v1/participants': g('participantes.gestionar'),
+    'POST /v1/participants': g('participantes.gestionar'),
     'GET /v1/participants/:id': g('participantes.gestionar'),
     'PUT /v1/participants/:id': g('participantes.gestionar'),
 
@@ -241,7 +253,9 @@ const esGuarda = (h: Handle) => Object.prototype.hasOwnProperty.call(h, 'guarda'
 const esMulter = (h: Handle) => h.name === 'multerMiddleware'
 const esValidacion = (h: Handle) => h.validaCuerpo === true
 /** Limitadores con clave por cuenta: necesitan `req.actor`, que deja la guarda. */
-const LIMITES_POR_ACTOR: readonly RequestHandler[] = [limiteMarcarAsistencia, limiteReenvioCredencial, limiteRenovacionSesion]
+const LIMITES_POR_ACTOR: readonly RequestHandler[] = [limiteMarcarAsistencia, limiteReenvioCredencial, limiteRenovacionSesion, limiteSwitch]
+/** Total de rutas de /api: una ruta nueva obliga a clasificarla aquí. */
+const TOTAL_RUTAS = 129
 
 function clasesDe(ruta: Ruta): Clase[] {
     const clases: Clase[] = []
@@ -258,9 +272,9 @@ const indiceDeAutenticacion = (ruta: Ruta) => ruta.handles.findIndex((h) =>
     esGuarda(h) || [requireTokenEvento, requireParticipante, requireSesion].includes(h as never))
 
 describe('matriz de rutas (spec 013)', () => {
-    it('carga las 117 rutas de /api, sin duplicados ni middlewares de router', () => {
+    it(`carga las ${TOTAL_RUTAS} rutas de /api, sin duplicados ni middlewares de router`, () => {
         expect(capasSinRuta).toEqual([])
-        expect(rutas).toHaveLength(117)
+        expect(rutas).toHaveLength(TOTAL_RUTAS)
         expect(new Set(rutas.map((r) => r.clave)).size).toBe(rutas.length)
     })
 
@@ -289,7 +303,7 @@ describe('matriz de rutas (spec 013)', () => {
             real[ruta.clave] = { permisos: [...permisos].sort(), evento: evento ?? null, filtraPorActor }
         }
         expect(real).toEqual(MATRIZ)
-        expect(Object.keys(MATRIZ)).toHaveLength(117 - PUBLICAS.length - SITIO.length - PARTICIPANTE.length - SESION.length)
+        expect(Object.keys(MATRIZ)).toHaveLength(TOTAL_RUTAS - PUBLICAS.length - SITIO.length - PARTICIPANTE.length - SESION.length)
     })
 
     it('la guarda va primera (o tras rutaLegacy) y antes de multer y validateBody', () => {
@@ -310,8 +324,8 @@ describe('matriz de rutas (spec 013)', () => {
         expect(malas).toEqual([])
         // La detección de multer y validateBody funciona (si no, lo anterior no probaría nada)
         expect(rutas.filter((r) => r.handles.some(esMulter)).map((r) => r.clave).sort()).toEqual([
-            'POST /v1/inscription', 'POST /v1/papers', 'POST /v1/payment-qr', 'POST /v1/site/inscriptions', 'POST /v1/site/papers',
-        ])
+            'POST /v1/inscription', 'POST /v1/papers', 'POST /v1/payment-qr', 'POST /v1/site/inscriptions', 'POST /v1/site/papers', 'PUT /v1/me/photo',
+        ].sort())
         expect(rutas.filter((r) => r.handles.some(esValidacion)).length).toBeGreaterThan(30)
     })
 
@@ -329,6 +343,7 @@ describe('matriz de rutas (spec 013)', () => {
         expect(con(limiteMarcarAsistencia)).toEqual(['POST /v1/activities/:id/attendances'])
         expect(con(limiteReenvioCredencial)).toEqual(['POST /v1/inscriptions/:id/resend-credential'])
         expect(con(limiteRenovacionSesion)).toEqual(['POST /v1/auth/refresh'])
+        expect(con(limiteSwitch)).toEqual(['POST /v1/auth/participant/switch'])
     })
 
     it('todo permiso por evento (E) tiene resolutor de evento o filtraPorActor', () => {

@@ -39,7 +39,7 @@ function inscripcion(cambios: Record<string, unknown> = {}) {
         monto: new Prisma.Decimal(120), descuento: new Prisma.Decimal(20), tieneDescuento: true, fechaPago: new Date('2026-09-19T00:00:00Z'),
         voucherArchivo: 'voucher-5.png', esCorreoInstitucional: false, motivoRechazo: null, revisadoPorId: null, revisadoEn: null,
         credencialEnviadaEn: null, esEstudianteUndc: false, codigoEstudiante: null, verificacionEstudiante: null,
-        esCorreoVerificado: false, verificacionCorreo: null,
+        esCorreoVerificado: false, verificacionCorreo: null, codigoCredencial: 'K7Q2M9X4TB', esQrLegado: false,
         evento,
         participante: { id: 50, tipoDocumentoId: 'dni', numeroDocumento: '12345678', nombres: 'Ana', apellidos: 'Pérez', correo: 'ana@gmail.com', celular: '987654321' },
         tipoInscripcion: {

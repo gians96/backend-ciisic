@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Aviso sobre tu correo</title>
+  </head>
+  <body style="margin: 0; padding: 0; width: 100%; background-color: #f0f0f0; color: #000000" bgcolor="#F0F0F0">
+    <table width="100%" align="center" border="0" cellpadding="0" cellspacing="0" style="border-collapse: collapse; width: 100%">
+      <tr>
+        <td align="center" valign="top" bgcolor="#F0F0F0" style="padding: 20px 0">
+          <table border="0" cellpadding="0" cellspacing="0" align="center" bgcolor="#FFFFFF" width="560" style="border-collapse: collapse; max-width: 560px; width: 100%">
+            <tr>
+              <td align="left" valign="top" style="padding: 25px 6.25% 0; font-family: sans-serif; font-size: 17px; line-height: 160%; color: #000000">
+                <h3 style="margin: 0 0 15px; color: #333333">Hola {{NOMBRE}}, conservamos tu correo</h3>
+                <p style="margin: 0 0 15px">
+                  Recibimos una inscripción al {{EVENTO_NOMBRE_CORTO}} con tu documento, en la que se indicó el
+                  correo <b>{{CORREO_INGRESADO}}</b>, distinto del que tienes registrado.
+                </p>
+                <p style="margin: 0 0 15px">
+                  Por seguridad, un correo nuevo solo reemplaza al registrado si se verifica con Google. Por eso la
+                  inscripción quedó con <b>este correo</b>: aquí recibirás la credencial y los avisos del evento, y
+                  con él entras a tu portal de participante.
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 10px 6.25% 0"><hr color="#E0E0E0" width="100%" size="1" noshade style="margin: 0" /></td>
+            </tr>
+            <tr>
+              <td align="left" valign="top" style="padding: 20px 6.25% 25px; font-family: sans-serif; font-size: 17px; line-height: 160%; color: #000000">
+                <b style="color: #333333">¿Quieres usar el otro correo o no fuiste tú?</b><br />
+                Escríbenos a
+                <a href="mailto:{{EVENTO_CORREO}}" target="_blank" style="color: #127db3; text-decoration: none">{{EVENTO_CORREO}}</a>
+                y lo revisamos contigo.
+              </td>
+            </tr>
+          </table>
+          <table border="0" cellpadding="0" cellspacing="0" align="center" width="560" style="border-collapse: collapse; max-width: 560px; width: 100%">
+            <tr>
+              <td align="center" valign="top" style="padding: 25px 6.25%; font-family: sans-serif; font-size: 13px; color: #999999">
+                © {{ANIO}} {{EVENTO_NOMBRE_CORTO}} · {{EVENTO_NOMBRE}}
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

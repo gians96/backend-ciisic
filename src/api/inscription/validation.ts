@@ -17,6 +17,13 @@ export const participanteSchema = yup.object({
     celular: yup.string().trim().matches(/^\+?\d{9,15}$/, 'El celular debe tener entre 9 y 15 dígitos').required(),
 })
 
+/**
+ * Número de operación de un pago. El prefijo `CORTESIA-` es de las inscripciones de cortesía (spec
+ * 014): nadie lo puede usar desde un formulario.
+ */
+const numeroOperacion = () => yup.string().trim().min(3).max(100).required()
+    .test('no-cortesia', 'El número de operación no es válido', (value) => !value || !/^cortesia-/i.test(value))
+
 /** Fecha de pago `YYYY-MM-DD` no posterior a hoy (hora de Lima), evaluada en cada solicitud. */
 const fechaPago = () => yup.string().trim().matches(REGEX_FECHA, 'Use el formato AAAA-MM-DD').required()
     .test('no-futura', 'La fecha de pago no puede ser futura', (value) => !value || value <= fechaLima())
@@ -29,7 +36,7 @@ export const crearInscripcionSchema = yup.object({
     banco: yup.string().trim().lowercase().max(40).nullable(),
     tipoOperacion: yup.string().oneOf(['directo', 'interbancario']).nullable(),
     billeteraDigital: yup.string().trim().lowercase().max(40).nullable(),
-    numeroOperacion: yup.string().trim().min(3).max(100).required(),
+    numeroOperacion: numeroOperacion(),
     fechaPago: fechaPago(),
     verificacionToken: yup.string().trim().max(4000).nullable(),
     /** Token de `/site/google-verification`: el correo se verificó con Google (spec 010). */
@@ -54,7 +61,7 @@ export const inscripcionLegacySchema = yup.object({
     bancoSeleccionado: yup.string().trim().max(80).nullable(),
     tipoOperacion: yup.string().trim().max(80).nullable(),
     billeteraDigital: yup.string().trim().max(80).nullable(),
-    numeroOperacion: yup.string().trim().min(3).max(100).required(),
+    numeroOperacion: numeroOperacion(),
     fechaPago: yup.date().required().test('no-futura', 'La fecha de pago no puede ser futura', (value) => !value || value.getTime() <= Date.now() + 24 * 60 * 60 * 1000),
 }).required()
 
@@ -69,3 +76,13 @@ export const cambiarEstadoSchema = yup.object({
 export const cambiarEstadoLegacySchema = yup.object({
     estadoId: yup.number().integer().min(1).max(5).required(),
 }).required()
+
+/** `POST /v1/events/:eventId/courtesy-inscriptions` (spec 014). */
+export const cortesiaSchema = yup.object({
+    participanteId: yup.number().integer().positive().required(),
+    tipoInscripcionId: yup.number().integer().positive().nullable(),
+    /** Genera y envía la credencial al crearla, como al aprobar. */
+    enviarCredencial: yup.boolean().default(false),
+}).required()
+
+export type CortesiaInput = yup.InferType<typeof cortesiaSchema>

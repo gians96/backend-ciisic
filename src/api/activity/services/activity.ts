@@ -1,10 +1,11 @@
 import { Prisma } from '@prisma/client'
 import type { Actividad } from '@prisma/client'
 import { prisma } from '../../../database/prisma'
-import { conflict, HttpError, notFound } from '../../../core/http-error'
+import { conflict, HttpError, notFound, unprocessable } from '../../../core/http-error'
 import { aColumnaFecha, fechaLima, fechaSoloDia, horaLima, instanteLima } from '../../../core/fechas'
 import type { MetodoAsistencia } from '../../../core/catalogos'
 import { tienePermiso, type Actor } from '../../../core/actor'
+import { rutaFoto } from '../../../core/almacenamiento'
 import { obtenerEventoPorId } from '../../event/services/public-event'
 import type { ActualizarActividadInput, CrearActividadInput, RegistrarAsistenciaInput } from '../validation'
 
@@ -94,11 +95,11 @@ export async function eliminarActividad(id: number) {
 
 // ─── Asistencia ─────────────────────────────────────────────────────────────
 
-/** Quién marca y cómo (spec 013). */
-export interface ContextoAsistencia {
-    actor: Actor
-    metodo: MetodoAsistencia
-}
+/** Minutos antes de `horaInicio` en que ya se puede marcar sin quedar fuera de horario (spec 014). */
+export const TOLERANCIA_ANTES_MINUTOS = 30
+
+/** Aviso para el escáner: se marcó con el QR anterior (id del participante); conviene verificar el DNI. */
+export type AlertaAsistencia = 'QR_LEGADO'
 
 /** Sin `inscripciones.ver` el documento se muestra como `****5678`. */
 export function enmascararDocumento(numero: string): string {
@@ -151,17 +152,42 @@ const yaRegistrada = (registradoEn?: Date | null) => conflict(
         : 'La asistencia ya fue registrada para esta actividad.',
 )
 
+/** Lo que la marca necesita de la inscripción: estado, regla del QR anterior y datos para el escáner. */
+const DATOS_INSCRIPCION = {
+    id: true,
+    eventoId: true,
+    codigoCredencial: true,
+    esQrLegado: true,
+    estado: { select: { codigo: true } },
+    evento: { select: { fechaFin: true } },
+    tipoInscripcion: { select: { nombre: true, etiqueta: true } },
+    participante: { select: { ...DATOS_PERSONA, fotoArchivo: true } },
+} as const
+
+type Inscrito = Prisma.InscripcionGetPayload<{ select: typeof DATOS_INSCRIPCION }>
+
+/**
+ * Inscripción del código de la credencial (spec 014). El código es único en todo el sistema: si
+ * es de otro evento responde 409 `CODE_OTHER_EVENT` sin datos de la persona.
+ */
+async function buscarPorCodigo(eventoId: number, codigoCredencial: string): Promise<Inscrito> {
+    const inscripcion = await prisma.inscripcion.findUnique({ where: { codigoCredencial }, select: DATOS_INSCRIPCION })
+    if (!inscripcion) throw notFound('CODE_NOT_FOUND', 'El código no corresponde a ninguna credencial.')
+    if (inscripcion.eventoId !== eventoId) throw conflict('CODE_OTHER_EVENT', 'La credencial es de otro evento.')
+    return inscripcion
+}
+
 /**
  * Persona inscrita en el evento de la actividad (spec 013): la búsqueda nunca sale de las
  * inscripciones del evento, así que el id o el documento de alguien no inscrito responde 404.
  */
-async function buscarInscrito(eventoId: number, input: RegistrarAsistenciaInput) {
+async function buscarInscrito(eventoId: number, input: RegistrarAsistenciaInput): Promise<Inscrito> {
     const persona: Prisma.ParticipanteWhereInput = input.participanteId
         ? { id: input.participanteId }
         : { numeroDocumento: input.numeroDocumento, ...(input.tipoDocumento ? { tipoDocumentoId: input.tipoDocumento } : {}) }
     const inscripciones = await prisma.inscripcion.findMany({
         where: { eventoId, participante: persona },
-        select: { estado: { select: { codigo: true } }, participante: { select: DATOS_PERSONA } },
+        select: DATOS_INSCRIPCION,
         take: 2,
     })
     if (!inscripciones.length) throw notFound('PARTICIPANT_NOT_FOUND', 'La persona no está inscrita en este evento.')
@@ -172,25 +198,61 @@ async function buscarInscrito(eventoId: number, input: RegistrarAsistenciaInput)
 }
 
 /**
- * Registra asistencia: la persona debe tener inscripción APROBADO en el evento de la
- * actividad y, salvo `fueraDeHorario` (permiso `asistencia.fuera_horario`), estar dentro de la
- * fecha y horario (hora de Lima). `esFueraDeHorario` sale de la hora real, no de lo que envía el
- * cliente. Una marca anulada se reactiva con los datos de quien marca.
+ * QR anterior (id del participante, spec 014): vale solo para quien pudo recibir la credencial con
+ * él (`esQrLegado`, o sin código porque la creó la imagen anterior) y hasta el último día del evento
+ * (hora de Lima). Si no, 422 `LEGACY_QR_NOT_ALLOWED`.
  */
-export async function registrarAsistencia(actividadId: number, input: RegistrarAsistenciaInput, { actor, metodo }: ContextoAsistencia, ahora = new Date()) {
+function exigirQrLegadoVigente(inscripcion: Inscrito, ahora: Date) {
+    const fin = fechaSoloDia(inscripcion.evento.fechaFin)
+    if (!fin || fechaLima(ahora) > fin) {
+        throw unprocessable('LEGACY_QR_NOT_ALLOWED', `El QR anterior solo valía hasta el fin del evento${fin ? ` (${fin})` : ''}. Pide el fotocheck del portal o registra con el documento.`)
+    }
+    if (!inscripcion.esQrLegado && inscripcion.codigoCredencial !== null) {
+        throw unprocessable('LEGACY_QR_NOT_ALLOWED', 'Este QR ya no es válido. Pide el fotocheck del portal o registra con el documento.')
+    }
+}
+
+/**
+ * Registra asistencia con exactamente un identificador (spec 014):
+ * - `codigo` (QR del fotocheck) → método QR.
+ * - `participanteId` (QR anterior) → método QR_LEGADO y `alerta: 'QR_LEGADO'`, con su regla.
+ * - `numeroDocumento` → método DOCUMENTO.
+ * - `metodo: 'MANUAL'` (permiso `asistencia.fuera_horario`) registra a la persona como MANUAL sin
+ *   la regla del QR anterior: el operador la identificó por su cuenta.
+ *
+ * La persona debe tener inscripción APROBADO en el evento de la actividad y, salvo `fueraDeHorario`
+ * (permiso `asistencia.fuera_horario`), estar el día de la actividad entre 30 min antes de
+ * `horaInicio` y `horaFin` (hora de Lima). `esFueraDeHorario` sale de la hora real, no de lo que
+ * envía el cliente. Una marca anulada se reactiva con los datos de quien marca.
+ */
+export async function registrarAsistencia(actividadId: number, input: RegistrarAsistenciaInput, actor: Actor, ahora = new Date()) {
     if (input.fueraDeHorario && !tienePermiso(actor, 'asistencia.fuera_horario')) {
         throw new HttpError(403, 'OUT_OF_HOURS_NOT_ALLOWED', 'No tiene permiso para marcar asistencia fuera del horario de la actividad.')
     }
+    const manual = input.metodo === 'MANUAL'
+    if (manual && !tienePermiso(actor, 'asistencia.fuera_horario')) {
+        throw new HttpError(403, 'MANUAL_NOT_ALLOWED', 'No tiene permiso para registrar asistencia manual.')
+    }
     const actividad = await obtenerActividad(actividadId)
-    const { estado, participante } = await buscarInscrito(actividad.eventoId, input)
+    const inscripcion = input.codigo
+        ? await buscarPorCodigo(actividad.eventoId, input.codigo)
+        : await buscarInscrito(actividad.eventoId, input)
+    const qrLegado = !manual && !input.codigo && Boolean(input.participanteId)
+    if (qrLegado) exigirQrLegadoVigente(inscripcion, ahora)
+    const { estado, participante } = inscripcion
     if (estado.codigo !== 'APROBADO') throw new HttpError(403, 'NOT_APPROVED', 'El participante no tiene una inscripción aprobada en este evento.')
+    const metodo: MetodoAsistencia = manual ? 'MANUAL' : input.codigo ? 'QR' : qrLegado ? 'QR_LEGADO' : 'DOCUMENTO'
+    const alerta: AlertaAsistencia | null = qrLegado ? 'QR_LEGADO' : null
 
     // Queda como fuera de horario solo si de verdad lo estaba (el panel puede dejar marcada la casilla)
     const dia = fechaSoloDia(actividad.fecha)
     const enOtroDia = dia !== fechaLima(ahora)
-    const fueraDeHorario = enOtroDia || ahora < actividad.horaInicio || ahora > actividad.horaFin
+    const desde = new Date(actividad.horaInicio.getTime() - TOLERANCIA_ANTES_MINUTOS * 60_000)
+    const fueraDeHorario = enOtroDia || ahora < desde || ahora > actividad.horaFin
     if (fueraDeHorario && !input.fueraDeHorario) {
-        throw conflict('OUTSIDE_WINDOW', enOtroDia ? `La asistencia se registra el día de la actividad (${dia}).` : 'La asistencia está fuera del horario de la actividad.')
+        throw conflict('OUTSIDE_WINDOW', enOtroDia
+            ? `La asistencia se registra el día de la actividad (${dia}).`
+            : `La asistencia se registra desde ${horaLima(desde)} hasta ${horaLima(actividad.horaFin)}.`)
     }
 
     const clave = { participanteId_actividadId: { participanteId: participante.id, actividadId } }
@@ -217,7 +279,21 @@ export async function registrarAsistencia(actividadId: number, input: RegistrarA
             throw error
         }
     }
-    return { id, registradoEn: marca.registradoEn, metodo, esFueraDeHorario: marca.esFueraDeHorario, participante: aPersona(participante, actor) }
+    return {
+        id,
+        registradoEn: marca.registradoEn,
+        metodo,
+        esFueraDeHorario: marca.esFueraDeHorario,
+        alerta,
+        // La foto se pide aparte con GET /v1/inscriptions/:id/photo
+        participante: { ...aPersona(participante, actor), foto: { tiene: rutaFoto(participante.fotoArchivo) !== null } },
+        inscripcion: {
+            id: inscripcion.id,
+            tipoInscripcion: inscripcion.tipoInscripcion
+                ? { nombre: inscripcion.tipoInscripcion.nombre, etiqueta: inscripcion.tipoInscripcion.etiqueta }
+                : null,
+        },
+    }
 }
 
 /** Anulación lógica (spec 013): la fila queda con quién y cuándo la anuló. */

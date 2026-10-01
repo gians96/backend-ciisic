@@ -34,10 +34,9 @@ export async function listAttendances(req: Request, res: Response) {
 }
 
 export async function createAttendance(req: Request, res: Response) {
+    // El método lo deduce el servicio del identificador (codigo, participanteId o numeroDocumento)
     const input = req.body as RegistrarAsistenciaInput
-    // Sin método declarado: el id sale del QR de la credencial y el documento se digita
-    const metodo = input.metodo ?? (input.participanteId ? 'QR' : 'DOCUMENTO')
-    res.status(201).json({ success: true, data: await service.registrarAsistencia(idParam(req.params.id), input, { actor: actorDe(req), metodo }) })
+    res.status(201).json({ success: true, data: await service.registrarAsistencia(idParam(req.params.id), input, actorDe(req)) })
 }
 
 export async function removeAttendance(req: Request, res: Response) {
@@ -51,10 +50,11 @@ export async function exportAttendance(req: Request, res: Response) {
 
 // ─── Legacy ─────────────────────────────────────────────────────────────────
 
-// Vienen del lector QR de la herramienta anterior (id_usuario = participante)
+// Vienen del lector QR de la herramienta anterior (id_usuario = participante): es el QR anterior,
+// así que se registra como QR_LEGADO con su regla (spec 014)
 function registrarLegacy(req: Request, fueraDeHorario: boolean) {
     const input = { participanteId: Number(req.body.id_usuario), fueraDeHorario }
-    return service.registrarAsistencia(Number(req.body.id_evento), input, { actor: actorDe(req), metodo: 'QR' })
+    return service.registrarAsistencia(Number(req.body.id_evento), input, actorDe(req))
 }
 
 export async function legacyCreate(req: Request, res: Response) {

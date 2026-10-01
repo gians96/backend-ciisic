@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { fechaSoloDia } from '../../../core/fechas'
 import { monto } from '../../../core/catalogos'
+import { enmascararCorreo } from '../../../core/codigos'
 import { mimeDeArchivo } from '../../../middlewares/upload'
 
 /** Relaciones que se cargan para mostrar una inscripción completa. */
@@ -63,6 +64,9 @@ export function aDetalle(i: InscripcionDetalle, conPago = true) {
         evento: { id: i.evento.id, codigo: i.evento.codigo, nombreCorto: i.evento.nombreCorto },
         creadoEn: i.creadoEn,
         actualizadoEn: i.actualizadoEn,
+        /** Código del QR del fotocheck (spec 014). No va en los listados ni en el CSV. */
+        codigoCredencial: i.codigoCredencial,
+        esQrLegado: i.esQrLegado,
         participante: {
             id: i.participante.id,
             tipoDocumento: i.participante.tipoDocumentoId,
@@ -128,8 +132,32 @@ export function aFilaLista(i: InscripcionDetalle, conPago = true) {
     }
 }
 
+/** `987654321` → `*********`: ni un dígito (con un documento ajeno no se debe poder averiguar nada). */
+export function ocultarCelular(celular: string): string {
+    return '*'.repeat(Math.max(celular.length, 3))
+}
+
+/**
+ * Contacto que ve quien envió el formulario. Si se conservó el correo registrado (spec 014), quien
+ * envió el formulario no lo escribió (pudo ser cualquiera que conozca el documento): el correo sale
+ * enmascarado (`a***@g***.com`, para que la persona reconozca cuál es) y el celular, oculto.
+ */
+function contactoVisible(i: InscripcionDetalle, correoConservado: boolean) {
+    return correoConservado
+        ? { correo: enmascararCorreo(i.participante.correo), celular: ocultarCelular(i.participante.celular) }
+        : { correo: i.participante.correo, celular: i.participante.celular }
+}
+
+/**
+ * Aviso de la spec 014 para la landing: `correoConservado` es `true` si el documento ya estaba
+ * registrado con otro correo (aunque el nuevo venga verificado con Google, o por la ruta legacy).
+ */
+function avisoCorreo(i: InscripcionDetalle, correoConservado: boolean) {
+    return { correoConservado, correoEnmascarado: correoConservado ? enmascararCorreo(i.participante.correo) : null }
+}
+
 /** Respuesta pública al crear una inscripción (la persona ve su propio pago). */
-export function aCreada(i: InscripcionDetalle) {
+export function aCreada(i: InscripcionDetalle, correoConservado = false) {
     const d = aDetalle(i)
     const pago = pagoDe(i)
     return {
@@ -140,8 +168,7 @@ export function aCreada(i: InscripcionDetalle) {
             numeroDocumento: d.participante.numeroDocumento,
             nombres: d.participante.nombres,
             apellidos: d.participante.apellidos,
-            correo: d.participante.correo,
-            celular: d.participante.celular,
+            ...contactoVisible(i, correoConservado),
         },
         tipoInscripcion: d.tipoInscripcion
             ? { id: d.tipoInscripcion.id, nombre: d.tipoInscripcion.nombre, etiqueta: d.tipoInscripcion.etiqueta, categoria: d.tipoInscripcion.categoria.codigo }
@@ -160,6 +187,7 @@ export function aCreada(i: InscripcionDetalle) {
         fechaPago: pago.fechaPago,
         estado: { codigo: d.estado.codigo, nombre: d.estado.nombre },
         creadoEn: d.creadoEn,
+        ...avisoCorreo(i, correoConservado),
     }
 }
 
@@ -199,5 +227,16 @@ export function aLegacy(i: InscripcionDetalle) {
         descuento: monto(i.descuento),
         creadoEn: i.creadoEn,
         actualizadoEn: i.actualizadoEn,
+    }
+}
+
+/** Respuesta de la ruta legacy al crear: la forma anterior más el aviso de correo conservado (spec 014). */
+export function aLegacyCreada(i: InscripcionDetalle, correoConservado = false) {
+    const legacy = aLegacy(i)
+    const contacto = contactoVisible(i, correoConservado)
+    return {
+        ...legacy,
+        usuario: { ...legacy.usuario, correoElectronico: contacto.correo, celular: contacto.celular },
+        ...avisoCorreo(i, correoConservado),
     }
 }

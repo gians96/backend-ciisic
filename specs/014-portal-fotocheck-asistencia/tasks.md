@@ -1,0 +1,22 @@
+# Tasks: Portal del participante, fotocheck virtual y asistencia por QR
+
+- [x] T001 Núcleo: `codigos.ts`, `concurrencia.ts`, `imagenes.ts`, fotos en `almacenamiento.ts`, sesión de participante de 12 h y límites nuevos
+- [x] T002 Esquema y migración `20261001120000_portal_fotocheck`; `verificar-014.sql`, `completar-014.sql` y `revertir-014.sql`; ensayo con el respaldo (308/308/308, 307 QR anterior, 585 asistencias, drift 0) y con las dos fallas simuladas (P3009)
+- [x] T003 Credencial: `codigo_credencial` al crear (con reintento) y al leer, PDF con el QR del código, código impreso y foto, huella en el nombre, semáforo y `PDF_BUSY`
+- [x] T004 Acceso por código: `code`, `code/verify`, `switch`, `credencialUtilizable`, `accesoCodigo` en `/v1/auth/config` y `limiteLoginGoogle`
+- [x] T005 Portal: `/me` ampliado, `PATCH /me/profile`, foto, `/badge`, `/attendances` y `fotocheck.disponible`
+- [x] T006 Asistencia: `codigo`, QR anterior con regla y alerta (también legacy), `MANUAL`, tolerancia de 30 min y `GET /v1/inscriptions/:id/photo`
+- [x] T007 Correo: conservado al reinscribirse (sitio y legacy) con aviso; aviso y registro al cambiarlo desde el panel
+- [x] T008 Alta de participantes y cortesías
+- [x] T009 Pruebas por frente, con acceso denegado en cada ruta nueva
+- [x] T010 Documentación: spec, plan, tasks, contratos, `docs/` (api, data-model, arquitectura-ecosistema, operación), `README.md` y `AGENTS.md`
+- [x] T011 Seguridad transversal: `tests/security/matriz-rutas.test.ts` (12 rutas nuevas, 129 en total; `PUT /v1/me/photo` en la lista de multer; `limiteSwitch` en los límites por cuenta), `tests/security/routes.test.ts` (401 de `/v1/me/*`) y `tests/system-settings/configuracion.test.ts` (`accesoCodigo`)
+- [x] T012 `Dockerfile`: copiar `src/api/participant-auth/templates` (sin ella el código por correo queda apagado en producción)
+- [x] T013 `errorHandler`: `Retry-After` en `503 PDF_BUSY` y no registrar como error interno los 503 esperados (`CODE_LOGIN_UNAVAILABLE`, `CODE_LOGIN_PAUSED`)
+- [x] T014 Documentación fuera de esta fase: `docs/overview.md` (ruta del PDF con huella), `docs/configuracion.md` (`uploads/fotos`, 2 MB) y `docs/despliegue-ecosistema.md` (URL interna del BFF obligatoria y la línea del `Dockerfile`)
+- [ ] T015 Panel (spec 009 del panel): login con código, portal (fotocheck con copia sin conexión, asistencia, perfil con foto recodificada), escáner (`{codigo}`, alerta ámbar `QR_LEGADO`, foto) y cambio al portal
+- [ ] T016 Landing: aviso cuando `correoConservado` es `true`
+- [ ] T017 Prueba integrada local (panel 3001 → backend 3010): código por correo, fotocheck, escaneo de un QR nuevo y uno anterior, foto y cambio al portal
+- [x] T020 Correcciones de la revisión de seguridad y regresiones: el formulario público nunca cambia el correo registrado (ni verificado con Google) y el precio sale del correo registrado; cortesías con número de operación aleatorio; fotos con dimensiones máximas, chunks y segmentos permitidos y CRC; topes por IP, disyuntor solo con participantes y presupuesto global de envíos del código; los fallos del envío del código no cambian la credencial; PDF leídos a memoria y sin borrar versiones más nuevas; timeouts de puppeteer; celular vacío en `PUT /v1/participants/:id`; causa en los envíos diferidos; migración con código solo en aprobadas o enviadas; `marcar-qr-legado-014.sql`; `credenciales:pregenerar`
+- [ ] T018 Despliegue: respaldo, panel 009 y después backend 014, `verificar-014.sql`, `migrate diff`, `marcar-qr-legado-014.sql` y `credenciales:pregenerar` (ver `docs/operacion.md`); URL interna del BFF del panel
+- [ ] T019 Después del 31-oct-2026: `codigo_credencial NOT NULL`, `regenerate-code`, retirar `participanteId` del escáner y certificados en el portal (spec 015)

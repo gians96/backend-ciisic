@@ -9,8 +9,9 @@ renombrado desde el esquema anterior: [`specs/001-esquema-bd-espanol/data-model.
 |---|---|---|
 | `eventos` | Ediciones y eventos | `codigo` único; un solo `es_principal`; `estado` BORRADOR/PUBLICADO/FINALIZADO/ARCHIVADO; `datos_pago` JSON; `credencial_correo_id` opcional |
 | `categorias_inscripcion` / `tipos_inscripcion` | Planes por evento | únicos `(evento_id, codigo)` y `(categoria_id, codigo)`; precio y precio institucional `DECIMAL(10,2)` |
-| `participantes` | Personas | únicos `(tipo_documento_id, numero_documento)` y `correo`; `google_sub` único (vínculo con Google) |
-| `inscripciones` | Inscripción de un participante a un evento | único `(evento_id, participante_id)`; `numero_operacion` único; estado por código; monto calculado por el servidor; evidencia de verificación de estudiante y de correo (Google) |
+| `participantes` | Personas | únicos `(tipo_documento_id, numero_documento)` y `correo`; `google_sub` único (vínculo con Google); foto opcional del fotocheck (spec 014): `foto_archivo` (`foto-<uuid>.png\|jpg` en `uploads/fotos`, nombre generado por el servidor) y `foto_actualizada_en`. Una reinscripción no cambia el correo sin verificarlo con Google |
+| `inscripciones` | Inscripción de un participante a un evento | único `(evento_id, participante_id)`; `numero_operacion` único (`CORTESIA-<12 hex aleatorios>` reservado a las cortesías, independiente del código del QR); estado por código; monto calculado por el servidor; evidencia de verificación de estudiante y de correo (Google). `codigo_credencial` CHAR(10) `[0-9A-Z]`, único (`uq_inscripciones_codigo_credencial`), es el contenido del QR del fotocheck y del PDF; admite NULL hasta después del 30-oct-2026 (la migración solo lo da a las aprobadas o con credencial enviada; la app lo completa al aprobar o al leer). `es_qr_legado`: pudo recibir la credencial con el QR anterior (id del participante) |
+| `codigos_acceso` | Códigos de acceso al portal por correo (spec 014) | solo `codigo_hash` (HMAC-SHA256 de `correo:código`, clave derivada de `JWT_SECRET`); `participante_id` NULL si el correo no existía (FK en cascada); `intentos`, `expira_en` (10 min), `usado_en`, `invalidado_en`, `ip`; índices por `(correo, creado_en)` y `(ip, creado_en)` para los topes; se borran a los 7 días |
 | `estados_inscripcion`, `tipos_documento`, `clasificaciones`, `roles` | Catálogos | se referencian por `codigo`. Roles (spec 013): `SUPERADMIN` «Owner», `ADMIN` «Administrador del sistema», `TESORERO` «Tesorero», `COMISION` «Comisión tecnológica»; los dos primeros conservan su código hasta después del 30-oct-2026 |
 | `administradores` | Cuentas del staff | `correo` único; `activo`; `google_sub` único; `contrasena_hash` NULL = entra solo con Google; se desactiva en lugar de borrarse si revisó inscripciones o registró o anuló asistencias |
 | `asignaciones_evento` | Eventos de las cuentas por evento (Tesorero, Comisión) | PK `(administrador_id, evento_id)`; en cascada con la cuenta y el evento; las cuentas globales no tienen filas |
@@ -26,4 +27,5 @@ renombrado desde el esquema anterior: [`specs/001-esquema-bd-espanol/data-model.
 Migraciones: [`prisma/migrations/`](../prisma/migrations). Las que tocan datos existentes están
 escritas a mano y se ensayaron con el respaldo real de producción (spec 001). Verificaciones:
 [`prisma/preflight/`](../prisma/preflight) (spec 013: preflight de cuentas, reasignación y reversión;
-ver [operación](operacion.md#migración-013-roles-y-permisos)).
+ver [operación](operacion.md#migración-013-roles-y-permisos); spec 014: verificación, completado y
+reversión, ver [operación](operacion.md#migración-014-portal-y-fotocheck)).

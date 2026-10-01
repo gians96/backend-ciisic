@@ -5,7 +5,7 @@ import { PERMISOS_ELEGIBLES_COMISION } from '../../src/core/permisos'
 import { tokenDeRol } from '../helpers/tokens'
 
 jest.mock('../../src/database/prisma', () => ({
-    prisma: { participante: { count: jest.fn(), findMany: jest.fn(), findUnique: jest.fn(), update: jest.fn() } },
+    prisma: { participante: { count: jest.fn(), findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn() } },
 }))
 
 const m = (prisma as unknown as { participante: Record<string, jest.Mock> }).participante
@@ -20,8 +20,9 @@ function participante(cambios: Record<string, unknown> = {}) {
 beforeEach(() => jest.clearAllMocks())
 
 describe('acceso a los participantes (spec 013)', () => {
-    const rutas: ['get' | 'put', string][] = [
+    const rutas: ['get' | 'post' | 'put', string][] = [
         ['get', '/api/v1/participants'],
+        ['post', '/api/v1/participants'],
         ['get', '/api/v1/participants/7'],
         ['put', '/api/v1/participants/7'],
     ]

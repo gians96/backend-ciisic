@@ -1,8 +1,10 @@
 # Backend CIISIC — API multi-evento
 
 API del Congreso Internacional de Ingeniería de Sistemas e Investigación Científica (UNDC):
-eventos, inscripciones, tipos de inscripción, actividades y asistencia, ponencias, consultas
-de DNI con pool de tokens, verificación de estudiantes UNDC e integración con deportes-fi.
+eventos, inscripciones, tipos de inscripción, actividades y asistencia (escáner con el QR de la
+credencial), ponencias, consultas de DNI con pool de tokens, verificación de estudiantes UNDC,
+integración con deportes-fi y portal del participante (Google o código por correo, fotocheck
+virtual, asistencia y perfil con foto).
 
 - **Stack**: Node 22 · Express 5 · TypeScript · Prisma 6 · MySQL 8 · yup · Jest
 - **Documentación** (visión general, configuración, API, datos, operación): [`docs/`](docs/README.md)
@@ -27,6 +29,7 @@ de DNI con pool de tokens, verificación de estudiantes UNDC e integración con 
 | [011](specs/011-portal-participante) | Portal del inscrito: "Mis inscripciones" con estado y credencial |
 | [012](specs/012-qr-billeteras) | Imagen del QR de las billeteras: subida desde el panel y entrega a la landing |
 | [013](specs/013-roles-permisos) | Roles (Owner, Administrador del sistema, Tesorero, Comisión), permisos por ruta y alcance por evento |
+| [014](specs/014-portal-fotocheck-asistencia) | Portal del participante (código por correo, perfil con foto, asistencia), fotocheck virtual con código de credencial y asistencia por QR |
 
 ## Desarrollo local
 
@@ -53,7 +56,8 @@ src/middlewares/              auth por permisos, validación, uploads, rate limi
 src/api/<módulo>/             controllers · routes · services · validation
   event · registration-type · inscription · activity · participant · papers · contact
   document-lookup · student-verification · integration · admin · catalog
-  email-credential · access-token · system-settings · google-auth · participant-portal
+  email-credential · access-token · system-settings · google-auth · participant-auth
+  participant-portal
 tests/                        Jest (*.test.ts)
 ```
 

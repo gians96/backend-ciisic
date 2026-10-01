@@ -13,7 +13,9 @@
     "lint:fix": "eslint src tests --fix",
     "seed": "ts-node ./src/database/seed.ts",
     "bootstrap:admin": "node ./dist/src/database/bootstrapAdmin.js",
-    "bootstrap:admin:dev": "ts-node ./src/database/bootstrapAdmin.ts"
+    "bootstrap:admin:dev": "ts-node ./src/database/bootstrapAdmin.ts",
+    "credenciales:pregenerar": "node ./dist/src/database/pregenerarCredenciales.js",
+    "credenciales:pregenerar:dev": "ts-node ./src/database/pregenerarCredenciales.ts"
   },
   "keywords": [],
   "author": "",

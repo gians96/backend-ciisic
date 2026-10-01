@@ -1,3 +1,4 @@
+import crypto from 'crypto'
 import fs from 'fs'
 import { Prisma } from '@prisma/client'
 import type { Evento } from '@prisma/client'
@@ -6,17 +7,21 @@ import { conflict, notFound, unprocessable } from '../../../core/http-error'
 import { aColumnaFecha, fechaLima } from '../../../core/fechas'
 import { monto, type CodigoEstadoInscripcion } from '../../../core/catalogos'
 import { pageMeta, type Pagination } from '../../../core/pagination'
+import {
+    asegurarCodigoCredencial, conReintentoDeCodigo, enmascararCorreo, INDICE_CODIGO_CREDENCIAL, nuevoCodigoCredencial,
+} from '../../../core/codigos'
+import { rutaFoto } from '../../../core/almacenamiento'
 import { uploadedFilePath } from '../../../middlewares/upload'
-import { inscripcionesAbiertas } from '../../event/services/public-event'
+import { inscripcionesAbiertas, obtenerEventoPorId } from '../../event/services/public-event'
 import { apellidosDe, nombresOficiales } from '../../document-lookup/services/cache'
 import { leerVerificacion, type ResultadoVerificacion } from '../../student-verification/services/verification-token'
 import { aSnapshot, verificarEstudiante } from '../../student-verification/services/student-verification'
 import { leerVerificacionCorreo } from '../../google-auth/services/verificacion-correo'
-import { generarCredencialPdf, rutaCredencial } from '../utils/generatePdf'
-import { enviarCorreoAprobacion } from '../utils/sendEmail'
+import { borrarCredenciales, generarCredencialPdf, rutaCredencial } from '../utils/generatePdf'
+import { enDiferido, enviarAvisoCorreoConservado, enviarCorreoAprobacion } from '../utils/sendEmail'
 import { calcularPrecio, esCorreoInstitucional } from './pricing'
 import { aDetalle, aFilaLista, detalleInclude, type InscripcionDetalle } from './mappers'
-import type { CrearInscripcionInput } from '../validation'
+import type { CortesiaInput, CrearInscripcionInput } from '../validation'
 
 export interface OpcionesCreacion {
     /** Ruta legacy: voucher opcional y regla histórica de precio por dominio de correo. */
@@ -35,11 +40,28 @@ function errorDeUnicidad(error: unknown): never {
     throw error
 }
 
+/** La inscripción creada y si se conservó el correo registrado en lugar del enviado (spec 014). */
+export type InscripcionCreada = InscripcionDetalle & { correoConservado: boolean }
+
+/** El correo no puede pertenecer a otra persona (409 `EMAIL_IN_USE`). */
+async function exigirCorreoLibre(tx: Prisma.TransactionClient, correo: string, participanteId: number | null): Promise<void> {
+    const dueno = await tx.participante.findUnique({ where: { correo } })
+    if (dueno && dueno.id !== participanteId) throw conflict('EMAIL_IN_USE', 'El correo ya está registrado por otra persona.')
+}
+
 /**
  * Crea una inscripción (spec 002): valida evento y tipo, calcula el precio en el servidor,
  * reutiliza al participante por documento y crea la inscripción en estado PENDIENTE.
+ *
+ * Correo al reinscribirse (spec 014): el correo es la llave del portal y de la credencial, y el
+ * formulario público no prueba que quien lo envía sea el dueño del documento (verificar con Google
+ * solo prueba que controla el correo **nuevo**). Por eso un correo distinto del registrado nunca lo
+ * reemplaza desde aquí, venga o no verificado: la inscripción se hace con el participante tal cual
+ * (correo y celular registrados), `correoConservado` es `true` y se avisa al correo registrado. El
+ * precio por dominio institucional y `esCorreoInstitucional` salen del correo con que queda la
+ * inscripción. Cambiar el correo lo hace el staff (`PUT /v1/participants/:id`, con aviso al anterior).
  */
-export async function crearInscripcion(evento: Evento, input: CrearInscripcionInput, voucherArchivo: string | null, opciones: OpcionesCreacion = {}) {
+export async function crearInscripcion(evento: Evento, input: CrearInscripcionInput, voucherArchivo: string | null, opciones: OpcionesCreacion = {}): Promise<InscripcionCreada> {
     if (!inscripcionesAbiertas(evento)) throw conflict('REGISTRATION_CLOSED', 'Las inscripciones para este evento están cerradas.')
     if (!voucherArchivo && !opciones.legacy) throw unprocessable('VOUCHER_REQUIRED', 'Adjunta el voucher de pago.')
 
@@ -61,22 +83,26 @@ export async function crearInscripcion(evento: Evento, input: CrearInscripcionIn
     const nombres = oficiales?.nombres ?? p.nombres
     const apellidos = oficiales ? apellidosDe(oficiales) : p.apellidos
 
-    const correoInstitucional = esCorreoInstitucional(correo, evento.dominioInstitucional)
     let verificacion: ResultadoVerificacion | null = null
     if (tipo.categoria.esEstudiantil) {
         verificacion = opciones.legacy
-            ? (correoInstitucional ? await verificarEstudiante(evento, { correo, tipoDocumento: p.tipoDocumento, numeroDocumento: p.numeroDocumento }) : null)
+            ? (esCorreoInstitucional(correo, evento.dominioInstitucional) ? await verificarEstudiante(evento, { correo, tipoDocumento: p.tipoDocumento, numeroDocumento: p.numeroDocumento }) : null)
             : leerVerificacion(input.verificacionToken, { eventoId: evento.id, tipoDocumento: p.tipoDocumento, numeroDocumento: p.numeroDocumento, correo })
     }
 
-    const precio = calcularPrecio({
-        precio: monto(tipo.precio),
-        precioInstitucional: monto(tipo.precioInstitucional),
-        esEstudiantil: tipo.categoria.esEstudiantil,
-        estudianteUndcVerificado: verificacion?.esEstudianteUndc ?? false,
-        correoInstitucional,
-        legacy: opciones.legacy,
-    })
+    /** Precio con el correo con que queda la inscripción (el ingresado o, si se conserva, el registrado). */
+    const precioPara = (correoFinal: string) => {
+        const correoInstitucional = esCorreoInstitucional(correoFinal, evento.dominioInstitucional)
+        const precio = calcularPrecio({
+            precio: monto(tipo.precio),
+            precioInstitucional: monto(tipo.precioInstitucional),
+            esEstudiantil: tipo.categoria.esEstudiantil,
+            estudianteUndcVerificado: verificacion?.esEstudianteUndc ?? false,
+            correoInstitucional,
+            legacy: opciones.legacy,
+        })
+        return { ...precio, correoInstitucional }
+    }
 
     // Evidencia opcional de que el correo se verificó con Google; no cambia el precio (spec 010)
     const verificacionCorreo = opciones.legacy ? null : leerVerificacionCorreo(input.verificacionCorreoToken, { eventoId: evento.id, correo })
@@ -86,40 +112,49 @@ export async function crearInscripcion(evento: Evento, input: CrearInscripcionIn
         : null
 
     try {
-        const creada = await prisma.$transaction(async (tx) => {
+        // Si el código de la credencial choca con otro (improbable), se repite la transacción con uno nuevo
+        const { inscripcion: creada, correoConservado } = await conReintentoDeCodigo(() => prisma.$transaction(async (tx) => {
             let participante = await tx.participante.findUnique({
                 where: { tipoDocumentoId_numeroDocumento: { tipoDocumentoId: p.tipoDocumento, numeroDocumento: p.numeroDocumento } },
             })
-            const duenoCorreo = await tx.participante.findUnique({ where: { correo } })
-            if (duenoCorreo && duenoCorreo.id !== participante?.id) throw conflict('EMAIL_IN_USE', 'El correo ya está registrado por otra persona.')
+            let conservado = false
+            // Correo con que queda la inscripción: el ingresado o, si se conserva, el registrado
+            let correoFinal = correo
 
             if (participante) {
                 const existente = await tx.inscripcion.findUnique({ where: { eventoId_participanteId: { eventoId: evento.id, participanteId: participante.id } } })
                 if (existente) throw conflict('ALREADY_REGISTERED', 'Ya tienes una inscripción registrada en este evento.')
-                const cambiaCorreo = participante.correo.toLowerCase() !== correo
-                participante = await tx.participante.update({
-                    where: { id: participante.id },
-                    data: {
-                        correo,
-                        celular: p.celular,
-                        ...(oficiales ? { nombres, apellidos } : {}),
-                        // Un correo nuevo invalida el vínculo con la cuenta Google anterior
-                        ...(cambiaCorreo ? { googleSub: null, googleVinculadoEn: null } : {}),
-                    },
-                })
+                conservado = participante.correo.toLowerCase() !== correo
+                correoFinal = participante.correo
+                if (conservado) {
+                    // Quien envió el formulario no probó ser el dueño del registro (ni con Google: eso
+                    // solo prueba el correo nuevo): no se toca su contacto ni su vínculo con Google; los
+                    // nombres oficiales (RENIEC) sí se actualizan
+                    if (oficiales) participante = await tx.participante.update({ where: { id: participante.id }, data: { nombres, apellidos } })
+                } else {
+                    participante = await tx.participante.update({
+                        where: { id: participante.id },
+                        data: { celular: p.celular, ...(oficiales ? { nombres, apellidos } : {}) },
+                    })
+                }
             } else {
+                await exigirCorreoLibre(tx, correo, null)
                 participante = await tx.participante.create({
                     data: { tipoDocumentoId: p.tipoDocumento, numeroDocumento: p.numeroDocumento, nombres, apellidos, correo, celular: p.celular },
                 })
             }
 
-            return tx.inscripcion.create({
+            const precio = precioPara(correoFinal)
+            // La verificación con Google es del correo ingresado: si se conservó el registrado, no aplica
+            const correoVerificado = conservado ? null : verificacionCorreo
+            const inscripcion = await tx.inscripcion.create({
                 data: {
                     evento: { connect: { id: evento.id } },
                     participante: { connect: { id: participante.id } },
                     tipoInscripcion: { connect: { id: tipo.id } },
                     ...(input.clasificacionId ? { clasificacion: { connect: { id: input.clasificacionId } } } : {}),
                     estado: { connect: { codigo: 'PENDIENTE' } },
+                    codigoCredencial: nuevoCodigoCredencial(),
                     modalidadPago: input.modalidadPago,
                     banco: input.modalidadPago === 'banco' ? input.banco ?? null : null,
                     tipoOperacion: input.modalidadPago === 'banco' ? input.tipoOperacion ?? null : null,
@@ -130,19 +165,24 @@ export async function crearInscripcion(evento: Evento, input: CrearInscripcionIn
                     monto: precio.monto,
                     descuento: precio.descuento,
                     tieneDescuento: precio.descuento > 0,
-                    esCorreoInstitucional: correoInstitucional,
+                    esCorreoInstitucional: precio.correoInstitucional,
                     esEstudianteUndc: verificacion?.esEstudianteUndc ?? false,
                     codigoEstudiante: verificacion?.esEstudianteUndc ? verificacion.codigoEstudiante : null,
                     verificacionEstudiante: snapshot ?? Prisma.JsonNull,
-                    esCorreoVerificado: Boolean(verificacionCorreo),
-                    verificacionCorreo: verificacionCorreo
-                        ? { metodo: verificacionCorreo.metodo, tipoCuenta: verificacionCorreo.tipoCuenta, hd: verificacionCorreo.hd, verificadoEn: verificacionCorreo.verificadoEn }
+                    esCorreoVerificado: Boolean(correoVerificado),
+                    verificacionCorreo: correoVerificado
+                        ? { metodo: correoVerificado.metodo, tipoCuenta: correoVerificado.tipoCuenta, hd: correoVerificado.hd, verificadoEn: correoVerificado.verificadoEn }
                         : Prisma.JsonNull,
                 },
                 include: detalleInclude,
             })
-        })
-        return creada
+            return { inscripcion, correoConservado: conservado }
+        }))
+        if (correoConservado) {
+            const ingresado = enmascararCorreo(correo)
+            enDiferido(`el aviso de correo conservado (inscripción ${creada.id})`, () => enviarAvisoCorreoConservado(creada, ingresado))
+        }
+        return { ...creada, correoConservado }
     } catch (error) {
         return errorDeUnicidad(error)
     }
@@ -212,9 +252,18 @@ function pdfVigente(ruta: string, desde: number): boolean {
 }
 
 /**
- * PDF de la credencial ya generado o uno nuevo si no existe o es anterior al último cambio de la
- * persona o del evento (nombres, documento, logo…). `inscripcion.actualizadoEn` no sirve para esto:
- * cambia con cada envío.
+ * La inscripción con su código de credencial. Las creadas por la imagen anterior no tienen: se les
+ * asigna uno (ver `asegurarCodigoCredencial`).
+ */
+async function conCodigo(inscripcion: InscripcionDetalle): Promise<InscripcionDetalle> {
+    if (inscripcion.codigoCredencial) return inscripcion
+    return { ...inscripcion, codigoCredencial: await asegurarCodigoCredencial(inscripcion.id) }
+}
+
+/**
+ * PDF de la credencial ya generado o uno nuevo si no existe (el nombre lleva la huella de lo que se
+ * imprime, spec 014) o es anterior al último cambio de la persona o del evento.
+ * `inscripcion.actualizadoEn` no sirve para esto: cambia con cada envío.
  */
 async function pdfDeCredencial(inscripcion: InscripcionDetalle): Promise<string> {
     const ruta = rutaCredencial(inscripcion)
@@ -226,8 +275,9 @@ async function pdfDeCredencial(inscripcion: InscripcionDetalle): Promise<string>
  * Envía la credencial y registra la fecha de envío. Nunca lanza. Al aprobar se genera de nuevo (la
  * fecha de aprobación cambia); al reenviar se reutiliza el PDF ya generado si sigue al día.
  */
-async function emitirCredencial(inscripcion: InscripcionDetalle, reutilizarPdf = false): Promise<boolean> {
+async function emitirCredencial(registro: InscripcionDetalle, reutilizarPdf = false): Promise<boolean> {
     try {
+        const inscripcion = await conCodigo(registro)
         const pdf = reutilizarPdf ? await pdfDeCredencial(inscripcion) : await generarCredencialPdf(inscripcion)
         const enviado = await enviarCorreoAprobacion(inscripcion, pdf)
         if (enviado) await prisma.inscripcion.update({ where: { id: inscripcion.id }, data: { credencialEnviadaEn: new Date() } })
@@ -240,6 +290,10 @@ async function emitirCredencial(inscripcion: InscripcionDetalle, reutilizarPdf =
 
 export async function cambiarEstado(id: number, codigo: CodigoEstadoInscripcion, motivo: string | null | undefined, adminId?: number) {
     const actual = await obtenerInscripcion(id)
+    const aprueba = codigo === 'APROBADO' && actual.estado.codigo !== 'APROBADO'
+    // El código se asigna antes de aprobar: así una inscripción de la imagen anterior que se aprueba
+    // ahora no queda marcada con el QR anterior (`esQrLegado`)
+    if (aprueba && !actual.codigoCredencial) await asegurarCodigoCredencial(id)
     const actualizada = await prisma.inscripcion.update({
         where: { id },
         data: {
@@ -251,7 +305,7 @@ export async function cambiarEstado(id: number, codigo: CodigoEstadoInscripcion,
         include: detalleInclude,
     })
     let credencialEnviada: boolean | null = null
-    if (codigo === 'APROBADO' && actual.estado.codigo !== 'APROBADO') credencialEnviada = await emitirCredencial(actualizada)
+    if (aprueba) credencialEnviada = await emitirCredencial(actualizada)
     return { inscripcion: await obtenerInscripcion(id), credencialEnviada }
 }
 
@@ -264,7 +318,7 @@ export async function reenviarCredencial(id: number) {
 export async function archivoCredencial(id: number): Promise<string> {
     const inscripcion = await obtenerInscripcion(id)
     if (inscripcion.estado.codigo !== 'APROBADO') throw conflict('NOT_APPROVED', 'La credencial solo existe para inscripciones aprobadas.')
-    return pdfDeCredencial(inscripcion)
+    return pdfDeCredencial(await conCodigo(inscripcion))
 }
 
 export async function archivoVoucher(id: number): Promise<string> {
@@ -278,9 +332,104 @@ export async function archivoVoucher(id: number): Promise<string> {
 export async function eliminarInscripcion(id: number) {
     const inscripcion = await obtenerInscripcion(id)
     await prisma.inscripcion.delete({ where: { id } })
-    for (const ruta of [inscripcion.voucherArchivo ? uploadedFilePath(inscripcion.voucherArchivo) : null, rutaCredencial(inscripcion)]) {
-        if (ruta && fs.existsSync(ruta)) fs.unlinkSync(ruta)
+    const voucher = inscripcion.voucherArchivo ? uploadedFilePath(inscripcion.voucherArchivo) : null
+    if (voucher && fs.existsSync(voucher)) fs.unlinkSync(voucher)
+    borrarCredenciales(id)
+}
+
+// ─── Cortesía y foto para el escáner (spec 014) ─────────────────────────────
+
+const PREFIJO_CORTESIA = 'CORTESIA-'
+
+/**
+ * Número de operación de una cortesía: `CORTESIA-` y 12 hexadecimales aleatorios, **independientes
+ * del código de la credencial**: el número sale en listados, CSV y búsquedas, y con el código
+ * cualquiera podría armar el QR de la persona.
+ */
+function numeroOperacionCortesia(): string {
+    return `${PREFIJO_CORTESIA}${crypto.randomBytes(6).toString('hex').toUpperCase()}`
+}
+
+/**
+ * Un choque del número de operación de una cortesía (aleatorio, improbable) se trata como uno del
+ * código para que `conReintentoDeCodigo` repita la creación con valores nuevos.
+ */
+function comoColisionDeCodigo(error: unknown): unknown {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002' && JSON.stringify(error.meta?.target ?? '').includes('numero_operacion')) {
+        return new Prisma.PrismaClientKnownRequestError(error.message, { code: 'P2002', clientVersion: error.clientVersion, meta: { target: INDICE_CODIGO_CREDENCIAL } })
     }
+    return error
+}
+
+/**
+ * Inscripción de cortesía (organizadores, ponentes, invitados): nace APROBADO, con monto 0,
+ * modalidad `cortesia` y número de operación `CORTESIA-<12 hex aleatorios>`; queda revisada por
+ * quien la registra. Con `enviarCredencial` genera y envía la credencial como al aprobar (si el envío
+ * falla, la inscripción se mantiene y `credencialEnviada` es `false`).
+ */
+export async function crearInscripcionCortesia(eventoId: number, input: CortesiaInput, adminId: number) {
+    const evento = await obtenerEventoPorId(eventoId)
+    const participante = await prisma.participante.findUnique({ where: { id: input.participanteId } })
+    if (!participante) throw notFound('PARTICIPANT_NOT_FOUND', `Participante con id ${input.participanteId} no encontrado`)
+    if (input.tipoInscripcionId) {
+        const tipo = await prisma.tipoInscripcion.findFirst({ where: { id: input.tipoInscripcionId, categoria: { eventoId: evento.id } }, select: { id: true } })
+        if (!tipo) throw unprocessable('REGISTRATION_TYPE_INVALID', 'El tipo de inscripción no existe o no pertenece a este evento.')
+    }
+    const existente = await prisma.inscripcion.findUnique({
+        where: { eventoId_participanteId: { eventoId: evento.id, participanteId: participante.id } },
+        select: { id: true },
+    })
+    if (existente) throw conflict('ALREADY_REGISTERED', 'La persona ya tiene una inscripción en este evento.')
+
+    const ahora = new Date()
+    let creada: InscripcionDetalle
+    try {
+        creada = await conReintentoDeCodigo(async () => {
+            try {
+                return await prisma.inscripcion.create({
+                    data: {
+                        evento: { connect: { id: evento.id } },
+                        participante: { connect: { id: participante.id } },
+                        ...(input.tipoInscripcionId ? { tipoInscripcion: { connect: { id: input.tipoInscripcionId } } } : {}),
+                        estado: { connect: { codigo: 'APROBADO' } },
+                        codigoCredencial: nuevoCodigoCredencial(),
+                        modalidadPago: 'cortesia',
+                        numeroOperacion: numeroOperacionCortesia(),
+                        fechaPago: aColumnaFecha(fechaLima(ahora)),
+                        monto: 0,
+                        descuento: 0,
+                        tieneDescuento: false,
+                        esCorreoInstitucional: esCorreoInstitucional(participante.correo, evento.dominioInstitucional),
+                        verificacionEstudiante: Prisma.JsonNull,
+                        verificacionCorreo: Prisma.JsonNull,
+                        revisadoEn: ahora,
+                        revisadoPor: { connect: { id: adminId } },
+                    },
+                    include: detalleInclude,
+                })
+            } catch (error) {
+                throw comoColisionDeCodigo(error)
+            }
+        })
+    } catch (error) {
+        return errorDeUnicidad(error)
+    }
+
+    if (!input.enviarCredencial) return { inscripcion: creada, credencialEnviada: null }
+    const credencialEnviada = await emitirCredencial(creada)
+    return { inscripcion: await obtenerInscripcion(creada.id), credencialEnviada }
+}
+
+/**
+ * Foto del participante de una inscripción, para el escáner de asistencia y el panel. 404
+ * `PHOTO_NOT_FOUND` si no tiene o el archivo ya no está.
+ */
+export async function archivoFoto(inscripcionId: number): Promise<string> {
+    const fila = await prisma.inscripcion.findUnique({ where: { id: inscripcionId }, select: { participante: { select: { fotoArchivo: true } } } })
+    if (!fila) throw notFound('INSCRIPTION_NOT_FOUND', `Inscripción con id ${inscripcionId} no encontrada`)
+    const ruta = rutaFoto(fila.participante.fotoArchivo)
+    if (!ruta || !fs.existsSync(ruta)) throw notFound('PHOTO_NOT_FOUND', 'El participante no tiene foto.')
+    return ruta
 }
 
 // ─── Exportación CSV ────────────────────────────────────────────────────────

@@ -6,13 +6,16 @@ export class HttpError extends Error {
     readonly status: number
     readonly code: string
     readonly fields?: Record<string, string>
+    /** Segundos de espera que el `errorHandler` anuncia en `Retry-After` (errores temporales: 429, 503). */
+    readonly reintentarEnSegundos?: number
 
-    constructor(status: number, code: string, message: string, fields?: Record<string, string>) {
+    constructor(status: number, code: string, message: string, fields?: Record<string, string>, reintentarEnSegundos?: number) {
         super(message)
         this.name = 'HttpError'
         this.status = status
         this.code = code
         this.fields = fields
+        if (reintentarEnSegundos !== undefined) this.reintentarEnSegundos = Math.max(1, Math.ceil(reintentarEnSegundos))
         Object.setPrototypeOf(this, new.target.prototype)
     }
 }

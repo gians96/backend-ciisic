@@ -13,7 +13,7 @@ jest.mock('../../src/database/prisma', () => ({
             findUnique: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), create: jest.fn(),
             updateMany: jest.fn(), count: jest.fn(), deleteMany: jest.fn(),
         },
-        inscripcion: { findMany: jest.fn() },
+        inscripcion: { findMany: jest.fn(), findUnique: jest.fn() },
         participante: { findMany: jest.fn() },
         evento: { findUnique: jest.fn() },
         configuracionSistema: { findUnique: jest.fn() },
@@ -50,20 +50,26 @@ function cumple(fila: Fila, where: Fila = {}): boolean {
 }
 
 const persona = (id: number, numeroDocumento: string, tipoDocumentoId = 'dni') =>
-    ({ id, nombres: 'Persona', apellidos: `Prueba ${id}`, tipoDocumentoId, numeroDocumento })
-const ANA = persona(100, '12345678')
+    ({ id, nombres: 'Persona', apellidos: `Prueba ${id}`, tipoDocumentoId, numeroDocumento, fotoArchivo: null as string | null })
+const ANA = { ...persona(100, '12345678'), fotoArchivo: 'foto-123e4567-e89b-42d3-a456-426614174000.jpg' }
 const LUIS = persona(101, '87654321')
 const DE_OTRO_EVENTO = persona(102, '11112222')
 const DNI_REPETIDO = persona(103, '55556666', 'dni')
 const CE_REPETIDO = persona(104, '55556666', 'ce')
-const PERSONAS = [ANA, LUIS, DE_OTRO_EVENTO, DNI_REPETIDO, CE_REPETIDO]
+/** Inscrita después de la spec 014: solo tiene el QR nuevo (sin la marca del QR anterior). */
+const NUEVA = persona(105, '44443333')
+const PERSONAS = [ANA, LUIS, DE_OTRO_EVENTO, DNI_REPETIDO, CE_REPETIDO, NUEVA]
 
+const APROBADO = { codigo: 'APROBADO' }
+const ESTUDIANTE = { nombre: 'Estudiante', etiqueta: 'UNDC' }
 const INSCRIPCIONES = [
-    { eventoId: 2, participante: ANA, estado: { codigo: 'APROBADO' } },
-    { eventoId: 2, participante: LUIS, estado: { codigo: 'PENDIENTE' } },
-    { eventoId: 3, participante: DE_OTRO_EVENTO, estado: { codigo: 'APROBADO' } },
-    { eventoId: 2, participante: DNI_REPETIDO, estado: { codigo: 'APROBADO' } },
-    { eventoId: 2, participante: CE_REPETIDO, estado: { codigo: 'APROBADO' } },
+    { id: 500, eventoId: 2, participante: ANA, estado: APROBADO, codigoCredencial: 'ANA0000001', esQrLegado: true, tipoInscripcion: ESTUDIANTE },
+    { id: 501, eventoId: 2, participante: LUIS, estado: { codigo: 'PENDIENTE' }, codigoCredencial: 'LUIS000001', esQrLegado: false, tipoInscripcion: null },
+    { id: 502, eventoId: 3, participante: DE_OTRO_EVENTO, estado: APROBADO, codigoCredencial: 'OTRO000001', esQrLegado: true, tipoInscripcion: null },
+    // Creada por la imagen anterior durante el despliegue: sin código, su credencial trae el QR anterior
+    { id: 503, eventoId: 2, participante: DNI_REPETIDO, estado: APROBADO, codigoCredencial: null, esQrLegado: false, tipoInscripcion: null },
+    { id: 504, eventoId: 2, participante: CE_REPETIDO, estado: APROBADO, codigoCredencial: 'CE00000001', esQrLegado: true, tipoInscripcion: null },
+    { id: 505, eventoId: 2, participante: NUEVA, estado: APROBADO, codigoCredencial: 'K7Q2M9X4TB', esQrLegado: false, tipoInscripcion: null },
 ]
 
 // La actividad «en curso» abarca una hora antes y después de ahora (hora de Lima)
@@ -79,6 +85,10 @@ const DE_EVENTO_3 = 20
 let actividades: Map<number, Fila>
 let asistencias: Fila[]
 let siguienteId: number
+/** Último día (`fechaFin`) de cada evento: el QR anterior vale hasta ese día inclusive. */
+let finEvento: Record<number, string>
+const HOY = fechaLima(ahora)
+const AYER = fechaLima(new Date(ahora.getTime() - 24 * 60 * 60 * 1000))
 
 function reiniciarBd() {
     actividades = new Map<number, Fila>([
@@ -92,7 +102,11 @@ function reiniciarBd() {
         { id: 2, actividadId: PASADA, participanteId: DNI_REPETIDO.id, registradoEn: antes, metodo: 'DOCUMENTO', registradoPorId: 2, esFueraDeHorario: false, anuladoEn: antes, anuladoPorId: 2 },
     ]
     siguienteId = 3
+    finEvento = { 2: HOY, 3: HOY }
 }
+
+/** Fila de inscripción como la devuelve el `select` del servicio (con la fecha de fin del evento). */
+const conEvento = (i: typeof INSCRIPCIONES[number]) => ({ ...i, evento: { fechaFin: aColumnaFecha(finEvento[i.eventoId]) } })
 
 const porClave = (where: Fila) => {
     const par = where.participanteId_actividadId as { participanteId: number, actividadId: number } | undefined
@@ -120,7 +134,11 @@ beforeEach(() => {
         return Promise.resolve({ id: where.id })
     })
 
-    m.inscripcion.findMany.mockImplementation(({ where, take }) => Promise.resolve(INSCRIPCIONES.filter((i) => cumple(i, where)).slice(0, take)))
+    m.inscripcion.findMany.mockImplementation(({ where, take }) => Promise.resolve(INSCRIPCIONES.filter((i) => cumple(i, where)).slice(0, take).map(conEvento)))
+    m.inscripcion.findUnique.mockImplementation(({ where }) => {
+        const inscripcion = INSCRIPCIONES.find((i) => i.codigoCredencial === where.codigoCredencial)
+        return Promise.resolve(inscripcion ? conEvento(inscripcion) : null)
+    })
     m.participante.findMany.mockImplementation(({ where }) => {
         const { eventoId } = where.inscripciones.some
         return Promise.resolve(INSCRIPCIONES.filter((i) => i.eventoId === eventoId && i.estado.codigo === 'APROBADO').map((i) => i.participante))
@@ -179,32 +197,36 @@ const fila = (id: number) => asistencias.find((a) => a.id === id)
 // ─── Marcar ─────────────────────────────────────────────────────────────────
 
 describe('marcar asistencia', () => {
-    it('la Comisión marca en una actividad de su evento y queda auditado quién y cómo', async () => {
-        const r = await marcar(EN_CURSO, { participanteId: ANA.id }, comision())
+    it('la Comisión marca con el código de la credencial y queda auditado quién y cómo', async () => {
+        const r = await marcar(EN_CURSO, { codigo: 'ANA0000001' }, comision())
         expect(r.status).toBe(201)
         expect(r.body.data).toEqual({
             id: 3,
             registradoEn: expect.any(String),
             metodo: 'QR',
             esFueraDeHorario: false,
-            // Sin `inscripciones.ver` el documento va enmascarado
-            participante: { id: ANA.id, nombres: 'Persona', apellidos: 'Prueba 100', tipoDocumento: 'dni', numeroDocumento: '****5678' },
+            alerta: null,
+            // Sin `inscripciones.ver` el documento va enmascarado; la foto se pide con GET /v1/inscriptions/:id/photo
+            participante: { id: ANA.id, nombres: 'Persona', apellidos: 'Prueba 100', tipoDocumento: 'dni', numeroDocumento: '****5678', foto: { tiene: true } },
+            inscripcion: { id: 500, tipoInscripcion: { nombre: 'Estudiante', etiqueta: 'UNDC' } },
         })
         expect(fila(3)).toMatchObject({ actividadId: EN_CURSO, participanteId: ANA.id, registradoPorId: 41, metodo: 'QR', esFueraDeHorario: false, anuladoEn: null })
+        expect(m.inscripcion.findUnique.mock.calls[0][0].where).toEqual({ codigoCredencial: 'ANA0000001' })
     })
 
-    it('por número de documento el método es DOCUMENTO; el método declarado se respeta', async () => {
+    it('por número de documento el método es DOCUMENTO; MANUAL se respeta y sin método el id es QR_LEGADO', async () => {
         const porDocumento = await marcar(EN_CURSO, { numeroDocumento: ANA.numeroDocumento }, comision())
         expect(porDocumento.status).toBe(201)
+        expect(porDocumento.body.data).toMatchObject({ metodo: 'DOCUMENTO', alerta: null })
         expect(fila(porDocumento.body.data.id)).toMatchObject({ participanteId: ANA.id, metodo: 'DOCUMENTO' })
 
         const manual = await marcar(EN_CURSO, { participanteId: DNI_REPETIDO.id, metodo: 'MANUAL' }, admin())
         expect(manual.status).toBe(201)
-        expect(manual.body.data).toMatchObject({ metodo: 'MANUAL', participante: { numeroDocumento: DNI_REPETIDO.numeroDocumento } })
+        expect(manual.body.data).toMatchObject({ metodo: 'MANUAL', alerta: null, participante: { numeroDocumento: DNI_REPETIDO.numeroDocumento } })
 
         const nulo = await marcar(EN_CURSO, { participanteId: CE_REPETIDO.id, metodo: null }, admin())
         expect(nulo.status).toBe(201)
-        expect(nulo.body.data.metodo).toBe('QR')
+        expect(nulo.body.data).toMatchObject({ metodo: 'QR_LEGADO', alerta: 'QR_LEGADO' })
     })
 
     it('el panel no puede declarar QR_LEGADO ni un método desconocido', async () => {
@@ -247,10 +269,13 @@ describe('marcar asistencia', () => {
         expect(conTipo.body.data.participante).toMatchObject({ id: CE_REPETIDO.id, tipoDocumento: 'ce', numeroDocumento: '****6666' })
     })
 
-    it('una inscripción no aprobada responde 403 NOT_APPROVED', async () => {
-        const r = await marcar(EN_CURSO, { participanteId: LUIS.id }, comision())
-        expect(r.status).toBe(403)
-        expect(r.body).toMatchObject({ code: 'NOT_APPROVED' })
+    it('una inscripción no aprobada responde 403 NOT_APPROVED (por código y por documento)', async () => {
+        for (const cuerpo of [{ codigo: 'LUIS000001' }, { numeroDocumento: LUIS.numeroDocumento }]) {
+            const r = await marcar(EN_CURSO, cuerpo, comision())
+            expect(r.status).toBe(403)
+            expect(r.body).toMatchObject({ code: 'NOT_APPROVED' })
+        }
+        expect(m.asistencia.create).not.toHaveBeenCalled()
     })
 
     it('fuera de horario exige el permiso asistencia.fuera_horario', async () => {
@@ -330,6 +355,172 @@ describe('marcar asistencia', () => {
     it('sin sesión responde 401', async () => {
         const r = await request(app).post(`/api/v1/activities/${EN_CURSO}/attendances`).send({ participanteId: ANA.id })
         expect(r.status).toBe(401)
+    })
+})
+
+// ─── Spec 014: código, QR anterior, método y tolerancia ──────────────────────
+
+describe('marcar con el código de la credencial (spec 014)', () => {
+    it('acepta minúsculas y espacios del lector y lo busca en mayúsculas', async () => {
+        const r = await marcar(EN_CURSO, { codigo: ' k7q2m9x4tb\r\n' }, comision())
+        expect(r.status).toBe(201)
+        expect(r.body.data).toMatchObject({
+            metodo: 'QR',
+            alerta: null,
+            participante: { id: NUEVA.id, foto: { tiene: false } },
+            inscripcion: { id: 505, tipoInscripcion: null },
+        })
+        expect(m.inscripcion.findUnique.mock.calls[0][0].where).toEqual({ codigoCredencial: 'K7Q2M9X4TB' })
+        expect(m.inscripcion.findMany).not.toHaveBeenCalled()
+    })
+
+    it('el código de otro evento responde 409 CODE_OTHER_EVENT sin datos de la persona', async () => {
+        const r = await marcar(EN_CURSO, { codigo: 'OTRO000001' }, admin())
+        expect(r.status).toBe(409)
+        expect(r.body).toEqual({ success: false, code: 'CODE_OTHER_EVENT', message: expect.any(String) })
+        expect(m.asistencia.create).not.toHaveBeenCalled()
+    })
+
+    it('un código inexistente responde 404 CODE_NOT_FOUND y uno mal formado 422', async () => {
+        const inexistente = await marcar(EN_CURSO, { codigo: 'ZZZZZZZZZZ' }, comision())
+        expect(inexistente.status).toBe(404)
+        expect(inexistente.body).toMatchObject({ code: 'CODE_NOT_FOUND' })
+
+        for (const codigo of ['ANA000001', 'ANA00000011', 'ANA-000001']) {
+            const r = await marcar(EN_CURSO, { codigo }, comision())
+            expect(r.status).toBe(422)
+            expect(r.body.fields).toHaveProperty('codigo')
+        }
+        expect(m.asistencia.create).not.toHaveBeenCalled()
+    })
+
+    it('exige exactamente un identificador y el tipo de documento solo con el documento', async () => {
+        const cuerpos: Fila[] = [
+            {},
+            { codigo: 'ANA0000001', participanteId: ANA.id },
+            { codigo: 'ANA0000001', numeroDocumento: ANA.numeroDocumento },
+            { numeroDocumento: ANA.numeroDocumento, participanteId: ANA.id },
+            { codigo: 'ANA0000001', tipoDocumento: 'dni' },
+        ]
+        for (const cuerpo of cuerpos) {
+            const r = await marcar(EN_CURSO, cuerpo, comision())
+            expect(r.status).toBe(422)
+            expect(r.body.code).toBe('VALIDATION_ERROR')
+        }
+        expect(m.inscripcion.findMany).not.toHaveBeenCalled()
+        expect(m.inscripcion.findUnique).not.toHaveBeenCalled()
+    })
+
+    it('el método declarado QR o DOCUMENTO no cambia el método deducido', async () => {
+        const codigo = await marcar(EN_CURSO, { codigo: 'ANA0000001', metodo: 'DOCUMENTO' }, comision())
+        expect(codigo.body.data).toMatchObject({ metodo: 'QR', alerta: null })
+        // El panel de la spec 013 envía { participanteId, metodo: 'QR' }: sigue funcionando, como QR anterior
+        const id = await marcar(EN_CURSO, { participanteId: CE_REPETIDO.id, metodo: 'QR' }, comision())
+        expect(id.status).toBe(201)
+        expect(id.body.data).toMatchObject({ metodo: 'QR_LEGADO', alerta: 'QR_LEGADO' })
+        expect(fila(id.body.data.id)).toMatchObject({ metodo: 'QR_LEGADO' })
+    })
+})
+
+describe('QR anterior (participanteId) (spec 014)', () => {
+    it('se acepta con esQrLegado hasta el último día del evento, como QR_LEGADO y con alerta', async () => {
+        const r = await marcar(EN_CURSO, { participanteId: ANA.id }, comision())
+        expect(r.status).toBe(201)
+        expect(r.body.data).toMatchObject({
+            metodo: 'QR_LEGADO',
+            alerta: 'QR_LEGADO',
+            participante: { id: ANA.id, foto: { tiene: true } },
+            inscripcion: { id: 500, tipoInscripcion: { nombre: 'Estudiante', etiqueta: 'UNDC' } },
+        })
+        expect(fila(r.body.data.id)).toMatchObject({ metodo: 'QR_LEGADO', registradoPorId: 41 })
+    })
+
+    it('se acepta sin la marca si la inscripción no tiene código (la creó la imagen anterior)', async () => {
+        const r = await marcar(EN_CURSO, { participanteId: DNI_REPETIDO.id }, comision())
+        expect(r.status).toBe(201)
+        expect(r.body.data).toMatchObject({ metodo: 'QR_LEGADO', alerta: 'QR_LEGADO', inscripcion: { id: 503 } })
+    })
+
+    it('se rechaza con 422 LEGACY_QR_NOT_ALLOWED sin la marca y con código propio', async () => {
+        const r = await marcar(EN_CURSO, { participanteId: NUEVA.id }, comisionFueraDeHorario())
+        expect(r.status).toBe(422)
+        expect(r.body).toMatchObject({ success: false, code: 'LEGACY_QR_NOT_ALLOWED' })
+        expect(m.asistencia.create).not.toHaveBeenCalled()
+
+        // Con su código nuevo sí entra
+        expect((await marcar(EN_CURSO, { codigo: 'K7Q2M9X4TB' }, comision())).status).toBe(201)
+    })
+
+    it('se rechaza después del último día del evento (hora de Lima); el código nuevo sigue valiendo', async () => {
+        finEvento[2] = AYER
+        for (const cuerpo of [{ participanteId: ANA.id }, { participanteId: DNI_REPETIDO.id }, { participanteId: ANA.id, fueraDeHorario: true }]) {
+            const r = await marcar(EN_CURSO, cuerpo, comisionFueraDeHorario())
+            expect(r.status).toBe(422)
+            expect(r.body).toMatchObject({ code: 'LEGACY_QR_NOT_ALLOWED', message: expect.stringContaining(AYER) })
+        }
+        expect(m.asistencia.create).not.toHaveBeenCalled()
+
+        const conCodigo = await marcar(EN_CURSO, { codigo: 'ANA0000001' }, comision())
+        expect(conCodigo.status).toBe(201)
+        expect(conCodigo.body.data).toMatchObject({ metodo: 'QR', alerta: null })
+    })
+
+    it('la ruta legacy aplica la misma regla de plazo', async () => {
+        finEvento[2] = AYER
+        const r = await request(app).post('/api/v1/attendances').set('Authorization', admin()).send({ id_usuario: ANA.id, id_evento: EN_CURSO })
+        expect(r.status).toBe(422)
+        expect(r.body.code).toBe('LEGACY_QR_NOT_ALLOWED')
+    })
+})
+
+describe('marca MANUAL (spec 014)', () => {
+    it('exige asistencia.fuera_horario: sin él responde 403 MANUAL_NOT_ALLOWED antes de buscar', async () => {
+        const r = await marcar(EN_CURSO, { participanteId: NUEVA.id, metodo: 'MANUAL' }, comision())
+        expect(r.status).toBe(403)
+        expect(r.body).toMatchObject({ code: 'MANUAL_NOT_ALLOWED' })
+        expect(m.inscripcion.findMany).not.toHaveBeenCalled()
+        expect(m.asistencia.create).not.toHaveBeenCalled()
+    })
+
+    it('con el permiso registra MANUAL sin la regla del QR anterior y sin alerta', async () => {
+        finEvento[2] = AYER
+        const r = await marcar(EN_CURSO, { participanteId: NUEVA.id, metodo: 'MANUAL' }, comisionFueraDeHorario())
+        expect(r.status).toBe(201)
+        expect(r.body.data).toMatchObject({ metodo: 'MANUAL', alerta: null, esFueraDeHorario: false })
+        expect(fila(r.body.data.id)).toMatchObject({ metodo: 'MANUAL', registradoPorId: 42 })
+
+        const porDocumento = await marcar(EN_CURSO, { numeroDocumento: ANA.numeroDocumento, metodo: 'MANUAL' }, comisionFueraDeHorario())
+        expect(porDocumento.body.data).toMatchObject({ metodo: 'MANUAL', alerta: null })
+    })
+})
+
+describe('tolerancia de 30 min antes del inicio (spec 014)', () => {
+    const PROXIMA = 30
+    const empiezaEn = (minutos: number) => {
+        const inicio = Date.now() + minutos * 60 * 1000
+        actividades.set(PROXIMA, {
+            id: PROXIMA, eventoId: 2, nombre: 'Próxima', fecha: aColumnaFecha(fechaLima(ahora)),
+            horaInicio: new Date(inicio), horaFin: new Date(inicio + 60 * 60 * 1000),
+        })
+    }
+
+    it('dentro de los 30 min previos se marca y no queda como fuera de horario', async () => {
+        empiezaEn(20)
+        const r = await marcar(PROXIMA, { codigo: 'ANA0000001' }, comision())
+        expect(r.status).toBe(201)
+        expect(r.body.data.esFueraDeHorario).toBe(false)
+        expect(fila(r.body.data.id)).toMatchObject({ esFueraDeHorario: false })
+    })
+
+    it('antes de los 30 min previos responde 409 OUTSIDE_WINDOW; con el permiso queda fuera de horario', async () => {
+        empiezaEn(40)
+        const temprano = await marcar(PROXIMA, { codigo: 'ANA0000001' }, comision())
+        expect(temprano.status).toBe(409)
+        expect(temprano.body).toMatchObject({ code: 'OUTSIDE_WINDOW', message: expect.stringMatching(/desde \d{2}:\d{2} hasta \d{2}:\d{2}/) })
+
+        const conPermiso = await marcar(PROXIMA, { codigo: 'ANA0000001', fueraDeHorario: true }, comisionFueraDeHorario())
+        expect(conPermiso.status).toBe(201)
+        expect(conPermiso.body.data.esFueraDeHorario).toBe(true)
     })
 })
 
@@ -489,10 +680,11 @@ describe('rutas legacy de asistencia', () => {
     })
 
     it('registran al actor que marca y la búsqueda sigue limitada al evento', async () => {
+        // id_usuario es el QR anterior: QR_LEGADO con su regla y el aviso para el operador
         const r = await llamar('post', '/api/v1/attendances', { id_usuario: ANA.id, id_evento: EN_CURSO }, admin())
         expect(r.status).toBe(201)
-        expect(r.body).toMatchObject({ metodo: 'QR', esFueraDeHorario: false })
-        expect(fila(r.body.id)).toMatchObject({ registradoPorId: 2, metodo: 'QR' })
+        expect(r.body).toMatchObject({ metodo: 'QR_LEGADO', alerta: 'QR_LEGADO', esFueraDeHorario: false })
+        expect(fila(r.body.id)).toMatchObject({ registradoPorId: 2, metodo: 'QR_LEGADO' })
 
         const fuera = await llamar('post', '/api/v1/attendances/overtime', { id_usuario: CE_REPETIDO.id, id_evento: PASADA }, admin())
         expect(fuera.status).toBe(201)
@@ -501,6 +693,11 @@ describe('rutas legacy de asistencia', () => {
         const ajena = await llamar('post', '/api/v1/attendances', { id_usuario: DE_OTRO_EVENTO.id, id_evento: EN_CURSO }, admin())
         expect(ajena.status).toBe(404)
         expect(ajena.body.code).toBe('PARTICIPANT_NOT_FOUND')
+
+        // Quien solo tiene el QR nuevo no se marca por id ni siquiera por la ruta legacy
+        const sinQrAnterior = await llamar('post', '/api/v1/attendances', { id_usuario: NUEVA.id, id_evento: EN_CURSO }, admin())
+        expect(sinQrAnterior.status).toBe(422)
+        expect(sinQrAnterior.body.code).toBe('LEGACY_QR_NOT_ALLOWED')
     })
 
     it('la consulta legacy conserva sus campos y oculta las anuladas', async () => {

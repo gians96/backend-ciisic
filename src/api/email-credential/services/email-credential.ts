@@ -158,14 +158,42 @@ export async function credencialParaEvento(credencialCorreoId: number | null): P
     return prisma.credencialCorreo.findFirst({ where: { activo: true }, orderBy: [{ esPredeterminada: 'desc' }, { id: 'asc' }] })
 }
 
+/** Tras un envío o una prueba fallidos, la credencial no se ofrece para el código de acceso durante este tiempo. */
+const ESPERA_TRAS_ERROR_MS = 15 * 60 * 1000
+
+/**
+ * Credencial para los correos que no son de un evento (código de acceso al portal, spec 014): la
+ * predeterminada activa. `null` si no hay o si su último envío o prueba falló hace menos de 15 min:
+ * funciona como un disyuntor que se recupera solo (el panel muestra `ultimoError` en Correo).
+ */
+export async function credencialUtilizable(ahora = new Date()): Promise<CredencialCorreo | null> {
+    const credencial = await prisma.credencialCorreo.findFirst({ where: { activo: true, esPredeterminada: true }, orderBy: { id: 'asc' } })
+    if (!credencial) return null
+    if (credencial.ultimoEstado === 'ERROR') {
+        const ultimoResultado = Math.max(credencial.ultimoEnvioEn?.getTime() ?? 0, credencial.ultimaPruebaEn?.getTime() ?? 0)
+        if (ahora.getTime() - ultimoResultado < ESPERA_TRAS_ERROR_MS) return null
+    }
+    return credencial
+}
+
+export interface OpcionesEnvio {
+    /**
+     * Si el resultado queda en la credencial (`ultimoEstado`, `ultimoError`, `ultimoEnvioEn`). Los
+     * envíos que provoca un anónimo (código de acceso, spec 014) no lo registran: un fallo suyo no
+     * debe apagar el acceso por código (`credencialUtilizable`) ni revelar qué correos existen.
+     */
+    registrar?: boolean
+}
+
 /** Envía un correo con una credencial y registra el resultado; devuelve el error o `null`. */
-export async function enviarConCredencial(credencial: CredencialCorreo, correo: CorreoSaliente): Promise<string | null> {
+export async function enviarConCredencial(credencial: CredencialCorreo, correo: CorreoSaliente, opciones: OpcionesEnvio = {}): Promise<string | null> {
+    const registrar = opciones.registrar ?? true
     try {
         await enviarConBrevo(descifrar(credencial.apiKeyCifrada), correo)
-        await registrarResultado(credencial.id, null, 'ultimoEnvioEn').catch(() => undefined)
+        if (registrar) await registrarResultado(credencial.id, null, 'ultimoEnvioEn').catch(() => undefined)
         return null
     } catch (error) {
-        await registrarResultado(credencial.id, mensajeDe(error), 'ultimoEnvioEn').catch(() => undefined)
+        if (registrar) await registrarResultado(credencial.id, mensajeDe(error), 'ultimoEnvioEn').catch(() => undefined)
         return mensajeDe(error)
     }
 }

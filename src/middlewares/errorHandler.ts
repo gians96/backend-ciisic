@@ -55,6 +55,12 @@ export function errorHandler(err: AppError, req: Request, res: Response, next: N
     void next
     removeUploadedFile(req.file)
     const { status, code, message, fields } = normalizar(err)
-    if (status >= 500) console.error('Error interno:', err.name, err.message)
+    if (err instanceof HttpError) {
+        if (err.reintentarEnSegundos) res.setHeader('Retry-After', String(err.reintentarEnSegundos))
+        // Un 503 de negocio (PDF_BUSY, CODE_LOGIN_*) es esperable: se registra su código, no como error interno
+        if (status >= 500) console.warn(`Servicio no disponible: ${code}`)
+    } else if (status >= 500) {
+        console.error('Error interno:', err.name, err.message)
+    }
     res.status(status).json({ success: false, code, message, ...(fields ? { fields } : {}) })
 }

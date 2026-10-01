@@ -82,8 +82,28 @@ export async function configuracionUndc(): Promise<{ url: string, apiKey: string
     return { url: c.undcApiUrl, apiKey: descifrar(c.undcApiKeyCifrada), timeoutMs: c.undcApiTimeoutMs }
 }
 
+export interface ConfiguracionPublica {
+    google: { clientId: string | null }
+    urlPanel: string | null
+}
+
 /** Lo que pueden leer el panel (sin sesión) y la landing (con su token): nada secreto. */
-export async function configuracionPublica(): Promise<{ google: { clientId: string | null }, urlPanel: string | null }> {
+export async function configuracionPublica(): Promise<ConfiguracionPublica> {
     const c = await obtenerConfiguracion()
     return { google: { clientId: c.googleClientId }, urlPanel: c.urlPanel }
+}
+
+export interface ConfiguracionPanel extends ConfiguracionPublica {
+    /** Si la pantalla de ingreso ofrece el código por correo (spec 014). */
+    accesoCodigo: { disponible: boolean }
+}
+
+/**
+ * Configuración pública del panel (`/v1/auth/config`): la pública más la disponibilidad del acceso
+ * por código, que decide el módulo de acceso (credencial de correo, plantilla y disyuntor). La landing
+ * (`/v1/site/config`) sigue recibiendo solo `configuracionPublica`.
+ */
+export async function configuracionPanel(accesoCodigoDisponible: () => Promise<boolean>): Promise<ConfiguracionPanel> {
+    const [publica, disponible] = await Promise.all([configuracionPublica(), accesoCodigoDisponible().catch(() => false)])
+    return { ...publica, accesoCodigo: { disponible } }
 }

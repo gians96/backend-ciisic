@@ -257,6 +257,34 @@ CORS está abierto a cualquier origen; la landing lo usa desde su servidor Nitro
 spec 012; la landing la sirve desde su BFF), `POST /inscriptions`, `/student-verification`,
 `/google-verification`, `/papers`, `/contact`.
 
+### Correo conservado al reinscribirse (spec 014)
+
+Definido en `backend-ciisic/specs/014-portal-fotocheck-asistencia/contracts/api-asistencia.md`. Si
+el documento ya está registrado con **otro** correo, el backend **no** cambia el correo ni responde
+409, **aunque el nuevo venga verificado con Google** (`verificacionCorreoToken` prueba que quien
+envía controla el correo nuevo, no que sea el dueño del documento): la inscripción se hace con el
+correo registrado y se avisa a ese correo. El cambio de correo lo hace la organización desde el
+panel. La respuesta `201` de `POST /api/v1/site/inscriptions` (y de la legacy
+`POST /api/v1/inscription`) agrega dos campos:
+
+```json
+{ "correoConservado": true, "correoEnmascarado": "a***@g***.com" }
+```
+
+- Con `correoConservado: true`, `data.participante.correo` sale enmascarado (`"a***@g***.com"`) y
+  `data.participante.celular` oculto por completo (`"*********"`); en la legacy,
+  `data.usuario.correoElectronico` y `data.usuario.celular`. `esCorreoVerificado` es `false` (la
+  verificación era del correo ingresado). Con `false`, `correoEnmascarado` es `null` y todo sale como
+  antes.
+- El precio por dominio institucional (categoría general y ruta legacy) se calcula con el correo
+  **registrado**: escribir un correo `@undc.edu.pe` ajeno no da el precio institucional.
+- **Cambio compatible**: una landing que lo ignore sigue funcionando. Mensaje sugerido cuando es
+  `true`: «Ya estabas registrado con {correoEnmascarado}; tu inscripción y tu credencial llegarán a
+  ese correo. Si ya no lo usas, escribe a la organización para cambiarlo».
+- Una persona **nueva** con un correo de otra persona sigue recibiendo `409 EMAIL_IN_USE`.
+- `numeroOperacion` con el prefijo `CORTESIA-` queda reservado (`422 VALIDATION_ERROR`).
+- `GET /api/v1/site/config` **no cambia** (`{ google, urlPanel }`).
+
 ## Contrato 4 — API administrativa del congreso (panel)
 
 Definido en `backend-ciisic/specs/002-multi-evento/contracts/api-admin.md`, en las specs
@@ -295,18 +323,76 @@ El panel la consume solo a través de su BFF (`/api/backend/**`), que agrega el
 - Compatibilidad: para Owner y Administrador el panel anterior recibe los mismos campos (lo nuevo son
   claves agregadas) y `PUT /api/v1/admin/:id` sigue aceptando `rolCodigo`.
 
+### Escáner, credencial y operación (spec 014)
+
+Definido en `specs/014-portal-fotocheck-asistencia/contracts/api-asistencia.md` (panel: spec 009).
+
+- El QR de la credencial (PDF y fotocheck) lleva el **código de credencial** de 10 caracteres
+  `[0-9A-Z]` (`codigoCredencial` en `GET /api/v1/inscriptions/:id`, nunca en listados ni CSV). El
+  QR anterior (id del participante) se acepta hasta el `fechaFin` del evento solo en las
+  inscripciones marcadas (`esQrLegado`).
+- `POST /api/v1/activities/:id/attendances` con exactamente uno de `{ codigo }` (método `QR`),
+  `{ numeroDocumento, tipoDocumento? }` (`DOCUMENTO`) o `{ participanteId }` (QR anterior,
+  `QR_LEGADO`); `metodo: "MANUAL"` exige `asistencia.fuera_horario`. Se marca desde 30 min antes de
+  `horaInicio`. La respuesta agrega `alerta: "QR_LEGADO" | null`, `participante.foto.tiene` e
+  `inscripcion: { id, tipoInscripcion }`; la foto se pide con `GET /api/v1/inscriptions/:id/photo`
+  (`asistencia.marcar` o `inscripciones.ver`).
+- Errores nuevos que el panel debe manejar: `404 CODE_NOT_FOUND`, `409 CODE_OTHER_EVENT`,
+  `422 LEGACY_QR_NOT_ALLOWED`, `403 MANUAL_NOT_ALLOWED`, `503 PDF_BUSY` con `Retry-After` (descarga
+  de credencial; al aprobar o reenviar llega `credencialEnviada: false`).
+- **Lectura del QR en el escáner** (los dos formatos conviven hasta el `fechaFin` del VIII):
+  texto leído sin espacios ni saltos de línea → si cumple `/^[0-9A-Za-z]{10}$/`, enviar
+  `{ codigo: texto.toUpperCase() }`; si cumple `/^\d+$/`, enviar `{ participanteId: Number(texto) }`
+  (QR anterior) y mostrar en ámbar la `alerta: "QR_LEGADO"`; si no, «QR no válido» sin llamar al
+  backend. Un código de 10 dígitos (todo números) se trata como código, no como id.
+- El número de operación de una cortesía es `CORTESIA-` + 12 hexadecimales aleatorios (sale en
+  listados y CSV: nunca lleva el código del QR).
+- `POST /api/v1/participants` (`participantes.gestionar`; `409 PARTICIPANT_EXISTS` con
+  `fields.id`, `409 EMAIL_IN_USE`, `422 NAMES_REQUIRED`) y
+  `POST /api/v1/events/:eventId/courtesy-inscriptions` (`inscripciones.cortesia`).
+- **Orden de despliegue**: primero (o a la vez) el panel 009, que lee los dos formatos de QR; nunca
+  el backend 014 solo. Con el panel anterior, cada credencial que se apruebe, reenvíe o descargue
+  lleva el QR nuevo y su escáner lo rechaza en el navegador («usa DNI / documento»).
+
 ---
 
 
-## Contrato 5 — Acceso con Google y portal del inscrito
+## Contrato 5 — Acceso con Google, código por correo y portal del inscrito
 
-Definidos en `backend-ciisic/specs/010-google-sign-in/contracts/api-google.md` y
-`specs/011-portal-participante/contracts/api-portal.md`. El panel obtiene el client ID de
-`GET /api/v1/auth/config`, emite un `nonce` desde su servidor y envía el ID token de Google a
-`POST /api/v1/auth/google`: entra como administrador (cuenta de un admin activo) o como
-participante (portal `/api/v1/me/*`). Las sesiones llevan audiencia `ciisic-admin` o
-`ciisic-participante`. La landing verifica opcionalmente el correo con
-`POST /api/v1/site/google-verification` y envía el token resultante con la inscripción.
+Definidos en `backend-ciisic/specs/010-google-sign-in/contracts/api-google.md`,
+`specs/011-portal-participante/contracts/api-portal.md` y, desde la spec 014,
+`specs/014-portal-fotocheck-asistencia/contracts/api-acceso-codigo.md` y `api-portal.md` (v2).
+
+- El panel obtiene de `GET /api/v1/auth/config` el client ID de Google, la URL del panel y
+  `accesoCodigo: { disponible }`; emite un `nonce` desde su servidor y envía el ID token de Google a
+  `POST /api/v1/auth/google`: entra como staff (cuenta activa) o como participante (portal
+  `/api/v1/me/*`). Las sesiones llevan audiencia `ciisic-admin` (1 h, renovable hasta 12 h) o
+  `ciisic-participante` (12 h, sin renovación).
+- **Código por correo** (spec 014), además de Google: `POST /api/v1/auth/participant/code`
+  `{ correo }` → `202 { expiraEnSegundos: 600, reintentarEnSegundos: 60 }` siempre igual (exista o
+  no el correo, también si está vinculado a Google); `POST /api/v1/auth/participant/code/verify`
+  `{ correo, codigo }` → `{ jwt, tipo: "PARTICIPANTE", participante, expiraEn }` (`metodo:
+  "CODIGO"`). El código **siempre** abre una sesión de participante, nunca de staff. Errores:
+  `429 CODE_COOLDOWN`, `401 INVALID_CODE` (`fields.restantes`), `401 CODE_EXPIRED`,
+  `429 CODE_LOCKED`, `429 RATE_LIMITED` (muchas solicitudes o códigos incorrectos desde la misma
+  red), `503 CODE_LOGIN_UNAVAILABLE` (sin credencial de correo o, con `Retry-After`, tope global de
+  envíos), `503 CODE_LOGIN_PAUSED`; las esperas van en `Retry-After` y en `fields` como texto. El BFF llama al backend por la URL interna de Docker y
+  reenvía en `X-Forwarded-For` la IP del visitante (la que agrega su proxy, no la primera de la
+  cadena, que el cliente puede falsificar): los topes por IP usan esa IP.
+- **Staff → portal**: `POST /api/v1/auth/participant/switch` (Bearer de staff, sin cuerpo) devuelve
+  la misma sesión de participante si la sesión del staff es de Google y hay un participante con su
+  correo; con contraseña `409 CODE_REQUIRED` (pedir el código), sin inscripción
+  `404 PARTICIPANT_NOT_FOUND`, otra cuenta Google `403 GOOGLE_ACCOUNT_MISMATCH` o
+  `409 GOOGLE_ACCOUNT_IN_USE`. Un solo sentido; `acceso.perfilParticipante` (spec 013) indica si
+  ofrecerlo.
+- **Portal v2**: `GET /me` (+ `celular`, `foto`, `google`), `PATCH /me/profile` (solo celular),
+  `GET /me/inscriptions` (+ `fotocheck.disponible`), `GET /me/inscriptions/:id/badge` (fotocheck:
+  código, QR en data URL, evento, documento enmascarado, tipo, foto), `GET /me/attendances`,
+  `PUT|GET|DELETE /me/photo` (JPG/PNG ≤ 2 MB y ≤ 4096 px por lado —si no, `422 IMAGE_TOO_LARGE`—,
+  `consentimiento=true`; el panel recodifica y reduce la imagen con canvas). Todo con `Cache-Control: private, no-store`.
+- La landing verifica opcionalmente el correo con `POST /api/v1/site/google-verification` y envía
+  el token resultante con la inscripción; con o sin él, un correo distinto del registrado se
+  conserva (contrato 3).
 
 ## Entornos locales de desarrollo
 

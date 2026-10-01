@@ -152,11 +152,14 @@ describe('configuración pública', () => {
     it('el panel la lee sin sesión y la landing con su token; nunca incluye secretos', async () => {
         fila = nuevaFila({ googleClientId: '1-a.apps.googleusercontent.com', urlPanel: 'https://admin.example', undcApiKeyCifrada: 'secreto' })
         const panel = await request(app).get('/api/v1/auth/config')
-        expect(panel.body.data).toEqual({ google: { clientId: '1-a.apps.googleusercontent.com' }, urlPanel: 'https://admin.example' })
+        // El panel además sabe si puede ofrecer el código por correo (spec 014); sin credencial de correo, no
+        expect(panel.body.data).toEqual({ google: { clientId: '1-a.apps.googleusercontent.com' }, urlPanel: 'https://admin.example', accesoCodigo: { disponible: false } })
         expect((await request(app).get('/api/v1/site/config')).status).toBe(401)
         m.tokenAcceso.findUnique.mockResolvedValue(registroDeToken({ id: 2, estado: 'PUBLICADO' }))
         const sitio = await request(app).get('/api/v1/site/config').set('X-Api-Key', TOKEN_SITIO)
-        expect(sitio.body.data).toEqual(panel.body.data)
+        // La landing recibe la forma de siempre
+        expect(sitio.body.data).toEqual({ google: { clientId: '1-a.apps.googleusercontent.com' }, urlPanel: 'https://admin.example' })
+        expect(JSON.stringify([panel.body, sitio.body])).not.toContain('secreto')
     })
 
     it('si la BD falla usa los valores por defecto (nada configurado)', async () => {

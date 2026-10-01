@@ -59,7 +59,16 @@ export const limiteVerificacion = limitador(MINUTO, 20)
 export const limiteConsultaDocumento = limitador(MINUTO, 10, 'Demasiadas consultas. Espera un minuto e inténtalo nuevamente.')
 export const limitePonencias = limitador(15 * MINUTO, 10, 'Demasiados intentos. Intenta nuevamente en 15 minutos.')
 export const limiteContacto = limitador(15 * MINUTO, 5, 'Demasiados mensajes. Intenta nuevamente en 15 minutos.')
+/** Inicio de sesión con contraseña. */
 export const limiteLogin = limitador(15 * MINUTO, 10, 'Demasiados intentos de inicio de sesión. Intenta nuevamente en 15 minutos.')
+/**
+ * Inicio de sesión con Google (spec 014): más alto que el de contraseña porque el token lo firma
+ * Google y muchas personas entran desde la misma red (UNDC) el día del evento.
+ */
+export const limiteLoginGoogle = limitador(15 * MINUTO, 120, 'Demasiados intentos de inicio de sesión. Intenta nuevamente en 15 minutos.')
+/** Código de acceso al portal por correo (spec 014); los topes por correo van en la BD. */
+export const limiteSolicitudCodigo = limitador(15 * MINUTO, 60, 'Demasiadas solicitudes de código. Intenta nuevamente en 15 minutos.')
+export const limiteVerificacionCodigo = limitador(15 * MINUTO, 120, 'Demasiados intentos de verificación. Intenta nuevamente en 15 minutos.')
 
 // Por token de acceso del evento (API del sitio, spec 009)
 const porToken = (windowMs: number, limit: number, message?: string) => limitador(windowMs, limit, message, { clave: 'token' })
@@ -75,6 +84,7 @@ export const limiteTokenContacto = porToken(15 * MINUTO, 60)
 // Por participante (portal del inscrito)
 export const limitePortal = limitador(MINUTO, 60, undefined, { clave: 'participante' })
 export const limiteCredencialPortal = limitador(MINUTO, 10, 'Demasiadas descargas. Espera un minuto.', { clave: 'participante' })
+export const limiteFotoPortal = limitador(60 * MINUTO, 10, 'Demasiados cambios de foto. Intenta nuevamente en una hora.', { clave: 'participante' })
 
 // Por cuenta de staff (spec 013)
 /**
@@ -86,3 +96,5 @@ export const esCuentaGlobal = (req: Request) => (req as AuthenticatedRequest).ac
 export const limiteMarcarAsistencia = limitador(MINUTO, 120, 'Demasiados registros de asistencia seguidos. Espera un momento.', { clave: 'actor', exenta: esCuentaGlobal })
 export const limiteReenvioCredencial = limitador(15 * MINUTO, 20, 'Demasiados reenvíos de credencial. Intenta nuevamente en 15 minutos.', { clave: 'actor' })
 export const limiteRenovacionSesion = limitador(15 * MINUTO, 30, undefined, { clave: 'actor' })
+/** Paso del staff a su portal de participante (`POST /v1/auth/participant/switch`, spec 014). */
+export const limiteSwitch = limitador(15 * MINUTO, 20, 'Demasiados cambios de perfil. Intenta nuevamente en 15 minutos.', { clave: 'actor' })

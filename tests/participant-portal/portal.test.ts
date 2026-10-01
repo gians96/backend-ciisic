@@ -3,7 +3,7 @@ import path from 'path'
 import request from 'supertest'
 import app from '../../src/app'
 import { prisma } from '../../src/database/prisma'
-import { DIRECTORIO_UPLOADS } from '../../src/core/almacenamiento'
+import { rutaCredencial } from '../../src/api/inscription/utils/generatePdf'
 import { tokenDeParticipante, tokenDeRol } from '../helpers/tokens'
 
 jest.mock('../../src/database/prisma', () => ({
@@ -19,14 +19,17 @@ const evento = { id: 2, codigo: 'ciisic-viii-2026', nombre: 'VIII Congreso', nom
 const inscripcion = (cambios: Record<string, unknown> = {}) => ({
     id: 29, participanteId: 50, evento, monto: 100, descuento: 20, modalidadPago: 'billetera', banco: null, tipoOperacion: null, billeteraDigital: 'yape',
     numeroOperacion: 'OP-1', fechaPago: new Date('2026-09-29T00:00:00Z'), motivoRechazo: 'Voucher ilegible', revisadoEn: null, credencialEnviadaEn: null,
-    creadoEn: new Date(), revisadoPorId: 1, voucherArchivo: 'voucher-1.png',
+    creadoEn: new Date('2026-09-28T15:00:00Z'), revisadoPorId: 1, voucherArchivo: 'voucher-1.png', codigoCredencial: 'K7Q2M9X4TB',
     tipoInscripcion: { nombre: 'ESTUDIANTES', etiqueta: 'CON KIT', precio: 120, categoria: { nombre: 'ESTUDIANTES' } },
     clasificacion: { nombre: 'ESTUDIANTE - VI CICLO' }, estado: { codigo: 'PENDIENTE', nombre: 'Pendiente' }, ...cambios,
 })
 
 beforeEach(() => {
     jest.clearAllMocks()
-    m.participante.findUnique.mockResolvedValue({ id: 50, correo: 'ana@gmail.com', nombres: 'ANA', apellidos: 'PEREZ', tipoDocumentoId: 'dni', numeroDocumento: '70009999' })
+    m.participante.findUnique.mockResolvedValue({
+        id: 50, correo: 'ana@gmail.com', nombres: 'ANA', apellidos: 'PEREZ', tipoDocumentoId: 'dni', numeroDocumento: '70009999', celular: '987654321',
+        googleSub: null, fotoArchivo: null, fotoActualizadaEn: null,
+    })
 })
 
 describe('portal del inscrito', () => {
@@ -37,7 +40,7 @@ describe('portal del inscrito', () => {
         expect(m.inscripcion.findMany.mock.calls[0][0].where).toEqual({ participanteId: 50 })
         expect(r.body.data[0]).toMatchObject({
             id: 29, evento: { codigo: 'ciisic-viii-2026', fechaInicio: '2026-10-26' }, monto: 100, precioRegular: 120, descuento: 20,
-            estado: { codigo: 'PENDIENTE' }, motivoRechazo: null, credencial: { disponible: false },
+            estado: { codigo: 'PENDIENTE' }, motivoRechazo: null, credencial: { disponible: false }, fotocheck: { disponible: false },
         })
         expect(r.body.data[1].motivoRechazo).toBe('Voucher ilegible')
         expect(JSON.stringify(r.body)).not.toMatch(/revisadoPor|voucher-1/)
@@ -45,7 +48,10 @@ describe('portal del inscrito', () => {
 
     it('devuelve su perfil', async () => {
         const r = await request(app).get('/api/v1/me').set('Authorization', sesion())
-        expect(r.body.data).toEqual({ id: 50, nombres: 'ANA', apellidos: 'PEREZ', correo: 'ana@gmail.com', tipoDocumento: 'dni', numeroDocumento: '70009999' })
+        expect(r.body.data).toEqual({
+            id: 50, nombres: 'ANA', apellidos: 'PEREZ', correo: 'ana@gmail.com', tipoDocumento: 'dni', numeroDocumento: '70009999', celular: '987654321',
+            foto: { tiene: false, actualizadaEn: null }, google: { vinculado: false },
+        })
     })
 
     it('la credencial ajena es 404 y la no aprobada 409; la propia aprobada se descarga', async () => {
@@ -59,12 +65,14 @@ describe('portal del inscrito', () => {
         expect(pendiente.status).toBe(409)
         expect(pendiente.body.code).toBe('NOT_APPROVED')
 
-        const ruta = path.join(DIRECTORIO_UPLOADS, 'credenciales', 'ciisic-viii-2026', '29.pdf')
+        // El PDF (nombre con la huella de lo impreso) es posterior al último cambio de la persona: se entrega el mismo
+        const participante = { id: 50, nombres: 'ANA', apellidos: 'PEREZ', tipoDocumentoId: 'dni', numeroDocumento: '70009999', correo: 'ana@gmail.com', celular: '987654321', actualizadoEn: new Date('2026-09-01T00:00:00Z') }
+        const aprobada = inscripcion({ estado: { codigo: 'APROBADO', nombre: 'Aprobado' }, participante })
+        const ruta = rutaCredencial(aprobada as unknown as Parameters<typeof rutaCredencial>[0])
+        expect(path.basename(ruta)).toMatch(/^29-[0-9a-f]{12}\.pdf$/)
         fs.mkdirSync(path.dirname(ruta), { recursive: true })
         fs.writeFileSync(ruta, '%PDF-1.4 credencial')
-        // El PDF es posterior al último cambio de la persona: se entrega el mismo (sin regenerarlo)
-        const participante = { id: 50, actualizadoEn: new Date('2026-09-01T00:00:00Z') }
-        m.inscripcion.findUnique.mockResolvedValueOnce(inscripcion({ estado: { codigo: 'APROBADO', nombre: 'Aprobado' }, participante }))
+        m.inscripcion.findUnique.mockResolvedValueOnce(aprobada)
         const pdf = await request(app).get('/api/v1/me/inscriptions/29/credential').set('Authorization', sesion())
         expect(pdf.status).toBe(200)
         expect(pdf.headers['content-disposition']).toBe('attachment; filename="credencial-ciisic-viii-2026-29.pdf"')

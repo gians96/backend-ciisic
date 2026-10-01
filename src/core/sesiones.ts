@@ -10,11 +10,16 @@ import type { CodigoRol } from './catalogos'
 export const EMISOR = 'backend-ciisic'
 export const AUDIENCIA_ADMIN = 'ciisic-admin'
 export const AUDIENCIA_PARTICIPANTE = 'ciisic-participante'
+/** Vida de una sesión del staff (se renueva con `POST /v1/auth/refresh`). */
 export const SESION_SEGUNDOS = 60 * 60
 /** Tope de una sesión del staff desde que se inició: la renovación no la extiende más (spec 013). */
 export const SESION_MAXIMA_SEGUNDOS = 12 * 60 * 60
+/** Vida de una sesión del portal del participante (spec 014): no se renueva. */
+export const SESION_PARTICIPANTE_SEGUNDOS = 12 * 60 * 60
 
-export type MetodoSesion = 'PASSWORD' | 'GOOGLE'
+/** Cómo se inició la sesión. `CODIGO` (código por correo) solo existe en sesiones de participante. */
+export type MetodoSesion = 'PASSWORD' | 'GOOGLE' | 'CODIGO'
+export type MetodoSesionParticipante = Extract<MetodoSesion, 'GOOGLE' | 'CODIGO'>
 
 export interface UsuarioSesion {
     id: number
@@ -64,15 +69,15 @@ export function huellaCredenciales(cuenta: Credenciales): string {
         .slice(0, 22)
 }
 
-function firmar(carga: object, audiencia: string, sujeto: number) {
+function firmar(carga: object, audiencia: string, sujeto: number, segundos: number) {
     const token = jwt.sign(carga, env.JWT_SECRET, {
         algorithm: 'HS256',
-        expiresIn: SESION_SEGUNDOS,
+        expiresIn: segundos,
         issuer: EMISOR,
         audience: audiencia,
         subject: String(sujeto),
     })
-    return { jwt: token, expiraEn: new Date(Date.now() + SESION_SEGUNDOS * 1000).toISOString() }
+    return { jwt: token, expiraEn: new Date(Date.now() + segundos * 1000).toISOString() }
 }
 
 export interface OpcionesSesionAdmin {
@@ -83,11 +88,12 @@ export interface OpcionesSesionAdmin {
 }
 
 export function firmarSesionAdmin(usuario: UsuarioSesion, { metodo, huella, authTime }: OpcionesSesionAdmin) {
-    return firmar({ user: usuario, metodo, huella, authTime: authTime ?? Math.floor(Date.now() / 1000) }, AUDIENCIA_ADMIN, usuario.id)
+    return firmar({ user: usuario, metodo, huella, authTime: authTime ?? Math.floor(Date.now() / 1000) }, AUDIENCIA_ADMIN, usuario.id, SESION_SEGUNDOS)
 }
 
-export function firmarSesionParticipante(participante: ParticipanteSesion) {
-    return firmar({ participante, metodo: 'GOOGLE' }, AUDIENCIA_PARTICIPANTE, participante.id)
+/** Sesión del portal (12 h). `metodo`: con Google (por defecto) o con el código por correo. */
+export function firmarSesionParticipante(participante: ParticipanteSesion, metodo: MetodoSesionParticipante = 'GOOGLE') {
+    return firmar({ participante, metodo }, AUDIENCIA_PARTICIPANTE, participante.id, SESION_PARTICIPANTE_SEGUNDOS)
 }
 
 /** Verifica firma, vigencia y emisor; la audiencia la decide quien llama. Lanza si no es válido. */

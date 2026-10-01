@@ -1,13 +1,15 @@
 import { Request, Response } from 'express'
-import { HttpError, idParam, unprocessable } from '../../../core/http-error'
+import { HttpError, idParam, notFound, unprocessable } from '../../../core/http-error'
+import { leerArchivoServido } from '../../../core/almacenamiento'
 import { ESTADO_POR_ID_LEGACY, type CodigoEstadoInscripcion } from '../../../core/catalogos'
 import { parsePagination } from '../../../core/pagination'
 import { mimeDeArchivo } from '../../../middlewares/upload'
+import type { Actor } from '../../../core/actor'
 import type { AuthenticatedRequest } from '../../../middlewares/auth'
 import { obtenerEventoPorId, obtenerEventoPrincipal } from '../../event/services/public-event'
 import * as service from '../services/inscription'
-import { aCreada, aDetalle, aLegacy } from '../services/mappers'
-import { cambiarEstadoSchema, crearInscripcionSchema, inscripcionLegacySchema, type CrearInscripcionInput } from '../validation'
+import { aCreada, aDetalle, aLegacy, aLegacyCreada } from '../services/mappers'
+import { cambiarEstadoSchema, crearInscripcionSchema, inscripcionLegacySchema, type CortesiaInput, type CrearInscripcionInput } from '../validation'
 import { eventoDelSitio } from '../../../middlewares/sitio'
 
 /** Quita cadenas vacías (multipart) para que yup trate los campos como ausentes. */
@@ -34,10 +36,16 @@ export async function publicCreate(req: Request, res: Response) {
         { abortEarly: false, stripUnknown: true },
     )
     const inscripcion = await service.crearInscripcion(evento, input, req.file?.filename ?? null)
-    res.status(201).json({ success: true, data: aCreada(inscripcion) })
+    res.status(201).json({ success: true, data: aCreada(inscripcion, inscripcion.correoConservado) })
 }
 
 // ─── Permisos del actor (spec 013) ──────────────────────────────────────────
+
+/** La guarda de permisos deja la cuenta en `req.actor`; sin ella la ruta está mal cableada. */
+function actorDe(req: AuthenticatedRequest): Actor {
+    if (!req.actor) throw new Error('Ruta de inscripciones sin guarda de permisos')
+    return req.actor
+}
 
 /** Sin «pagos.ver» (Comisión) las respuestas no llevan montos, precios ni datos de pago. */
 function conPago(req: AuthenticatedRequest): boolean {
@@ -82,7 +90,7 @@ export async function legacyCreate(req: Request, res: Response) {
     }
     // Solo se acepta el archivo subido (nunca un nombre de archivo enviado por el cliente)
     const inscripcion = await service.crearInscripcion(evento, input, req.file?.filename ?? null, { legacy: true })
-    res.status(201).json({ success: true, message: 'Inscripción creada exitosamente', data: aLegacy(inscripcion) })
+    res.status(201).json({ success: true, message: 'Inscripción creada exitosamente', data: aLegacyCreada(inscripcion, inscripcion.correoConservado) })
 }
 
 export async function legacyList(_req: Request, res: Response) {
@@ -159,11 +167,29 @@ export async function voucher(req: Request, res: Response) {
 
 export async function credential(req: Request, res: Response) {
     const id = idParam(req.params.id)
-    const ruta = await service.archivoCredencial(id)
+    // Se lee a memoria sin esperas: una foto nueva borra los PDF guardados (ver `leerArchivoServido`)
+    const pdf = leerArchivoServido(await service.archivoCredencial(id), () => new HttpError(503, 'PDF_BUSY', 'La credencial se está actualizando. Intenta nuevamente en unos segundos.', undefined, 5))
     res.setHeader('Cache-Control', 'private, no-store')
     res.setHeader('Content-Type', 'application/pdf')
     res.setHeader('Content-Disposition', `inline; filename="credencial-${id}.pdf"`)
-    res.sendFile(ruta)
+    res.send(pdf)
+}
+
+/** Inscripción de cortesía (spec 014). El cuerpo ya viene validado (`cortesiaSchema`). */
+export async function createCourtesy(req: AuthenticatedRequest, res: Response) {
+    const eventoId = idParam(req.params.eventId, 'eventId')
+    const { inscripcion, credencialEnviada } = await service.crearInscripcionCortesia(eventoId, req.body as CortesiaInput, actorDe(req).id)
+    res.status(201).json({ success: true, data: { ...aDetalle(inscripcion, conPago(req)), credencialEnviada } })
+}
+
+/** Foto del participante de la inscripción para el escáner (spec 014). */
+export async function photo(req: Request, res: Response) {
+    const ruta = await service.archivoFoto(idParam(req.params.id))
+    const foto = leerArchivoServido(ruta, () => notFound('PHOTO_NOT_FOUND', 'El participante no tiene foto.'))
+    res.setHeader('Cache-Control', 'private, no-store')
+    res.setHeader('Content-Type', mimeDeArchivo(ruta))
+    res.setHeader('Content-Disposition', 'inline')
+    res.send(foto)
 }
 
 export async function remove(req: Request, res: Response) {

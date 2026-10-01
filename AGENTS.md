@@ -5,8 +5,9 @@ Guía para agentes de IA y desarrolladores que trabajen en este repositorio.
 ## Qué es
 
 API del congreso CIISIC (UNDC), **multi-evento**: eventos, inscripciones, credenciales PDF y
-correo, asistencia, ponencias, consultas DNI, verificación de estudiantes, integraciones,
-acceso con Google y portal del inscrito. Es el **centro del ecosistema del congreso**: la
+correo, asistencia (escáner con el QR de la credencial), ponencias, consultas DNI, verificación de
+estudiantes, integraciones, acceso con Google o con código por correo y portal del inscrito
+(fotocheck virtual, asistencia y perfil con foto). Es el **centro del ecosistema del congreso**: la
 consumen el panel y la landing, y ella consume API_UNDC, deportes-fi, Decolecta/apiperu, Brevo
 y Google. Documentación: [`docs/`](docs/README.md).
 
@@ -27,6 +28,7 @@ y Google. Documentación: [`docs/`](docs/README.md).
   | Verificar que no hay drift | `npx prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --shadow-database-url <shadow> --exit-code` |
   | Catálogos (idempotente) | `npm run seed` (`-- --demo` agrega tipos de ejemplo) |
   | Primer Owner | `npm run bootstrap:admin:dev -- --correo tu@undc.edu.pe` |
+  | Pregenerar las credenciales PDF de un evento (tras desplegar la 014) | `npm run credenciales:pregenerar:dev -- --evento <código>` |
 
 - BD local: MySQL 8.4 en Docker (`ciisic-mysql`, puerto 3310). **Nunca** apuntes a producción
   desde desarrollo.
@@ -39,7 +41,9 @@ y Google. Documentación: [`docs/`](docs/README.md).
   audiencia (`sesiones.ts`), configuración del sistema con caché (`configuracion-sistema.ts`),
   URLs salientes anti-SSRF (`url-saliente.ts`), reglas del correo institucional; roles y permisos
   del staff (`catalogos.ts`, `permisos.ts`), la cuenta leída de la BD (`actor.ts`) y los
-  resolutores del evento de cada recurso (`resolutores-evento.ts`).
+  resolutores del evento de cada recurso (`resolutores-evento.ts`); códigos de acceso y de
+  credencial (`codigos.ts`), semáforo de PDF (`concurrencia.ts`), tipo real y limpieza de
+  imágenes (`imagenes.ts`) y rutas de archivos (`almacenamiento.ts`).
 - `src/middlewares/`: `auth.ts` (`requirePermiso`, `requireActor`, `requireParticipante`,
   `requireSesion`), `sitio.ts` (`requireTokenEvento`), `rate-limit.ts` (por IP, token,
   participante o cuenta de staff), `legacy.ts`, `upload.ts`, `validate.ts`.
@@ -68,7 +72,22 @@ y Google. Documentación: [`docs/`](docs/README.md).
   de verificación de estudiante válido y coincidente.
 - Aprobar genera la credencial y envía el correo; si el correo falla, la aprobación se mantiene.
 - Google en la landing es **opcional** y no cambia precios; en el panel entra una cuenta de staff
-  activa (cualquier dominio) o un participante inscrito (portal).
+  activa (cualquier dominio) o un participante inscrito (portal), este con Google **o con un código
+  de 6 dígitos por correo** (spec 014).
+- Código por correo: siempre abre una sesión de **participante** (12 h), nunca de staff; se envía
+  también a cuentas vinculadas a Google; la respuesta de la solicitud es idéntica exista o no el
+  correo. El staff pasa a su portal solo con `POST /v1/auth/participant/switch` (sesión de Google;
+  con contraseña, el código); no hay camino del portal al panel.
+- Una reinscripción con otro correo **nunca** cambia el correo registrado desde un formulario
+  público, ni aunque el nuevo venga verificado con Google (eso prueba el correo, no que sea el dueño
+  del documento: sería una toma de cuenta): se conserva, se avisa a ese correo, la respuesta lleva
+  `correoConservado` y el precio por dominio sale del correo registrado. Solo el staff lo cambia
+  (`PUT /v1/participants/:id`): se avisa al correo anterior y se registra con ids.
+- Cada inscripción tiene `codigo_credencial` (10 caracteres `[0-9A-Z]`, único): es lo único que va
+  en el QR del fotocheck y del PDF. Se crea con `conReintentoDeCodigo(nuevoCodigoCredencial)` y, si
+  falta, `asegurarCodigoCredencial`. Va en el detalle, **nunca** en listados, búsquedas, el CSV ni en
+  un dato que salga en ellos (el `numeroOperacion` de una cortesía es aleatorio e independiente). El
+  QR anterior (id del participante) solo vale con `es_qr_legado` y hasta el `fechaFin` del evento.
 - Staff (spec 013): Owner (`SUPERADMIN`) y Administrador del sistema (`ADMIN`) son globales;
   Tesorero y Comisión solo operan en sus eventos. Solo el Owner configura Sistema y gestiona Owners
   y Administradores. Sin `pagos.ver` no salen montos ni datos de pago (van en `null`).
@@ -95,15 +114,33 @@ y Google. Documentación: [`docs/`](docs/README.md).
 - CORS abierto (`*`, sin cookies): la seguridad es el token. Toda ruta del sitio lleva límite por
   visitante **y** por token.
 - URLs salientes configurables: `validarUrlSaliente` + `asegurarDestinoPublico`.
-- Escapar texto de usuario en HTML (PDF, correos). No registrar secretos ni tokens.
+- Escapar texto de usuario en HTML (PDF, correos). No registrar secretos ni tokens, ni correos ni
+  códigos de acceso (en la BD solo su HMAC, `codigos_acceso`).
+- Fotos del participante: solo PNG o JPEG por la firma de bytes (`tipoDeImagen`), `limpiarMetadatos`
+  (deja solo lo necesario para decodificar, valida la estructura y rechaza más de 4096 px por lado:
+  `422 IMAGE_TOO_LARGE`), nombre generado (`nuevoNombreFoto`, escritura con `flag: 'wx'`) y lectura
+  solo por `rutaFoto` (nunca un nombre que llegue del cliente); consentimiento obligatorio. El staff
+  las lee con `GET /v1/inscriptions/:id/photo` (alcance por evento). Los archivos que otra petición
+  puede borrar (fotos, PDF de credencial) se sirven con `leerArchivoServido`, no con `res.sendFile`.
+- Los envíos de correo que no deben retrasar la respuesta van en diferido y con su `.catch`
+  (`enDiferido` de `src/api/inscription/utils/sendEmail.ts`, que registra la causa y los ids, nunca
+  el mensaje): no hay manejador global de promesas rechazadas y una sin manejar tumba el proceso.
+  Puppeteer solo dentro de `limitarConcurrencia` (`503 PDF_BUSY` con `Retry-After`).
+- Errores temporales: `HttpError(…, fields, reintentarEnSegundos)` y el `errorHandler` pone
+  `Retry-After`; un 503 de negocio se registra con `console.warn` (código), no como error interno.
+- Los envíos que provoca un anónimo (código de acceso) usan `enviarConCredencial(…, { registrar: false })`:
+  su fallo no cambia el estado de la credencial (sería un oráculo de qué correos existen).
+- Toda carpeta `templates` de `src` necesita su `COPY` en el `Dockerfile` (lo comprueba
+  `tests/core/plantillas-docker.test.ts`).
 
 ## Ecosistema y comunicación entre sistemas
 
 La fuente de verdad de los contratos es [`docs/arquitectura-ecosistema.md`](docs/arquitectura-ecosistema.md)
 (contratos 1–5). Este repositorio **expone** la API de administración (panel), la API del sitio
 `/api/v1/site/*` (landings y otras plataformas, con token de acceso del evento), el portal
-`/api/v1/me/*` y `/api/v1/auth/*`; **consume** API_UNDC (`POST /externo/estudiantes/verificar`),
-deportes-fi (`/api/v1/integrations/event/*`), Decolecta/apiperu, Brevo y Google.
+`/api/v1/me/*` y `/api/v1/auth/*` (incluido el código por correo, `/api/v1/auth/participant/*`);
+**consume** API_UNDC (`POST /externo/estudiantes/verificar`), deportes-fi
+(`/api/v1/integrations/event/*`), Decolecta/apiperu, Brevo y Google.
 
 | Sistema | Repositorio | Relación con este repo |
 |---|---|---|
@@ -132,7 +169,8 @@ con ambos sistemas levantados.
 
 Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Cada cambio
 empieza en `specs/NNN-nombre/` (spec → plan → tasks → contracts) y se marcan las tasks al
-implementar. Specs actuales: 001–013 (ver [README](README.md)).
+implementar. Specs actuales: 001–014 (ver [README](README.md)); la 015 (certificados) tiene solo
+su diseño (`research.md`).
 
 ## Antes de dar por terminado
 
