@@ -1,7 +1,7 @@
 import request from 'supertest'
 import app from '../../src/app'
 import { prisma } from '../../src/database/prisma'
-import { tokenDeRol } from '../helpers/tokens'
+import { tokenDeParticipante, tokenDeRol } from '../helpers/tokens'
 import { registroDeToken, TOKEN_SITIO } from '../helpers/sitio'
 
 jest.mock('../../src/database/prisma', () => ({
@@ -12,6 +12,7 @@ jest.mock('../../src/database/prisma', () => ({
         administrador: { findMany: jest.fn() },
         credencialCorreo: { findMany: jest.fn() },
         evento: { findUnique: jest.fn() },
+        certificado: { findUnique: jest.fn() },
     },
 }))
 
@@ -21,6 +22,7 @@ const m = prisma as unknown as {
     administrador: { findMany: jest.Mock }
     credencialCorreo: { findMany: jest.Mock }
     evento: { findUnique: jest.Mock }
+    certificado: { findUnique: jest.Mock }
 }
 const evento = { id: 2, codigo: 'ciisic-viii-2026', estado: 'PUBLICADO' }
 const pedir = (method: string, path: string) => (request(app) as unknown as Record<string, (p: string) => request.Test>)[method](path)
@@ -33,6 +35,7 @@ beforeEach(() => {
     m.administrador.findMany.mockResolvedValue([])
     m.credencialCorreo.findMany.mockResolvedValue([])
     m.evento.findUnique.mockResolvedValue({ id: 1, codigo: 'ciisic-vii-2025' })
+    m.certificado.findUnique.mockResolvedValue(null)
 })
 
 describe('seguridad de rutas administrativas', () => {
@@ -68,6 +71,13 @@ describe('seguridad de rutas administrativas', () => {
         ['get', '/api/v1/admin'],
         ['get', '/api/v1/roles'],
         ['post', '/api/v1/auth/refresh'],
+        // Certificados (spec 015): firmados, anulación y portal
+        ['post', '/api/v1/events/1/certificates/signed'],
+        ['put', '/api/v1/certificates/1/signed'],
+        ['delete', '/api/v1/certificates/1/signed'],
+        ['post', '/api/v1/certificates/1/annul'],
+        ['get', '/api/v1/me/certificates'],
+        ['get', '/api/v1/me/certificates/1/file'],
     ])('%s %s exige token', async (method, path) => {
         const response = await pedir(method, path)
         expect(response.status).toBe(401)
@@ -126,6 +136,43 @@ describe('seguridad de rutas administrativas', () => {
         const response = await request(app).get('/api/v1/no-existe')
         expect(response.status).toBe(404)
         expect(response.body).toMatchObject({ success: false, code: 'NOT_FOUND' })
+    })
+})
+
+// Spec 015 (enmienda de los principios III y IV): `/v1/public/*` es pública a propósito. Solo la
+// verificación de certificados, de lectura, sin documento y con límites por IP y global.
+describe('rutas públicas intencionales (/v1/public)', () => {
+    it('la verificación de certificados responde sin token (404 genérico si no hay uno firmado)', async () => {
+        const r = await request(app).get('/api/v1/public/certificates/CIISIC-2026-000123-7KQ2XM')
+        expect(r.status).toBe(404)
+        expect(r.body).toMatchObject({ success: false, code: 'CERTIFICATE_NOT_FOUND' })
+        expect(m.certificado.findUnique).toHaveBeenCalledTimes(1)
+    })
+
+    it('un formato inválido no llega a la BD', async () => {
+        const r = await request(app).get('/api/v1/public/certificates/1%20OR%201=1')
+        expect(r.status).toBe(404)
+        expect(m.certificado.findUnique).not.toHaveBeenCalled()
+    })
+
+    it.each([
+        ['post', '/api/v1/public/certificates/CIISIC-2026-000123-7KQ2XM'],
+        ['get', '/api/v1/public/certificates'],
+        ['get', '/api/v1/public/certificates/CIISIC-2026-000123-7KQ2XM/file'],
+    ])('no hay más rutas públicas: %s %s → 404', async (method, path) => {
+        const response = await pedir(method, path)
+        expect(response.status).toBe(404)
+        expect(response.body).toMatchObject({ success: false, code: 'NOT_FOUND' })
+    })
+})
+
+describe('certificados del staff (spec 015)', () => {
+    it.each([
+        ['post', '/api/v1/events/1/certificates/signed'],
+        ['post', '/api/v1/certificates/1/annul'],
+    ])('un token de participante no abre %s %s', async (method, path) => {
+        const response = await pedir(method, path).set('Authorization', `Bearer ${tokenDeParticipante()}`)
+        expect(response.status).toBe(403)
     })
 })
 

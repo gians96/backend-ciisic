@@ -15,6 +15,8 @@ jest.mock('../../src/database/prisma', () => ({
         tipoInscripcion: { findMany: jest.fn() },
         ponencia: { count: jest.fn() },
         asistencia: { count: jest.fn() },
+        // Borrar el evento revisa sus certificados (spec 015)
+        certificado: { count: jest.fn() },
         $transaction: jest.fn(),
     },
 }))

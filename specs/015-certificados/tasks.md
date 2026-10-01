@@ -1,0 +1,29 @@
+# Tasks: Certificados (plantillas PDF, emisión, firma externa, portal y verificación)
+
+- [x] T001 Esquema y migración `20261001150000_certificados` (tablas, columnas `certificados_*`, CHECK `ck_certificados_clave_vigente`, tipos sembrados) y `prisma/preflight/revertir-015.sql`; `migrate diff` vacío contra las migraciones y contra la BD local
+- [x] T002 Ensayo en una copia desechable del respaldo (`ciisic_ensayo_015`): las 4 migraciones pendientes (013, `administradores_solo_google`, 014 y 015) con diff 0, conteos iguales salvo `roles` (2 → 4, por la 013), el CHECK rechaza un PENDIENTE sin clave y un ANULADO con clave, `revertir-015.sql` dos veces seguidas, `migrate resolve --rolled-back`, nuevo despliegue y diff 0
+- [x] T003 Núcleo: permisos elegibles de la Comisión, resolutores `eventoDeCertificado`/`eventoDePlantilla`, configuración `certificados_*` con caché, rutas y escritura atómica en `almacenamiento.ts`, `core/pdf.ts`
+- [x] T004 Dependencias (`pdf-lib`, `@pdf-lib/fontkit`, `yazl`, `@types/yazl`), 14 fuentes TTF con sus licencias (Pinyon Script y Parisienne en lugar de Great Vibes y Allura, que perdían glifos al embeberse) y `COPY` en el `Dockerfile`
+- [x] T005 Motor PDF: estampado, texto en caja, QR vectorial, fuentes con respaldo, conteo de firmas y coincidencia, validación del diseño
+- [x] T006 Código local y adaptador del proveedor (LOCAL; UNDC 501)
+- [x] T007 Tipos, fuentes y configuración de certificados (`certificados.gestionar`); credenciales UNDC en Sistema (Owner) con prueba 501
+- [x] T008 Plantillas: diseño, campos validados con todos los errores, versión, edición simultánea, reemplazo del diseño y vista previa con `X-Avisos`
+- [x] T009 Emisión individual, desde inscritos (asistencia sin anuladas) y por lista, con `crearParticipante` de la spec 014 y correo obligatorio
+- [x] T010 Generación en tandas (cursor, idempotencia, optimista, URL y código impreso congelados) y descargas (archivo y ZIP con manifiesto; proveedor confirmado para firmar)
+- [x] T011 Firmados por tandas y uno a uno (coincidencia, EN_FIRMA/FIRMADO, forzar auditado), quitar firmado y anular
+- [x] T012 Portal (`/v1/me/certificates`, solo FIRMADO) y verificación pública (`/v1/public/certificates/:codigo`, límites por IP y global)
+- [x] T013 409 al borrar eventos con certificados (borra sus plantillas) e inscripciones con certificado vigente
+- [x] T014 Pruebas por frente (`tests/certificate/*`, 14 suites), 401 de las rutas nuevas y `/v1/public` en `tests/security/routes.test.ts`, elegibles en `tests/core/permisos.test.ts`
+- [x] T015 Documentación: spec, plan, tasks, contrato, `docs/` (api, data-model, arquitectura-ecosistema con los contratos 6 y 7, operación), `README.md`, `AGENTS.md` y constitución 1.4.0 (III y IV)
+- [x] T016 Seguridad transversal: `tests/security/matriz-rutas.test.ts` (32 rutas nuevas, 161 en total; `PUBLICAS` con la verificación, `PARTICIPANTE` con `/v1/me/certificates*`, `eventoDeCertificado`, 4 rutas con multer, `limiteVistaPrevia` y `limiteCargaFirmados` por cuenta, turno de carga antes de multer y `/v1/public/*` con límite por IP primero)
+- [ ] T017 `src/database/seed.ts`: tipos de certificado (la migración ya los siembra; el seed los repone si faltan)
+- [ ] T018 Documentación fuera de esta fase: `docs/configuracion.md` (`uploads/certificados` y límites), `docs/despliegue-ecosistema.md` (volumen y `COPY` de las fuentes), `docs/overview.md` y la línea «reservados» de `specs/013-roles-permisos/contracts/api-roles-permisos.md`
+- [ ] T019 Decidir el prefijo de los PENDIENTE emitidos antes de cambiarlo (bloquear con cualquier certificado o reasignar los nunca generados)
+- [ ] T020 F0 antes del evento: diseños finales, prueba de firma con FirmaPerú o ReFirma sobre un PDF generado (firma incremental, renombrado, sellos de tiempo), listas con DNI y correo, pedir a la UNDC el acceso a su API
+- [ ] T021 Panel (spec 010 del panel): página Certificados, editor visual con vista previa, tipos y configuración, carga de firmados en tandas, «Mis certificados» y `/verificar/[codigo]`
+- [ ] T022 Prueba integrada local (panel 3001 → backend 3010): plantilla, emisión, generación, ZIP, firmado simulado, portal y verificación
+- [ ] T023 Despliegue después del 30-oct-2026: respaldo, imagen con la migración 015, verificación, URL del panel en Sistema, confirmar el proveedor y respaldo de `uploads/certificados` tras cada carga (ver `docs/operacion.md`)
+- [ ] T024 API UNDC (cuando haya acceso): adaptador `undc.ts`, prueba de conexión, `register-external`, reasignación del código de lo no firmado y verificación por `codigoExterno`
+- [x] T025 Corrección de la revisión adversarial (firmados): firmas que verifican (CMS) solo en campos del AcroForm; lo agregado al generado solo puede traer firmas (toda versión de catálogo, páginas y AcroForm revisada; cabeceras y xref consistentes con lo leído); contenido activo rechazado; METADATOS solo forzado; reemplazar un FIRMADO es de `gestionar`; un EN_FIRMA solo se reemplaza por uno que lo continúe o tenga más firmas; firmados archivados en `firmados/reemplazados/`; `bytes_firmado` y `firmantes` en la migración 015 (aún no en producción; reaplicada en local y ensayada en `ciisic_ensayo_015c`)
+- [x] T026 Corrección de la revisión adversarial (resto): lectura acotada de PDF (bomba de descompresión) y turno de 2 cargas de firmados; diseños sin campos, firmas ni contenido activo; versión de la plantilla sin depender del orden de claves de MySQL; bajar `firmasRequeridas` promueve los EN_FIRMA; ZIP por cursor (`despuesDe`); HORAS y DETALLE vacíos no se imprimen; tope global de la verificación solo para códigos inexistentes
+- [ ] T027 Lista de emisores de confianza para las firmas (RENIEC/FirmaPerú) en la configuración de certificados, tras la prueba F0 con firmas reales

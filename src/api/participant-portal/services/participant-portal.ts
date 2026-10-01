@@ -7,7 +7,7 @@ import { conflict, notFound, unprocessable } from '../../../core/http-error'
 import { fechaSoloDia, horaLima } from '../../../core/fechas'
 import { monto } from '../../../core/catalogos'
 import { asegurarCodigoCredencial } from '../../../core/codigos'
-import { DIRECTORIO_FOTOS, nuevoNombreFoto, rutaFoto } from '../../../core/almacenamiento'
+import { DIRECTORIO_FOTOS, nuevoNombreFoto, rutaCertificadoFirmado, rutaFoto } from '../../../core/almacenamiento'
 import { limpiarMetadatos, MIME_POR_TIPO, TIPO_POR_MIME, tipoDeImagen, type TipoFoto } from '../../../core/imagenes'
 import { archivoCredencial } from '../../inscription/services/inscription'
 import { borrarCredenciales } from '../../inscription/utils/generatePdf'
@@ -289,4 +289,64 @@ export async function misAsistencias(participanteId: number) {
             actividades: delEvento,
         }
     })
+}
+
+// ─── Certificados (spec 015) ────────────────────────────────────────────────
+
+/** Solo los certificados FIRMADOS del participante: ni anulados ni en preparación. */
+const CERTIFICADO_PROPIO_FIRMADO = (participanteId: number) => ({ participanteId, estado: 'FIRMADO' as const })
+
+export const certificadoNoEncontrado = () => notFound('CERTIFICATE_NOT_FOUND', 'El certificado no existe o aún no está firmado.')
+
+/**
+ * Certificados firmados del participante, para ver y descargar. Sin documento, quién lo emitió ni
+ * rutas de archivo; la URL de verificación es la impresa en su QR.
+ */
+export async function misCertificados(participanteId: number) {
+    const filas = await prisma.certificado.findMany({
+        where: CERTIFICADO_PROPIO_FIRMADO(participanteId),
+        select: {
+            id: true,
+            codigo: true,
+            codigoImpreso: true,
+            fechaEmision: true,
+            horas: true,
+            detalle: true,
+            firmadoEn: true,
+            urlVerificacion: true,
+            evento: { select: { codigo: true, nombre: true, nombreCorto: true, fechaInicio: true, fechaFin: true } },
+            tipo: { select: { codigo: true, nombre: true } },
+        },
+        orderBy: [{ fechaEmision: 'desc' }, { id: 'desc' }],
+    })
+    return filas.map((c) => ({
+        id: c.id,
+        codigoImpreso: c.codigoImpreso ?? c.codigo,
+        evento: {
+            codigo: c.evento.codigo,
+            nombre: c.evento.nombre,
+            nombreCorto: c.evento.nombreCorto,
+            fechaInicio: fechaSoloDia(c.evento.fechaInicio),
+            fechaFin: fechaSoloDia(c.evento.fechaFin),
+        },
+        tipo: { codigo: c.tipo.codigo, nombre: c.tipo.nombre },
+        fechaEmision: fechaSoloDia(c.fechaEmision),
+        horas: c.horas,
+        detalle: c.detalle,
+        firmadoEn: c.firmadoEn,
+        urlVerificacion: c.urlVerificacion,
+    }))
+}
+
+/** Ruta y nombre de descarga del PDF firmado propio; 404 si es ajeno, no está firmado o falta el archivo. */
+export async function miCertificadoFirmado(participanteId: number, certificadoId: number): Promise<{ ruta: string, nombre: string }> {
+    const c = await prisma.certificado.findFirst({
+        where: { id: certificadoId, ...CERTIFICADO_PROPIO_FIRMADO(participanteId) },
+        select: { eventoId: true, codigo: true, codigoImpreso: true, archivoFirmado: true },
+    })
+    const ruta = c ? rutaCertificadoFirmado(c.eventoId, c.archivoFirmado) : null
+    if (!c || !ruta) throw certificadoNoEncontrado()
+    // El código impreso lo puede asignar la UNDC: en el nombre solo letras, números, guion y punto
+    const nombre = `certificado-${(c.codigoImpreso ?? c.codigo).replace(/[^A-Za-z0-9.-]+/g, '_')}.pdf`
+    return { ruta, nombre }
 }

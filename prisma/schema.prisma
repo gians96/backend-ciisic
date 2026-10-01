@@ -44,6 +44,11 @@ model Administrador {
   permisos                PermisoAdministrador[]
   asistenciasRegistradas  Asistencia[]           @relation("AsistenciaRegistradaPor")
   asistenciasAnuladas     Asistencia[]           @relation("AsistenciaAnuladaPor")
+  plantillasCertificado   PlantillaCertificado[] @relation("PlantillaCertificadoCreadaPor")
+  certificadosEmitidos    Certificado[]          @relation("CertificadoEmitidoPor")
+  certificadosEditados    Certificado[]          @relation("CertificadoEditadoPor")
+  certificadosCargados    Certificado[]          @relation("CertificadoFirmadoCargadoPor")
+  certificadosAnulados    Certificado[]          @relation("CertificadoAnuladoPor")
 
   @@index([rolId], map: "idx_administradores_rol")
   @@map("administradores")
@@ -115,6 +120,8 @@ model Evento {
   integraciones         IntegracionEvento[]
   tokensAcceso          TokenAcceso[]
   asignaciones          AsignacionEvento[]
+  plantillasCertificado PlantillaCertificado[]
+  certificados          Certificado[]
 
   @@index([credencialCorreoId], map: "idx_eventos_credencial_correo")
   @@map("eventos")
@@ -150,6 +157,7 @@ model Participante {
   inscripciones     Inscripcion[]
   asistencias       Asistencia[]
   codigosAcceso     CodigoAcceso[]
+  certificados      Certificado[]
 
   @@unique([tipoDocumentoId, numeroDocumento], map: "uq_participantes_documento")
   @@map("participantes")
@@ -270,6 +278,7 @@ model Inscripcion {
   clasificacion          Clasificacion?    @relation(fields: [clasificacionId], references: [id], onDelete: SetNull, map: "fk_inscripciones_clasificacion")
   estado                 EstadoInscripcion @relation(fields: [estadoId], references: [id], map: "fk_inscripciones_estado")
   revisadoPor            Administrador?    @relation("InscripcionRevisor", fields: [revisadoPorId], references: [id], onDelete: SetNull, map: "fk_inscripciones_revisado_por")
+  certificados           Certificado[]
 
   @@unique([eventoId, participanteId], map: "uq_inscripciones_evento_participante")
   @@index([participanteId], map: "idx_inscripciones_participante")
@@ -330,16 +339,17 @@ model Asistencia {
 // ─── Ponencias y contacto ────────────────────────────────────────────────────
 
 model Ponencia {
-  id              String   @id @db.VarChar(36)
-  eventoId        Int      @map("evento_id")
-  titulo          String   @db.VarChar(300)
-  autorPrincipal  Json     @map("autor_principal")
+  id              String        @id @db.VarChar(36)
+  eventoId        Int           @map("evento_id")
+  titulo          String        @db.VarChar(300)
+  autorPrincipal  Json          @map("autor_principal")
   coautores       Json
-  archivo         String   @db.VarChar(255)
-  archivoOriginal String   @map("archivo_original") @db.VarChar(255)
-  tamanoBytes     Int      @map("tamano_bytes")
-  creadoEn        DateTime @default(now()) @map("creado_en")
-  evento          Evento   @relation(fields: [eventoId], references: [id], map: "fk_ponencias_evento")
+  archivo         String        @db.VarChar(255)
+  archivoOriginal String        @map("archivo_original") @db.VarChar(255)
+  tamanoBytes     Int           @map("tamano_bytes")
+  creadoEn        DateTime      @default(now()) @map("creado_en")
+  evento          Evento        @relation(fields: [eventoId], references: [id], map: "fk_ponencias_evento")
+  certificados    Certificado[]
 
   @@index([eventoId, creadoEn], map: "idx_ponencias_evento_creado")
   @@map("ponencias")
@@ -560,6 +570,180 @@ model ConfiguracionSistema {
   actualizadoEn      DateTime           @updatedAt @map("actualizado_en")
   actualizadoPor     Administrador?     @relation(fields: [actualizadoPorId], references: [id], onDelete: SetNull, map: "fk_configuracion_sistema_actualizado_por")
 
+  /// Certificados (spec 015): proveedor del código (LOCAL ahora; UNDC cuando haya API), prefijo
+  /// del código local y si el proveedor ya se confirmó (sin eso no se descarga para firmar).
+  /// Proveedor, prefijo y confirmación: `certificados.gestionar`; el prefijo se bloquea en cuanto
+  /// hay un certificado generado. Credenciales de la API UNDC: solo Sistema (Owner), cifradas.
+  certificadosProveedor           ProveedorCertificados @default(LOCAL) @map("certificados_proveedor")
+  certificadosPrefijo             String                @default("CIISIC") @map("certificados_prefijo") @db.VarChar(20)
+  certificadosProveedorConfirmado Boolean               @default(false) @map("certificados_proveedor_confirmado")
+  certificadosUndcUrl             String?               @map("certificados_undc_url") @db.VarChar(255)
+  certificadosUndcUsuario         String?               @map("certificados_undc_usuario") @db.VarChar(191)
+  certificadosUndcSecretoCifrado  String?               @map("certificados_undc_secreto_cifrado") @db.Text
+  certificadosUndcSecretoSufijo   String?               @map("certificados_undc_secreto_sufijo") @db.VarChar(8)
+  certificadosUndcTimeoutMs       Int                   @default(10000) @map("certificados_undc_timeout_ms")
+  certificadosUndcUltimoEstado    EstadoIntegracion?    @map("certificados_undc_ultimo_estado")
+  certificadosUndcUltimoError     String?               @map("certificados_undc_ultimo_error") @db.VarChar(500)
+  certificadosUndcUltimaPruebaEn  DateTime?             @map("certificados_undc_ultima_prueba_en")
+
   @@index([actualizadoPorId], map: "idx_configuracion_sistema_actualizado_por")
   @@map("configuracion_sistema")
+}
+
+// ─── Certificados (spec 015) ─────────────────────────────────────────────────
+
+enum EstadoCertificado {
+  PENDIENTE
+  PREPARADO
+  EN_FIRMA
+  FIRMADO
+  ANULADO
+}
+
+/// Cómo se aceptó el PDF firmado: mismo prefijo de bytes que el generado, mismo `Subject`
+/// (`ciisic:<código>:<generación>`) o forzado por `certificados.gestionar` con motivo.
+enum CoincidenciaFirmado {
+  PREFIJO
+  METADATOS
+  FORZADO
+}
+
+enum EstadoRegistroExterno {
+  NO_APLICA
+  PENDIENTE
+  REGISTRADO
+  ERROR
+}
+
+/// Quién asigna el código que se imprime: LOCAL (`<PREFIJO>-<AÑO>-<NNNNNN>-<XXXXXX>`) o la API de
+/// certificados.undc.edu.pe (pendiente: responde 501).
+enum ProveedorCertificados {
+  LOCAL
+  UNDC
+}
+
+/// Catálogo de tipos (PARTICIPANTE, ORGANIZADOR, PONENTE sembrados por la migración). No se borran:
+/// se desactivan. El código no se edita.
+model TipoCertificado {
+  id           Int           @id @default(autoincrement())
+  codigo       String        @unique(map: "uq_tipos_certificado_codigo") @db.VarChar(40)
+  nombre       String        @db.VarChar(80)
+  textoImpreso String        @map("texto_impreso") @db.VarChar(80)
+  activo       Boolean       @default(true)
+  orden        Int           @default(0)
+  certificados Certificado[]
+
+  @@map("tipos_certificado")
+}
+
+/// Diseño PDF por evento (1–2 páginas, ≤5 MB) con sus campos en puntos PDF (origen abajo a la
+/// izquierda, coordenadas absolutas de la página). `version` sube cuando cambian los campos o el diseño.
+model PlantillaCertificado {
+  id               Int            @id @default(autoincrement())
+  eventoId         Int            @map("evento_id")
+  nombre           String         @db.VarChar(120)
+  /// `plantilla-<uuid>.pdf` en uploads/certificados/plantillas
+  archivoDiseno    String         @unique(map: "uq_plantillas_certificado_archivo") @map("archivo_diseno") @db.VarChar(80)
+  archivoOriginal  String         @map("archivo_original") @db.VarChar(255)
+  tamanoBytes      Int            @map("tamano_bytes")
+  paginas          Int
+  anchoPt          Float          @map("ancho_pt")
+  altoPt           Float          @map("alto_pt")
+  campos           Json
+  horasPorDefecto  Int?           @map("horas_por_defecto")
+  firmasRequeridas Int            @default(1) @map("firmas_requeridas")
+  version          Int            @default(1)
+  activa           Boolean        @default(true)
+  creadoPorId      Int?           @map("creado_por_id")
+  creadoEn         DateTime       @default(now()) @map("creado_en")
+  actualizadoEn    DateTime       @updatedAt @map("actualizado_en")
+  evento           Evento         @relation(fields: [eventoId], references: [id], map: "fk_plantillas_certificado_evento")
+  creadoPor        Administrador? @relation("PlantillaCertificadoCreadaPor", fields: [creadoPorId], references: [id], onDelete: SetNull, map: "fk_plantillas_certificado_creado_por")
+  certificados     Certificado[]
+
+  @@index([eventoId], map: "idx_plantillas_certificado_evento")
+  @@index([creadoPorId], map: "idx_plantillas_certificado_creado_por")
+  @@map("plantillas_certificado")
+}
+
+/// Certificado con código fijo y aleatorio asignado antes de firmar.
+/// PENDIENTE → PREPARADO (generado) → EN_FIRMA (firmas parciales) → FIRMADO | ANULADO.
+/// Los archivos van en uploads/certificados/<eventoId>/{generados,firmados}; la BD guarda solo el nombre.
+model Certificado {
+  id                     Int                   @id @default(autoincrement())
+  eventoId               Int                   @map("evento_id")
+  participanteId         Int                   @map("participante_id")
+  tipoCertificadoId      Int                   @map("tipo_certificado_id")
+  plantillaId            Int?                  @map("plantilla_id")
+  inscripcionId          Int?                  @map("inscripcion_id")
+  ponenciaId             String?               @map("ponencia_id") @db.VarChar(36)
+  /// Correlativo por evento (el NNNNNN del código)
+  numero                 Int
+  codigo                 String                @unique(map: "uq_certificados_codigo") @db.VarChar(40)
+  /// "<evento>:<participante>:<tipo>:<ponencia|->"; NULL solo si ANULADO (CHECK): se puede volver a emitir
+  claveVigente           String?               @unique(map: "uq_certificados_clave_vigente") @map("clave_vigente") @db.VarChar(80)
+  estado                 EstadoCertificado     @default(PENDIENTE)
+  nombreImpreso          String                @map("nombre_impreso") @db.VarChar(200)
+  tipoDocumento          String                @map("tipo_documento") @db.VarChar(10)
+  numeroDocumento        String                @map("numero_documento") @db.VarChar(20)
+  detalle                String?               @db.VarChar(500)
+  horas                  Int?
+  fechaEmision           DateTime              @map("fecha_emision") @db.Date
+  /// Código impreso y en el QR (LOCAL: el mismo `codigo`), fijado al generar
+  codigoImpreso          String?               @map("codigo_impreso") @db.VarChar(80)
+  /// `<url_panel>/verificar/<código>`, congelada al generar
+  urlVerificacion        String?               @map("url_verificacion") @db.VarChar(255)
+  plantillaVersion       Int?                  @map("plantilla_version")
+  /// 8 caracteres aleatorios por generación: va en el `Subject` y en el nombre del archivo generado
+  generacion             String?               @db.Char(8)
+  archivoGenerado        String?               @map("archivo_generado") @db.VarChar(120)
+  hashGenerado           String?               @map("hash_generado") @db.Char(64)
+  bytesGenerado          Int?                  @map("bytes_generado")
+  generadoEn             DateTime?             @map("generado_en")
+  descargadoParaFirmarEn DateTime?             @map("descargado_para_firmar_en")
+  archivoFirmado         String?               @map("archivo_firmado") @db.VarChar(120)
+  hashFirmado            String?               @map("hash_firmado") @db.Char(64)
+  /// Tamaño del firmado vigente: un parcial (EN_FIRMA) solo se reemplaza por uno que lo continúe o tenga más firmas
+  bytesFirmado           Int?                  @map("bytes_firmado")
+  /// Firmantes de las firmas que verificaron: [{nombre, emisor, serie, validoDesde, validoHasta, fechaFirma}]
+  firmantes              Json?
+  firmasDetectadas       Int                   @default(0) @map("firmas_detectadas")
+  coincidencia           CoincidenciaFirmado?
+  motivoForzado          String?               @map("motivo_forzado") @db.VarChar(500)
+  firmadoEn              DateTime?             @map("firmado_en")
+  codigoExterno          String?               @unique(map: "uq_certificados_codigo_externo") @map("codigo_externo") @db.VarChar(80)
+  registroExterno        EstadoRegistroExterno @default(NO_APLICA) @map("registro_externo")
+  registroExternoError   String?               @map("registro_externo_error") @db.VarChar(500)
+  registradoExternoEn    DateTime?             @map("registrado_externo_en")
+  anuladoEn              DateTime?             @map("anulado_en")
+  motivoAnulacion        String?               @map("motivo_anulacion") @db.VarChar(500)
+  emitidoPorId           Int?                  @map("emitido_por_id")
+  editadoPorId           Int?                  @map("editado_por_id")
+  firmadoCargadoPorId    Int?                  @map("firmado_cargado_por_id")
+  anuladoPorId           Int?                  @map("anulado_por_id")
+  creadoEn               DateTime              @default(now()) @map("creado_en")
+  actualizadoEn          DateTime              @updatedAt @map("actualizado_en")
+  evento                 Evento                @relation(fields: [eventoId], references: [id], map: "fk_certificados_evento")
+  participante           Participante          @relation(fields: [participanteId], references: [id], map: "fk_certificados_participante")
+  tipo                   TipoCertificado       @relation(fields: [tipoCertificadoId], references: [id], map: "fk_certificados_tipo")
+  plantilla              PlantillaCertificado? @relation(fields: [plantillaId], references: [id], onDelete: SetNull, map: "fk_certificados_plantilla")
+  inscripcion            Inscripcion?          @relation(fields: [inscripcionId], references: [id], onDelete: SetNull, map: "fk_certificados_inscripcion")
+  ponencia               Ponencia?             @relation(fields: [ponenciaId], references: [id], onDelete: SetNull, map: "fk_certificados_ponencia")
+  emitidoPor             Administrador?        @relation("CertificadoEmitidoPor", fields: [emitidoPorId], references: [id], onDelete: SetNull, map: "fk_certificados_emitido_por")
+  editadoPor             Administrador?        @relation("CertificadoEditadoPor", fields: [editadoPorId], references: [id], onDelete: SetNull, map: "fk_certificados_editado_por")
+  firmadoCargadoPor      Administrador?        @relation("CertificadoFirmadoCargadoPor", fields: [firmadoCargadoPorId], references: [id], onDelete: SetNull, map: "fk_certificados_firmado_cargado_por")
+  anuladoPor             Administrador?        @relation("CertificadoAnuladoPor", fields: [anuladoPorId], references: [id], onDelete: SetNull, map: "fk_certificados_anulado_por")
+
+  @@unique([eventoId, numero], map: "uq_certificados_evento_numero")
+  @@index([eventoId, estado], map: "idx_certificados_evento_estado")
+  @@index([participanteId], map: "idx_certificados_participante")
+  @@index([tipoCertificadoId], map: "idx_certificados_tipo")
+  @@index([plantillaId], map: "idx_certificados_plantilla")
+  @@index([inscripcionId], map: "idx_certificados_inscripcion")
+  @@index([ponenciaId], map: "idx_certificados_ponencia")
+  @@index([emitidoPorId], map: "idx_certificados_emitido_por")
+  @@index([editadoPorId], map: "idx_certificados_editado_por")
+  @@index([firmadoCargadoPorId], map: "idx_certificados_firmado_cargado_por")
+  @@index([anuladoPorId], map: "idx_certificados_anulado_por")
+  @@map("certificados")
 }

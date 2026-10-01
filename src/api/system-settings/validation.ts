@@ -13,6 +13,11 @@ export const actualizarConfiguracionSchema = yup.object({
     }).nullable(),
     urlPanel: yup.string().trim().max(255).nullable(),
     rutasLegacyActivas: yup.boolean(),
+    // API de certificados de la UNDC (spec 015, pendiente): el secreto es de solo escritura como la API key
+    certificadosUndcUrl: yup.string().trim().max(255).nullable(),
+    certificadosUndcUsuario: yup.string().trim().max(191).nullable(),
+    certificadosUndcSecreto: yup.string().trim().min(4).max(500).nullable(),
+    certificadosUndcTimeoutMs: yup.number().integer().min(1000).max(30000),
 }).required()
 
 export type ActualizarConfiguracionInput = yup.InferType<typeof actualizarConfiguracionSchema>

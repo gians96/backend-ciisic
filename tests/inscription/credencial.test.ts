@@ -20,6 +20,8 @@ jest.mock('../../src/database/prisma', () => {
         personaConsultada: { findUnique: jest.fn() },
         participante: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
         inscripcion: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn(), updateMany: jest.fn(), delete: jest.fn() },
+        // Borrar la inscripción revisa sus certificados vigentes (spec 015)
+        certificado: { count: jest.fn(async () => 0) },
     }
     mock.$transaction = jest.fn((fn: (tx: unknown) => unknown) => fn(mock))
     return { prisma: mock }

@@ -53,13 +53,23 @@ del token de acceso del evento, nunca de un parámetro del cliente.
 - Las URLs salientes configuradas por administradores se validan contra SSRF
   (`src/core/url-saliente.ts`): https y, en producción, nunca destinos internos.
 - Las rutas públicas con costo o abuso posible (consultas DNI, verificación, contacto,
-  inscripción, ponencias) tienen rate limit.
-- Las respuestas públicas no exponen datos personales de terceros.
+  inscripción, ponencias, verificación de certificados) tienen rate limit.
+- Las respuestas públicas no exponen datos personales de terceros. Única excepción: la
+  verificación de un certificado FIRMADO o ANULADO muestra lo que ya va impreso en él (titular,
+  tipo, evento, fechas y horas), nunca el documento, el correo, el motivo de una anulación ni el
+  archivo.
+- La familia pública `/api/v1/public/*` (sin sesión ni token) solo admite consultas de solo
+  lectura por un código no adivinable (al menos 30 bits aleatorios), con límite por IP **y** uno
+  global, `404` idéntico para lo que no existe o no debe mostrarse (un código con otro formato no
+  llega a la BD) y `Cache-Control: no-store`.
 
 ### IV. Contratos explícitos
 - Rutas nuevas bajo `/api/v1`: administración con JWT de admin, `/api/v1/site/*` para la
-  landing de cada evento (token de acceso), `/api/v1/me/*` para el portal del inscrito y
-  `/api/v1/auth/*` para sesiones y configuración pública.
+  landing de cada evento (token de acceso), `/api/v1/me/*` para el portal del inscrito,
+  `/api/v1/auth/*` para sesiones y configuración pública y `/api/v1/public/*` para verificaciones
+  públicas sin token (principio III; hoy, la de certificados). Una ruta nueva en esta familia se
+  justifica en su spec y se declara como pública intencional en las pruebas de seguridad; nunca
+  comparte prefijo con rutas administrativas.
 - Respuestas de éxito nuevas: `{ success: true, data, meta? }`. Errores:
   `{ success: false, code, message, fields? }` (normalizados por `normalizeErrorResponses`).
 - Cualquier cambio de contrato se refleja en `specs/<feature>/contracts/` y, si afecta a
@@ -77,7 +87,8 @@ del token de acceso del evento, nunca de un parámetro del cliente.
 ## Stack y convenciones
 
 - Node 22, Express 5, TypeScript estricto (CommonJS), Prisma 6 sobre MySQL 8, yup para
-  validación, jsonwebtoken (HS256, Bearer), multer, Puppeteer (PDF), Brevo (correo), Jest +
+  validación, jsonwebtoken (HS256, Bearer), multer, Puppeteer (PDF de credenciales), pdf-lib +
+  @pdf-lib/fontkit (certificados sobre un diseño PDF), yazl (ZIP en flujo), Brevo (correo), Jest +
   supertest.
 - Módulos en `src/api/<nombre-en-ingles-kebab>/{controllers,routes,services}` +
   `validation.ts`; las rutas se autocargan (`src/loaders/routesLoader.ts`) con
@@ -101,7 +112,16 @@ del token de acceso del evento, nunca de un parámetro del cliente.
 Esta constitución prevalece sobre prácticas ad-hoc. Enmiendas: se documentan en este
 archivo con fecha y motivo, y se revisan en el PR correspondiente.
 
-**Versión**: 1.3.0 | **Ratificada**: 2026-09-29 | **Última enmienda**: 2026-09-30
+**Versión**: 1.4.0 | **Ratificada**: 2026-09-29 | **Última enmienda**: 2026-10-01
+
+- 1.4.0 (2026-10-01): principios III y IV, familia pública `/api/v1/public/*` para verificar
+  certificados con el QR impreso (spec 015): sin token, solo lectura, código no adivinable,
+  límites por IP y global, `404` idéntico para lo que no esté FIRMADO ni ANULADO y sin documento,
+  correo ni archivo; excepción explícita a «las respuestas públicas no exponen datos personales de
+  terceros» para lo que ya va impreso en el certificado. Motivo: cualquiera que reciba un
+  certificado firmado debe poder verificarlo sin sesión, y la revisión adversarial pidió una familia
+  propia en lugar de una ruta pública bajo un prefijo administrativo (`/v1/certificates/verify`).
+  Stack: pdf-lib + fontkit y yazl.
 
 - 1.3.0 (2026-09-30): principio III, autorización del staff por permisos (`requirePermiso` /
   `requireActor`) con la cuenta leída de la BD en cada petición, en lugar de roles fijos leídos

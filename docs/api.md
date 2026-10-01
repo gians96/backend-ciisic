@@ -9,10 +9,11 @@ Base `/api`. Respuestas de éxito `{ "success": true, "data": … , "meta"? }`; 
 
 | Audiencia | Cómo | Rutas |
 |---|---|---|
-| Administración (staff) | `Authorization: Bearer <JWT>` (aud `ciisic-admin`, 1 h renovable); permiso por ruta según el rol: Owner, Administrador del sistema, Tesorero o Comisión (spec 013) | `/api/v1/events…`, `/inscriptions…`, `/settings`, `/email-credentials`, `/lookup-tokens`, `/admin`, `POST /api/v1/auth/refresh`, `POST /api/v1/auth/participant/switch`, … |
+| Administración (staff) | `Authorization: Bearer <JWT>` (aud `ciisic-admin`, 1 h renovable); permiso por ruta según el rol: Owner, Administrador del sistema, Tesorero o Comisión (spec 013) | `/api/v1/events…`, `/inscriptions…`, `/certificates…`, `/certificate-templates…`, `/settings`, `/email-credentials`, `/lookup-tokens`, `/admin`, `POST /api/v1/auth/refresh`, `POST /api/v1/auth/participant/switch`, … |
 | Sitio del evento (landing u otra plataforma) | `X-Api-Key: <token de acceso del evento>` (+ `X-Client-Ip` desde un BFF) | `/api/v1/site/*` |
 | Portal del inscrito | `Authorization: Bearer <JWT>` (aud `ciisic-participante`, 12 h; con Google o con un código por correo) | `/api/v1/me/*` |
 | Sesión y configuración pública | sin token (con límites) | `POST /api/v1/auth/login`, `POST /api/v1/auth/google`, `POST /api/v1/auth/participant/code`, `POST /api/v1/auth/participant/code/verify`, `GET /api/v1/auth/config` |
+| Verificación pública (spec 015) | sin token, con límite por IP **y** global; solo lectura con un código no adivinable y sin documento | `GET /api/v1/public/certificates/:codigo` |
 
 Un token de un perfil en rutas de otro responde `403 FORBIDDEN`.
 
@@ -35,6 +36,17 @@ asistencia con `{ codigo }` y acepta el QR anterior (`{ participanteId }`) con `
 hasta el fin del evento. Una reinscripción con otro correo conserva el correo registrado, aunque el
 nuevo venga verificado con Google (`correoConservado: true`); solo el staff lo cambia.
 
+Certificados (spec 015): plantillas PDF por evento con campos ubicados y vista previa; emisión
+(individual, desde inscritos aprobados con asistencia mínima o por lista) con plantilla obligatoria
+y un código fijo `<PREFIJO>-<AÑO>-<NNNNNN>-<XXXXXX>`; generación en tandas síncronas de 10;
+descarga para firmar (archivo o ZIP) solo con el proveedor del código confirmado
+(`409 PROVIDER_NOT_CONFIRMED`); carga de firmados en tandas que solo acepta el PDF generado vigente
+(`SIGNED_MISMATCH`). Permisos `certificados.gestionar` (global), `certificados.operar` y
+`certificados.ver` (por evento; elegibles para la Comisión). El portal (`GET /api/v1/me/certificates`)
+lista solo los firmados propios y la verificación pública (`GET /api/v1/public/certificates/:codigo`)
+responde solo FIRMADO (`VALIDO`) o ANULADO, sin documento. El código de la API de la UNDC está
+pendiente (`501 CERTIFICATE_PROVIDER_PENDING`).
+
 ## Contratos (fuente de verdad)
 
 | Área | Contrato |
@@ -52,6 +64,7 @@ nuevo venga verificado con Google (`correoConservado: true`); solo el staff lo c
 | Acceso al portal con código por correo y cambio del staff al portal | [`specs/014-portal-fotocheck-asistencia/contracts/api-acceso-codigo.md`](../specs/014-portal-fotocheck-asistencia/contracts/api-acceso-codigo.md) |
 | Asistencia por QR, código y PDF de la credencial, alta de participantes, cortesías y correo conservado | [`specs/014-portal-fotocheck-asistencia/contracts/api-asistencia.md`](../specs/014-portal-fotocheck-asistencia/contracts/api-asistencia.md) |
 | Roles, permisos y alcance por evento (permiso de cada ruta, sesión con `acceso`, equipo) | [`specs/013-roles-permisos/contracts/api-roles-permisos.md`](../specs/013-roles-permisos/contracts/api-roles-permisos.md) |
+| Certificados: tipos, plantillas, emisión, generación, firmados, descargas, portal y verificación pública | [`specs/015-certificados/contracts/api-certificados.md`](../specs/015-certificados/contracts/api-certificados.md) |
 | Rutas legacy (landing anterior) | [`specs/002-multi-evento/contracts/api-publica.md`](../specs/002-multi-evento/contracts/api-publica.md) |
 
 ## Límites
@@ -70,9 +83,22 @@ nuevo venga verificado con Google (`correoConservado: true`); solo el staff lo c
   llevan `Retry-After`.
 - Por token del sitio: lecturas 3000/min, DNI 60/min y 1500/día, verificación 50/min, Google
   300/min, inscripciones 150/15 min, ponencias y contacto 60/15 min.
-- Por participante (portal): 60/min; descarga de credencial 10/min; cambio de foto 10/h.
+- Por participante (portal): 60/min; descarga de credencial o de certificado 10/min; cambio de
+  foto 10/h.
 - Por cuenta de staff: marcar asistencia 120/min (solo Tesorero y Comisión), reenvío de
-  credencial 20/15 min, renovación de sesión 30/15 min, cambio al portal 20/15 min.
+  credencial 20/15 min, renovación de sesión 30/15 min, cambio al portal 20/15 min, vista previa
+  de plantillas de certificado 30/min y cargas de firmados 30/min.
+- Verificación pública de certificados (spec 015): 30/min por IP y un tope global de 1200 códigos
+  **inexistentes** por minuto (pasado el tope, esos responden `429`; un código real siempre
+  responde); un código con otro formato responde `404` sin consultar la BD ni contar.
+- Carga de firmados (en memoria, por proceso): 2 cargas a la vez y 4 en espera, antes de leer el
+  cuerpo (`503 SIGNED_UPLOAD_BUSY`, `Retry-After: 5`). Los PDF de afuera (diseños y firmados) se leen
+  con topes de descompresión (32 MiB por flujo, 64 MiB por archivo).
+- Certificados (en memoria, por proceso): generación 2 tandas a la vez y 4 en espera
+  (`503 GENERATION_BUSY`, `Retry-After: 5`); vista previa 2 a la vez y 10 en espera
+  (`503 PDF_BUSY`). Tamaños: diseño 5 MB y 2 páginas; firmado 10 MB; carga de 10 archivos y 25 MB
+  con `Content-Length` obligatorio (`411 LENGTH_REQUIRED`); 10 certificados por tanda de
+  generación; 300 filas y 50 consultas DNI por importación; ZIP de hasta 500 por parte.
 - Generación de PDF de credenciales (global, en memoria): 2 a la vez y 30 en cola, cada paso de
   puppeteer con un tope de 30 s; con la cola llena, `503 PDF_BUSY` (`Retry-After: 10`) en las
   descargas y `credencialEnviada: false` al aprobar o reenviar.

@@ -7,6 +7,7 @@ import { monto } from '../../../core/catalogos'
 import type { Actor } from '../../../core/actor'
 import { obtenerEventoPorId } from './public-event'
 import { limpiarQrs, qrsDe, verificarQrs } from '../../payment-qr/services/payment-qr'
+import { borrarArchivo, rutaPlantilla } from '../../../core/almacenamiento'
 import type { ActualizarEventoInput, CrearEventoInput } from '../validation'
 
 type CredencialResumen = { id: number, nombre: string, remitenteCorreo: string }
@@ -208,21 +209,30 @@ export async function actualizarEvento(id: number, input: ActualizarEventoInput)
 
 export async function eliminarEvento(id: number) {
     const evento = await obtenerEventoPorId(id)
-    const [inscripciones, ponencias, asistencias] = await Promise.all([
+    const [inscripciones, ponencias, asistencias, certificados] = await Promise.all([
         prisma.inscripcion.count({ where: { eventoId: id } }),
         prisma.ponencia.count({ where: { eventoId: id } }),
         prisma.asistencia.count({ where: { actividad: { eventoId: id } } }),
+        prisma.certificado.count({ where: { eventoId: id } }),
     ])
-    if (inscripciones || ponencias || asistencias) {
-        throw conflict('EVENT_HAS_INSCRIPTIONS', 'El evento tiene inscripciones, ponencias o asistencias; archívelo en lugar de eliminarlo.')
+    if (inscripciones || ponencias || asistencias || certificados) {
+        throw conflict('EVENT_HAS_INSCRIPTIONS', 'El evento tiene inscripciones, ponencias, asistencias o certificados; archívelo en lugar de eliminarlo.')
     }
+    // Plantillas de certificado sin certificados (spec 015): se borran con el evento y luego sus PDF
+    const plantillas = await prisma.plantillaCertificado.findMany({ where: { eventoId: id }, select: { archivoDiseno: true } })
     await prisma.$transaction([
+        prisma.plantillaCertificado.deleteMany({ where: { eventoId: id } }),
         prisma.tipoInscripcion.deleteMany({ where: { categoria: { eventoId: id } } }),
         prisma.categoriaInscripcion.deleteMany({ where: { eventoId: id } }),
         prisma.actividad.deleteMany({ where: { eventoId: id } }),
         prisma.evento.delete({ where: { id } }),
     ])
     await limpiarQrs(qrsDe(evento.datosPago), new Set())
+    for (const { archivoDiseno } of plantillas) {
+        await borrarArchivo(rutaPlantilla(archivoDiseno)).catch((error: unknown) => {
+            console.error(`No se pudo borrar el diseño de una plantilla del evento ${id}:`, error instanceof Error ? error.message : error)
+        })
+    }
 }
 
 /** KPIs del evento para el panel. Sin `conPago` (Comisión) los montos van en null con las mismas claves. */

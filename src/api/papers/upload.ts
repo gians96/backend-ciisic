@@ -16,6 +16,5 @@ export const paperUpload = multer({
   },
 })
 
-export function hasPdfSignature(buffer: Buffer): boolean {
-  return /^%PDF-\d\.\d/.test(buffer.subarray(0, 8).toString('ascii')) && buffer.subarray(-1024).includes(Buffer.from('%%EOF'))
-}
+// La comprobación vive en core/pdf.ts (la comparten las plantillas y los firmados de certificados)
+export { hasPdfSignature } from '../../core/pdf'

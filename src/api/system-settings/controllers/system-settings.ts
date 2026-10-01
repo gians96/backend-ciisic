@@ -20,6 +20,12 @@ export async function testUndc(_req: Request, res: Response) {
     res.json({ success: true, data: await service.probarUndc() })
 }
 
+/** API de certificados de la UNDC (spec 015): 501 `CERTIFICATE_PROVIDER_PENDING` mientras no haya API. */
+export async function testCertificadosUndc(_req: Request, res: Response) {
+    res.setHeader('Cache-Control', 'no-store')
+    res.json({ success: true, data: await service.probarCertificadosUndc() })
+}
+
 /**
  * Configuración pública (client ID de Google y URL del panel): nada secreto. La landing
  * (`/v1/site/config`, con el token del evento) la recibe sin cambios; el panel (`/v1/auth/config`)

@@ -123,6 +123,37 @@ describe('permisos elegibles de la Comisión', () => {
     })
 })
 
+describe('permisos de certificados (spec 015)', () => {
+    it('gestionar es global; ver y operar son por evento y operar implica ver', () => {
+        expect(ALCANCE['certificados.gestionar']).toBe('G')
+        expect(ALCANCE['certificados.ver']).toBe('E')
+        expect(ALCANCE['certificados.operar']).toBe('E')
+        expect(ordenados(cierre(['certificados.operar']))).toEqual(['certificados.operar', 'certificados.ver'])
+        expect(ETIQUETAS_PERMISO['certificados.operar']).toMatch(/firmar/)
+    })
+
+    it('la Comisión puede elegir ver u operar, nunca gestionar, y no vienen preseleccionados', () => {
+        expect(PERMISOS_ELEGIBLES_COMISION).toEqual(expect.arrayContaining(['certificados.ver', 'certificados.operar']))
+        expect(PERMISOS_ELEGIBLES_COMISION).not.toContain('certificados.gestionar')
+        expect(PERMISOS_COMISION_POR_DEFECTO).not.toContain('certificados.ver')
+        expect(PERMISOS_COMISION_POR_DEFECTO).not.toContain('certificados.operar')
+        expect(ordenados(permisosEfectivos(ROL.COMISION, ['certificados.operar']))).toEqual(['certificados.operar', 'certificados.ver'])
+        expect(ordenados(permisosEfectivos(ROL.COMISION, ['certificados.ver']))).toEqual(['certificados.ver'])
+        expect(permisosEfectivos(ROL.COMISION, ['certificados.gestionar']).size).toBe(0)
+    })
+
+    it('el Tesorero ve certificados pero no los opera ni gestiona; Owner y Administrador tienen los tres', () => {
+        const tesorero = permisosEfectivos(ROL.TESORERO)
+        expect(tesorero.has('certificados.ver')).toBe(true)
+        expect(tesorero.has('certificados.operar')).toBe(false)
+        expect(tesorero.has('certificados.gestionar')).toBe(false)
+        for (const rol of [ROL.OWNER, ROL.ADMINISTRADOR]) {
+            const efectivos = permisosEfectivos(rol)
+            for (const p of ['certificados.gestionar', 'certificados.operar', 'certificados.ver'] as Permiso[]) expect(efectivos.has(p)).toBe(true)
+        }
+    })
+})
+
 describe('roles: alcance y delegación', () => {
     it('Owner y Administrador son globales; Tesorero y Comisión, por evento', () => {
         expect(ROLES.map((rol) => [rol, alcanceDeRol(rol)])).toEqual([

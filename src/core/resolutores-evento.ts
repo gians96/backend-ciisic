@@ -53,3 +53,15 @@ export const eventoDePonencia = resolutor('ponencia', async (req) => {
     const fila = await prisma.ponencia.findUnique({ where: { id: uuidRecepcion(req.params.id) }, select: { eventoId: true } })
     return fila?.eventoId ?? null
 })
+
+/** Certificado por id (spec 015): `/v1/certificates/:id/...`. */
+export const eventoDeCertificado = resolutor('certificado', async (req) => {
+    const fila = await prisma.certificado.findUnique({ where: { id: idParam(req.params.id) }, select: { eventoId: true } })
+    return fila?.eventoId ?? null
+})
+
+/** Plantilla de certificado por id (spec 015): `/v1/certificate-templates/:id/...`. */
+export const eventoDePlantilla = resolutor('plantilla', async (req) => {
+    const fila = await prisma.plantillaCertificado.findUnique({ where: { id: idParam(req.params.id) }, select: { eventoId: true } })
+    return fila?.eventoId ?? null
+})

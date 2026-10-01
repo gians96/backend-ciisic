@@ -5,10 +5,12 @@ import * as auth from '../../src/middlewares/auth'
 import { requireParticipante, requirePermiso, requireSesion, type GuardaPermiso } from '../../src/middlewares/auth'
 import { requireTokenEvento } from '../../src/middlewares/sitio'
 import { rutaLegacy } from '../../src/middlewares/legacy'
-import { limiteMarcarAsistencia, limiteReenvioCredencial, limiteRenovacionSesion, limiteSwitch } from '../../src/middlewares/rate-limit'
+import { limiteCargaFirmados, limiteMarcarAsistencia, limiteReenvioCredencial, limiteRenovacionSesion, limiteSwitch, limiteVerificacionCertificado } from '../../src/middlewares/rate-limit'
+import { limiteVistaPrevia } from '../../src/api/certificate/routes/certificate-template'
+import { turnoCargaFirmados } from '../../src/api/certificate/upload-firmados'
 import { ALCANCE, type Permiso } from '../../src/core/permisos'
 import {
-    eventoDeActividad, eventoDeAsistencia, eventoDeInscripcion, eventoDelParametro, eventoDeMensaje, eventoDePonencia,
+    eventoDeActividad, eventoDeAsistencia, eventoDeCertificado, eventoDeInscripcion, eventoDelParametro, eventoDeMensaje, eventoDePonencia,
 } from '../../src/core/resolutores-evento'
 
 /**
@@ -79,6 +81,9 @@ const PUBLICAS: readonly Clave[] = [
     'POST /v1/papers',
     'GET /v1/registration-types',
     'GET /v1/registration-types/:id',
+    // Verificación pública de certificados (spec 015, constitución 1.4.0): código no adivinable, 404
+    // idéntico para lo que no corresponde, sin documento; límite por IP y tope global de fallos
+    'GET /v1/public/certificates/:codigo',
 ]
 
 /** API del sitio: el evento sale del token de acceso (`requireTokenEvento`). */
@@ -100,6 +105,8 @@ const PARTICIPANTE: readonly Clave[] = [
     'GET /v1/me', 'GET /v1/me/inscriptions', 'GET /v1/me/inscriptions/:id/credential',
     // Portal v2 (spec 014)
     'PATCH /v1/me/profile', 'GET /v1/me/photo', 'PUT /v1/me/photo', 'DELETE /v1/me/photo', 'GET /v1/me/inscriptions/:id/badge', 'GET /v1/me/attendances',
+    // Certificados firmados propios (spec 015)
+    'GET /v1/me/certificates', 'GET /v1/me/certificates/:id/file',
 ]
 const SESION: readonly Clave[] = ['GET /v1/auth/session']
 
@@ -143,6 +150,38 @@ const MATRIZ: Record<Clave, Esperada> = {
     'POST /v1/auth/refresh': ACTOR,
     // participant-auth: el staff que entró con Google pasa a su portal (el servicio exige el método)
     'POST /v1/auth/participant/switch': ACTOR,
+
+    // certificate (spec 015): gestionar es global; ver y operar, por evento
+    'GET /v1/events/:eventId/certificates': g('certificados.ver', P()),
+    'GET /v1/events/:eventId/certificates/zip': g('certificados.operar', P()),
+    'POST /v1/events/:eventId/certificates': g('certificados.gestionar'),
+    'POST /v1/events/:eventId/certificates/from-inscriptions': g('certificados.gestionar'),
+    'POST /v1/events/:eventId/certificates/import': g('certificados.gestionar'),
+    'POST /v1/events/:eventId/certificates/generate': g('certificados.operar', P()),
+    'GET /v1/certificates/:id': g('certificados.ver', eventoDeCertificado),
+    'PUT /v1/certificates/:id': g('certificados.gestionar'),
+    'DELETE /v1/certificates/:id': g('certificados.gestionar'),
+    // generado (para firmar): además operar, en el servicio
+    'GET /v1/certificates/:id/file': g('certificados.ver', eventoDeCertificado),
+    // reemplazar un FIRMADO o forzar: además gestionar, en el servicio
+    'POST /v1/events/:eventId/certificates/signed': g('certificados.operar', P()),
+    'PUT /v1/certificates/:id/signed': g('certificados.operar', eventoDeCertificado),
+    'DELETE /v1/certificates/:id/signed': g('certificados.gestionar'),
+    'POST /v1/certificates/:id/annul': g('certificados.gestionar'),
+    'GET /v1/certificate-types': { permisos: ['certificados.gestionar', 'certificados.ver'], evento: null, filtraPorActor: true },
+    'POST /v1/certificate-types': g('certificados.gestionar'),
+    'PUT /v1/certificate-types/:id': g('certificados.gestionar'),
+    'GET /v1/certificate-fonts': g('certificados.gestionar'),
+    'GET /v1/events/:eventId/certificate-templates': g('certificados.gestionar'),
+    'POST /v1/events/:eventId/certificate-templates': g('certificados.gestionar'),
+    'GET /v1/certificate-templates/:id': g('certificados.gestionar'),
+    'PUT /v1/certificate-templates/:id': g('certificados.gestionar'),
+    'DELETE /v1/certificate-templates/:id': g('certificados.gestionar'),
+    'GET /v1/certificate-templates/:id/design': g('certificados.gestionar'),
+    'PUT /v1/certificate-templates/:id/design': g('certificados.gestionar'),
+    'POST /v1/certificate-templates/:id/preview': g('certificados.gestionar'),
+    'GET /v1/certificate-settings': g('certificados.gestionar'),
+    'PUT /v1/certificate-settings': g('certificados.gestionar'),
 
     // catalog
     'POST /v1/classification': g('catalogos.configurar'),
@@ -237,6 +276,7 @@ const MATRIZ: Record<Clave, Esperada> = {
     'GET /v1/settings': g('sistema.configurar'),
     'PUT /v1/settings': g('sistema.configurar'),
     'POST /v1/settings/undc-api/test': g('sistema.configurar'),
+    'POST /v1/settings/certificados-undc/test': g('sistema.configurar'),
 }
 
 /** Rutas legacy de staff: `[rutaLegacy, guarda, ...]`. */
@@ -253,9 +293,9 @@ const esGuarda = (h: Handle) => Object.prototype.hasOwnProperty.call(h, 'guarda'
 const esMulter = (h: Handle) => h.name === 'multerMiddleware'
 const esValidacion = (h: Handle) => h.validaCuerpo === true
 /** Limitadores con clave por cuenta: necesitan `req.actor`, que deja la guarda. */
-const LIMITES_POR_ACTOR: readonly RequestHandler[] = [limiteMarcarAsistencia, limiteReenvioCredencial, limiteRenovacionSesion, limiteSwitch]
+const LIMITES_POR_ACTOR: readonly RequestHandler[] = [limiteMarcarAsistencia, limiteReenvioCredencial, limiteRenovacionSesion, limiteSwitch, limiteVistaPrevia, limiteCargaFirmados]
 /** Total de rutas de /api: una ruta nueva obliga a clasificarla aquí. */
-const TOTAL_RUTAS = 129
+const TOTAL_RUTAS = 161
 
 function clasesDe(ruta: Ruta): Clase[] {
     const clases: Clase[] = []
@@ -325,6 +365,8 @@ describe('matriz de rutas (spec 013)', () => {
         // La detección de multer y validateBody funciona (si no, lo anterior no probaría nada)
         expect(rutas.filter((r) => r.handles.some(esMulter)).map((r) => r.clave).sort()).toEqual([
             'POST /v1/inscription', 'POST /v1/papers', 'POST /v1/payment-qr', 'POST /v1/site/inscriptions', 'POST /v1/site/papers', 'PUT /v1/me/photo',
+            'POST /v1/events/:eventId/certificate-templates', 'PUT /v1/certificate-templates/:id/design',
+            'POST /v1/events/:eventId/certificates/signed', 'PUT /v1/certificates/:id/signed',
         ].sort())
         expect(rutas.filter((r) => r.handles.some(esValidacion)).length).toBeGreaterThan(30)
     })
@@ -344,6 +386,26 @@ describe('matriz de rutas (spec 013)', () => {
         expect(con(limiteReenvioCredencial)).toEqual(['POST /v1/inscriptions/:id/resend-credential'])
         expect(con(limiteRenovacionSesion)).toEqual(['POST /v1/auth/refresh'])
         expect(con(limiteSwitch)).toEqual(['POST /v1/auth/participant/switch'])
+        expect(con(limiteVistaPrevia)).toEqual(['POST /v1/certificate-templates/:id/preview'])
+        expect(con(limiteCargaFirmados).sort()).toEqual(['POST /v1/events/:eventId/certificates/signed', 'PUT /v1/certificates/:id/signed'])
+    })
+
+    it('la carga de firmados toma turno después de la guarda y antes de leer el cuerpo', () => {
+        for (const clave of ['POST /v1/events/:eventId/certificates/signed', 'PUT /v1/certificates/:id/signed']) {
+            const ruta = rutas.find((r) => r.clave === clave) as Ruta
+            const turno = ruta.handles.indexOf(turnoCargaFirmados as Handle)
+            expect({ clave, turno: turno > ruta.handles.findIndex(esGuarda) }).toEqual({ clave, turno: true })
+            expect({ clave, antesDeMulter: turno < ruta.handles.findIndex(esMulter) }).toEqual({ clave, antesDeMulter: true })
+        }
+    })
+
+    it('/v1/public/* es solo lectura, pública intencional y con límite por IP primero', () => {
+        const publicas = rutas.filter((r) => r.clave.includes(' /v1/public/'))
+        expect(publicas.map((r) => r.clave)).toEqual(['GET /v1/public/certificates/:codigo'])
+        for (const ruta of publicas) {
+            expect(PUBLICAS).toContain(ruta.clave)
+            expect(ruta.handles[0]).toBe(limiteVerificacionCertificado)
+        }
     })
 
     it('todo permiso por evento (E) tiene resolutor de evento o filtraPorActor', () => {

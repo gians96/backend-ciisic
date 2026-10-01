@@ -22,8 +22,11 @@ actualizar este documento.
 ciisic-undc-web ──(BFF Nitro · X-Api-Key del evento · /api/v1/site/*)──► backend-ciisic ◄──(BFF Nitro, cookie httpOnly)── administrator-ciisic-frontend
                                               │  ├─► Decolecta / apiperu  (pool de tokens rotativo, caché, bitácora)
                                               │  ├─► API_UNDC  POST /externo/estudiantes/verificar  (X-API-Key)
-                                              │  └─► deportes-fi GET /api/v1/integrations/event/*   (X-Api-Key por evento)
+                                              │  ├─► deportes-fi GET /api/v1/integrations/event/*   (X-Api-Key por evento)
+                                              │  └─► certificados.undc.edu.pe  (código de certificados: PENDIENTE, contrato 7)
 API_UNDC ◄── app-web-sigenet (gestión de Clientes API)      deportes-fi backend ◄── deportes-fi frontend (tokens por evento)
+
+QR del certificado ──► panel /verificar/<código> (página pública) ──(BFF, X-Forwarded-For)──► backend GET /api/v1/public/certificates/:codigo (contrato 6)
 ```
 
 ## Principios transversales
@@ -354,14 +357,48 @@ Definido en `specs/014-portal-fotocheck-asistencia/contracts/api-asistencia.md` 
   el backend 014 solo. Con el panel anterior, cada credencial que se apruebe, reenvíe o descargue
   lleva el QR nuevo y su escáner lo rechaza en el navegador («usa DNI / documento»).
 
+### Certificados (spec 015)
+
+Definido en `specs/015-certificados/contracts/api-certificados.md` (panel: spec 010).
+
+- Permisos: `certificados.gestionar` (global: tipos, plantillas, emitir, editar, anular, forzar,
+  proveedor y prefijo), `certificados.operar` (por evento: generar, descargar para firmar, subir
+  firmados) y `certificados.ver` (por evento: listar, ver, descargar firmados). `ver` y `operar` son
+  elegibles para la Comisión (nunca preseleccionados); el Tesorero tiene `ver`. Las credenciales de la
+  API UNDC están en Sistema (`certificadosUndc` en `GET|PUT /api/v1/settings`, solo Owner).
+- Flujo que maneja el panel, siempre en tandas síncronas: plantilla (`/certificate-templates`, editor
+  sobre `GET …/design` y vista previa `POST …/preview` con avisos en `X-Avisos` =
+  `encodeURIComponent(JSON)`) → emitir (individual, `from-inscriptions` o `import`, con `simular`) →
+  generar (`POST …/certificates/generate` con `{ pendientes: true, despuesDeId }` mientras `hayMas`)
+  → confirmar el proveedor (`PUT /certificate-settings`) → ZIP para firmar por partes (cursor:
+  `despuesDe=<X-Zip-Siguiente>` mientras `X-Zip-Hay-Mas` sea `true`) → firmar fuera → subir firmados
+  en tandas de ≤10 PDF y ≤10 MB (`POST …/certificates/signed`; un ZIP se abre en el navegador;
+  `503 SIGNED_UPLOAD_BUSY` → reintentar tras `Retry-After`).
+- El BFF debe **transmitir el multipart en flujo** (`streamRequest`) y enviar `Content-Length` (sin él,
+  `411 LENGTH_REQUIRED`; más de 25 MB, `413`). Las cabeceras `X-Avisos*` y `X-Zip-*` no están en
+  `exposedHeaders` de CORS: el panel las lee en su BFF (mismo origen).
+- Errores que el panel debe manejar: `409 PROVIDER_NOT_CONFIRMED`, `422 VERIFICATION_URL_NOT_CONFIGURED`
+  (falta la URL del panel en Sistema), `501 CERTIFICATE_PROVIDER_PENDING`, `503 GENERATION_BUSY` y
+  `503 PDF_BUSY` (con `Retry-After`), `409 CERTIFICATE_SENT_TO_SIGN` (repetir con `confirmar: true`),
+  `409 CERTIFICATE_LOCKED`, `409 TEMPLATE_CHANGED`, `409 TEMPLATE_IN_USE`,
+  `409 CERTIFICATE_SETTINGS_LOCKED`, `422 INVALID_TEMPLATE_FIELDS` (`fields` por campo),
+  `422 PDF_HAS_FORM_FIELDS` · `PDF_ACTIVE_CONTENT` (diseño), `409 SIGNATURES_NOT_EXTENDED` y los
+  resultados por archivo de la carga (`SIGNED_MISMATCH`, `SIGNED_REWRITTEN`, `SIGNED_MODIFIED`,
+  `SIGNATURE_INVALID`, `PDF_ACTIVE_CONTENT`, `SIGNATURE_NOT_FOUND`…). `reemplazar` un firmado y
+  `forzar` son de `certificados.gestionar` (`403`).
+- Las firmas se verifican criptográficamente (CMS), pero **sin** cadena de confianza (RENIEC,
+  FirmaPerú): el panel muestra «N de M firmas» y los `firmantes` del detalle (nombre, emisor,
+  vigencia) para que quien opera revise que sean los esperados.
+
 ---
 
 
 ## Contrato 5 — Acceso con Google, código por correo y portal del inscrito
 
 Definidos en `backend-ciisic/specs/010-google-sign-in/contracts/api-google.md`,
-`specs/011-portal-participante/contracts/api-portal.md` y, desde la spec 014,
-`specs/014-portal-fotocheck-asistencia/contracts/api-acceso-codigo.md` y `api-portal.md` (v2).
+`specs/011-portal-participante/contracts/api-portal.md`, desde la spec 014,
+`specs/014-portal-fotocheck-asistencia/contracts/api-acceso-codigo.md` y `api-portal.md` (v2) y, para
+los certificados del portal, `specs/015-certificados/contracts/api-certificados.md`.
 
 - El panel obtiene de `GET /api/v1/auth/config` el client ID de Google, la URL del panel y
   `accesoCodigo: { disponible }`; emite un `nonce` desde su servidor y envía el ID token de Google a
@@ -390,9 +427,83 @@ Definidos en `backend-ciisic/specs/010-google-sign-in/contracts/api-google.md`,
   código, QR en data URL, evento, documento enmascarado, tipo, foto), `GET /me/attendances`,
   `PUT|GET|DELETE /me/photo` (JPG/PNG ≤ 2 MB y ≤ 4096 px por lado —si no, `422 IMAGE_TOO_LARGE`—,
   `consentimiento=true`; el panel recodifica y reduce la imagen con canvas). Todo con `Cache-Control: private, no-store`.
+- **Certificados** (spec 015): `GET /me/certificates` devuelve **solo los FIRMADO** propios (ni en
+  preparación ni anulados; `[]` si no hay: el panel muestra un mensaje) con
+  `{ id, codigoImpreso, evento: { codigo, nombre, nombreCorto, fechaInicio, fechaFin }, tipo: { codigo, nombre }, fechaEmision, horas, detalle, firmadoEn, urlVerificacion }`;
+  `GET /me/certificates/:id/file` entrega el PDF firmado propio (10/min; `404 CERTIFICATE_NOT_FOUND`
+  si es ajeno o no está firmado).
 - La landing verifica opcionalmente el correo con `POST /api/v1/site/google-verification` y envía
   el token resultante con la inscripción; con o sin él, un correo distinto del registrado se
   conserva (contrato 3).
+
+---
+
+## Contrato 6 — Verificación pública de certificados (`/api/v1/public/*`)
+
+Definido en `backend-ciisic/specs/015-certificados/contracts/api-certificados.md`. **Proveedor:**
+backend-ciisic. **Consumidores:** la página pública `/verificar/<código>` del panel (spec 010 del
+panel, sin sesión) y cualquier persona o sistema que lea el QR impreso en un certificado. Es la
+única familia de rutas públicas sin token (constitución del backend 1.4.0, principios III y IV).
+
+- **URL impresa en el QR**: `<url_panel>/verificar/<código>` (Sistema → URL del panel). Se fija al
+  generar cada certificado y queda **congelada** en él: cambiar después la URL del panel no cambia lo
+  ya impreso, así que la página `/verificar/[codigo]` del panel debe seguir existiendo en esa URL.
+- `GET /api/v1/public/certificates/:codigo`, sin token. Límites: 30/min por IP y un tope global de
+  1200 códigos inexistentes por minuto (`429 RATE_LIMITED` solo para esos: un código real siempre
+  responde). El BFF del panel llama por la URL interna y reenvía la IP del visitante en
+  `X-Forwarded-For` (como el login); además puede aplicar su propio límite por IP. Si el BFF no la
+  reenviara, todos los visitantes compartirían el cupo de 30/min de la IP del BFF.
+- El código (`<PREFIJO>-<AÑO>-<NNNNNN>-<XXXXXX>`, p. ej. `CIISIC-2026-000123-7KQ2XM`) se normaliza:
+  sin espacios, mayúsculas y, en la parte aleatoria, O→0 e I/L→1. Otro formato → `404` sin consultar
+  la BD.
+- Respuesta `200` (`Cache-Control: no-store`):
+
+```json
+{ "success": true, "data": { "codigo": "CIISIC-2026-000123-7KQ2XM", "estado": "VALIDO", "titular": "ANA PÉREZ GARCÍA", "tipo": "Participante",
+  "evento": { "nombre": "VIII Congreso Internacional …", "fechaInicio": "2026-10-26", "fechaFin": "2026-10-30" },
+  "fechaEmision": "2026-11-03", "horas": 40, "firmadoEn": "2026-11-05T16:00:00.000Z" } }
+```
+
+- `estado`: `VALIDO` (firmado) o `ANULADO` (agrega `anuladoEn`). Un certificado pendiente, preparado,
+  en firma o inexistente responde el mismo `404 CERTIFICATE_NOT_FOUND` («No encontramos un
+  certificado firmado con ese código.»): un borrador filtrado no «verifica».
+- **Nunca** se devuelve el documento, el correo, el motivo de la anulación ni el PDF (el titular
+  descarga el suyo en el portal, contrato 5). La parte aleatoria del código tiene 30 bits: no se
+  recorre el correlativo.
+- Cambios futuros solo por agregación (claves nuevas); con la API UNDC se podrá agregar un enlace
+  externo y la búsqueda por el código de la UNDC (contrato 7).
+
+---
+
+## Contrato 7 — API de certificados de la UNDC (PENDIENTE)
+
+**Consumidor:** backend-ciisic (`src/api/certificate/codigos/undc.ts`, adaptador
+`ProveedorCodigoCertificado`). **Proveedor:** `certificados.undc.edu.pe` (UNDC). **Estado:** sin
+acceso todavía; no hay contrato acordado ni formato conocido de sus códigos.
+
+- Hoy el código lo asigna el proveedor **LOCAL** (`CIISIC-2026-000123-7KQ2XM`) y es el que se imprime.
+  Con el proveedor UNDC elegido, todas sus operaciones responden `501 CERTIFICATE_PROVIDER_PENDING`
+  (generar certificados sin código impreso, confirmar el proveedor y
+  `POST /api/v1/settings/certificados-undc/test`).
+- La descarga para firmar exige el proveedor **confirmado**: así no se firma un código que luego haya
+  que cambiar por el de la UNDC. Lo ya firmado con el código local se sigue verificando en el
+  contrato 6 y, cuando exista la API, se registrará afuera (`codigo_externo`).
+- Configuración ya prevista (Sistema, solo Owner; sin variables de entorno): `certificadosUndcUrl`
+  (https, validada contra SSRF también antes de cada llamada), `certificadosUndcUsuario`,
+  `certificadosUndcSecreto` (cifrado AES-256-GCM, solo se muestra el sufijo) y
+  `certificadosUndcTimeoutMs` (1000–30000); el resultado de la última prueba queda en
+  `certificados_undc_ultimo_estado|ultimo_error|ultima_prueba_en`.
+- Operaciones que el adaptador necesita de la UNDC (a acordar en su spec antes de implementar):
+  1. **Probar la conexión** con las credenciales.
+  2. **Obtener o registrar el código** de un certificado (`resolverImpresion`: qué código se imprime y
+     va en el QR), antes de firmar, si la UNDC exige imprimir su código.
+  3. **Registrar un certificado firmado** (`registrar` → `codigoExterno`, único en `certificados`):
+     titular, tipo, evento, fecha y horas; en tandas de ≤10 (ruta prevista
+     `POST /api/v1/events/:eventId/certificates/register-external`).
+  4. Saber si la UNDC exige su propio código impreso o acepta registrar el nuestro.
+- Al implementarlo: spec nueva en backend-ciisic con su `contracts/`, actualizar este contrato,
+  verificación pública también por `codigoExterno` y «reasignar a código UNDC» solo para lo que aún
+  no se ha firmado.
 
 ## Entornos locales de desarrollo
 

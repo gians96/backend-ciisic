@@ -6,10 +6,12 @@ Guía para agentes de IA y desarrolladores que trabajen en este repositorio.
 
 API del congreso CIISIC (UNDC), **multi-evento**: eventos, inscripciones, credenciales PDF y
 correo, asistencia (escáner con el QR de la credencial), ponencias, consultas DNI, verificación de
-estudiantes, integraciones, acceso con Google o con código por correo y portal del inscrito
-(fotocheck virtual, asistencia y perfil con foto). Es el **centro del ecosistema del congreso**: la
-consumen el panel y la landing, y ella consume API_UNDC, deportes-fi, Decolecta/apiperu, Brevo
-y Google. Documentación: [`docs/`](docs/README.md).
+estudiantes, integraciones, acceso con Google o con código por correo, portal del inscrito
+(fotocheck virtual, asistencia, perfil con foto y certificados firmados) y certificados (plantillas
+PDF, emisión, generación, firma digital externa y verificación pública). Es el **centro del
+ecosistema del congreso**: la consumen el panel y la landing, y ella consume API_UNDC, deportes-fi,
+Decolecta/apiperu, Brevo y Google (la API de certificados de la UNDC está pendiente).
+Documentación: [`docs/`](docs/README.md).
 
 ## Entorno y comandos
 
@@ -43,7 +45,15 @@ y Google. Documentación: [`docs/`](docs/README.md).
   del staff (`catalogos.ts`, `permisos.ts`), la cuenta leída de la BD (`actor.ts`) y los
   resolutores del evento de cada recurso (`resolutores-evento.ts`); códigos de acceso y de
   credencial (`codigos.ts`), semáforo de PDF (`concurrencia.ts`), tipo real y limpieza de
-  imágenes (`imagenes.ts`) y rutas de archivos (`almacenamiento.ts`).
+  imágenes (`imagenes.ts`), firma de bytes de un PDF (`pdf.ts`) y rutas, nombres y escritura atómica
+  de archivos (`almacenamiento.ts`).
+- `src/api/certificate/` (spec 015): `pdf/` (motor con `pdf-lib` + `@pdf-lib/fontkit`: estampado,
+  texto, QR vectorial, lectura acotada de PDF de afuera (`lector.ts`), verificación CMS de las firmas
+  (`cms.ts`), firmas, coincidencia y cambios después del generado (`firmas.ts`), validación del
+  diseño; `pdf/fuentes/` con las
+  TTF y sus licencias), `codigos/` (código local y adaptador `ProveedorCodigoCertificado`: LOCAL y
+  UNDC pendiente) y `services/` (tipos, configuración, plantillas, emisión, generación, descargas con
+  `yazl`, firmados, verificación).
 - `src/middlewares/`: `auth.ts` (`requirePermiso`, `requireActor`, `requireParticipante`,
   `requireSesion`), `sitio.ts` (`requireTokenEvento`), `rate-limit.ts` (por IP, token,
   participante o cuenta de staff), `legacy.ts`, `upload.ts`, `validate.ts`.
@@ -93,6 +103,34 @@ y Google. Documentación: [`docs/`](docs/README.md).
   y Administradores. Sin `pagos.ver` no salen montos ni datos de pago (van en `null`).
 - Reglas del dominio institucional fijas en `src/core/correo-institucional.ts` (`undc.edu.pe`,
   parte local numérica = estudiante).
+- Certificados (spec 015):
+  - Permisos `certificados.gestionar` (global: tipos, plantillas, emitir, editar, anular, forzar,
+    reemplazar o quitar un firmado, proveedor y prefijo), `certificados.operar` (por evento: generar,
+    descargar para firmar, subir firmados) y `certificados.ver` (por evento). `ver` y `operar` son
+    elegibles para la Comisión y nunca vienen marcados; el Tesorero tiene `ver`. Las credenciales de
+    la API UNDC son de Sistema (`sistema.configurar`, solo Owner).
+  - Emitir exige plantilla (del evento y activa) y tipo; una persona nueva se registra con
+    `crearParticipante` (spec 014) y **correo obligatorio**. Un certificado vigente es único por
+    evento, participante, tipo y ponencia (`clave_vigente`, NULL solo si ANULADO).
+  - El código `<PREFIJO>-<AÑO>-<NNNNNN>-<XXXXXX>` se asigna al emitir y no cambia; el código impreso y
+    la URL de verificación (`<url_panel>/verificar/<código>`, nunca guardada en la configuración) se
+    congelan al generar. Sin URL del panel: `422 VERIFICATION_URL_NOT_CONFIGURED`.
+  - Generar y subir firmados: tandas **síncronas** de ≤10, idempotentes y reanudables (sin trabajos en
+    segundo plano), con `setImmediate` entre certificados y actualización optimista. Un firmado
+    **nunca** se regenera; editar devuelve a PENDIENTE.
+  - Descargar para firmar solo con `certificados_proveedor_confirmado` (`409 PROVIDER_NOT_CONFIRMED`).
+  - Un firmado entra sin forzar (`pdf/firmas.ts`) solo si sus firmas **verifican** (CMS: `ByteRange`,
+    `messageDigest` y firma con el certificado que trae; sin cadena de confianza: se guardan los
+    `firmantes`), no trae contenido activo y es el generado vigente con firmas agregadas (prefijo
+    SHA-256) sin cambiar nada de lo generado (`SIGNED_MODIFIED`). Un PDF reescrito con el `Subject`
+    vigente (METADATOS, `SIGNED_REWRITTEN`), uno que no coincide (`SIGNED_MISMATCH`) o uno con cambios
+    solo entra forzado: individual, de `certificados.gestionar` y con motivo. Nunca uno con una firma
+    que no verifica o con contenido activo.
+  - Reemplazar un FIRMADO es de `certificados.gestionar`; un EN_FIRMA solo se reemplaza por uno que lo
+    continúe o tenga más firmas; el firmado anterior nunca se borra (`firmados/reemplazados/`).
+  - El portal muestra **solo los FIRMADO** propios; la verificación pública solo responde FIRMADO o
+    ANULADO, nunca con documento, correo ni PDF.
+  - Proveedor UNDC (certificados.undc.edu.pe): pendiente, `501 CERTIFICATE_PROVIDER_PENDING`.
 - Las rutas legacy existen para la landing anterior y se apagan desde el panel (Sistema).
 
 ## Seguridad
@@ -131,16 +169,39 @@ y Google. Documentación: [`docs/`](docs/README.md).
 - Los envíos que provoca un anónimo (código de acceso) usan `enviarConCredencial(…, { registrar: false })`:
   su fallo no cambia el estado de la credencial (sería un oráculo de qué correos existen).
 - Toda carpeta `templates` de `src` necesita su `COPY` en el `Dockerfile` (lo comprueba
-  `tests/core/plantillas-docker.test.ts`).
+  `tests/core/plantillas-docker.test.ts`); también `src/api/certificate/pdf/fuentes` (TTF y
+  licencias: `tsc` no copia binarios). Una fuente nueva entra con su licencia y pasa la prueba de
+  contornos de `tests/certificate/estampado.test.ts` (Great Vibes y Allura perdían glifos al
+  embeberse).
+- Consultas públicas sin token ni sesión (aparte de `/api/v1/auth/*` y las rutas legacy): solo en la
+  familia `/api/v1/public/*` (constitución 1.4.0), con límite por IP **y** un tope global (de fallos:
+  que no corte a quien acierta, `topeDeFallos`), un código no adivinable, `404` idéntico para lo que
+  no corresponde y sin documento; toda ruta nueva allí va en la lista de públicas intencionales de las
+  pruebas de seguridad.
+- Archivos de certificados en `uploads/certificados/plantillas/` y
+  `uploads/certificados/<eventoId>/{generados,firmados}/` (carpeta por id: el código del evento es
+  editable): nombres generados por el servidor, rutas solo con `rutaPlantilla`,
+  `rutaCertificadoGenerado` y `rutaCertificadoFirmado`, escritura con `escribirArchivoAtomico` y
+  lectura con `leerArchivoServido`. Los firmados no se pueden reponer: nunca se borran (al
+  reemplazarlos o quitarlos, `archivarFirmado` los pasa a `firmados/reemplazados/`) y se respaldan
+  tras cada carga.
+- Todo PDF que llega de afuera (diseños, firmados) se lee con `leerPdf` (`pdf/lector.ts`): topes de
+  descompresión (pdf-lib decodifica `/ObjStm` y `/XRef` enteros al cargar) y registro de lo leído
+  para comparar con lo que vería un visor. Nunca `PDFDocument.load` directo sobre bytes de afuera.
+  La carga de firmados toma turno (`turnoCargaFirmados`, 2 a la vez) **antes** de multer.
+- Subidas grandes en memoria y acotadas: `limiteContenido` exige `Content-Length` antes de multer
+  (`411`/`413`); los PDF se validan por su firma de bytes (`hasPdfSignature`).
 
 ## Ecosistema y comunicación entre sistemas
 
 La fuente de verdad de los contratos es [`docs/arquitectura-ecosistema.md`](docs/arquitectura-ecosistema.md)
-(contratos 1–5). Este repositorio **expone** la API de administración (panel), la API del sitio
+(contratos 1–7). Este repositorio **expone** la API de administración (panel), la API del sitio
 `/api/v1/site/*` (landings y otras plataformas, con token de acceso del evento), el portal
-`/api/v1/me/*` y `/api/v1/auth/*` (incluido el código por correo, `/api/v1/auth/participant/*`);
-**consume** API_UNDC (`POST /externo/estudiantes/verificar`), deportes-fi
-(`/api/v1/integrations/event/*`), Decolecta/apiperu, Brevo y Google.
+`/api/v1/me/*`, `/api/v1/auth/*` (incluido el código por correo, `/api/v1/auth/participant/*`) y la
+verificación pública de certificados `/api/v1/public/*` (contrato 6); **consume** API_UNDC
+(`POST /externo/estudiantes/verificar`), deportes-fi (`/api/v1/integrations/event/*`),
+Decolecta/apiperu, Brevo y Google, y consumirá la API de certificados de la UNDC
+(certificados.undc.edu.pe, contrato 7, **pendiente**).
 
 | Sistema | Repositorio | Relación con este repo |
 |---|---|---|
@@ -148,6 +209,7 @@ La fuente de verdad de los contratos es [`docs/arquitectura-ecosistema.md`](docs
 | Landing del evento | `gians96/ciisic-undc-web` | Consumidor de `/api/v1/site/*` (token del evento, desde su servidor) |
 | API UNDC | `API_UNDC` (+ UI `app-web-sigenet` para crear la API key) | Proveedor (verificación de estudiantes) |
 | Deportes FI | `deportes-fi/backend` (+ `frontend` para crear el token por evento) | Proveedor (resumen Semana Sistémica) |
+| Certificados UNDC | `certificados.undc.edu.pe` (externo, de la UNDC) | Proveedor del código de certificados (**pendiente**: hoy `501`) |
 
 Puertos locales: landing 3000 · panel 3001 · backend-ciisic 3010 · API_UNDC 3020 · deportes-fi 3030.
 
@@ -169,8 +231,8 @@ con ambos sistemas levantados.
 
 Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Cada cambio
 empieza en `specs/NNN-nombre/` (spec → plan → tasks → contracts) y se marcan las tasks al
-implementar. Specs actuales: 001–014 (ver [README](README.md)); la 015 (certificados) tiene solo
-su diseño (`research.md`).
+implementar. Specs actuales: 001–015 (ver [README](README.md)); la 015 es la de certificados
+(diseño y revisión adversarial en su `research.md`).
 
 ## Antes de dar por terminado
 

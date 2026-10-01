@@ -11,6 +11,8 @@ const routes: AppRoute[] = [
     { method: 'get', path: '/v1/settings', handler: controller.find, middlewares: [requirePermiso('sistema.configurar')] },
     { method: 'put', path: '/v1/settings', handler: controller.update, middlewares: [requirePermiso('sistema.configurar'), validateBody(actualizarConfiguracionSchema)] },
     { method: 'post', path: '/v1/settings/undc-api/test', handler: controller.testUndc, middlewares: [requirePermiso('sistema.configurar')] },
+    // API de certificados de la UNDC (spec 015): credenciales en PUT /v1/settings; la prueba responde 501 hasta tener API
+    { method: 'post', path: '/v1/settings/certificados-undc/test', handler: controller.testCertificadosUndc, middlewares: [requirePermiso('sistema.configurar')] },
 
     // Configuración pública: el panel (sin sesión) y la landing (con su token)
     { method: 'get', path: '/v1/auth/config', handler: controller.publicConfig, middlewares: [limiteLecturaPublica] },

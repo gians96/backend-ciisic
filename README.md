@@ -3,8 +3,9 @@
 API del Congreso Internacional de Ingeniería de Sistemas e Investigación Científica (UNDC):
 eventos, inscripciones, tipos de inscripción, actividades y asistencia (escáner con el QR de la
 credencial), ponencias, consultas de DNI con pool de tokens, verificación de estudiantes UNDC,
-integración con deportes-fi y portal del participante (Google o código por correo, fotocheck
-virtual, asistencia y perfil con foto).
+integración con deportes-fi, portal del participante (Google o código por correo, fotocheck
+virtual, asistencia, perfil con foto y certificados firmados) y certificados (plantillas PDF por
+evento, emisión, generación en tandas, firma digital externa y verificación pública por QR).
 
 - **Stack**: Node 22 · Express 5 · TypeScript · Prisma 6 · MySQL 8 · yup · Jest
 - **Documentación** (visión general, configuración, API, datos, operación): [`docs/`](docs/README.md)
@@ -30,6 +31,7 @@ virtual, asistencia y perfil con foto).
 | [012](specs/012-qr-billeteras) | Imagen del QR de las billeteras: subida desde el panel y entrega a la landing |
 | [013](specs/013-roles-permisos) | Roles (Owner, Administrador del sistema, Tesorero, Comisión), permisos por ruta y alcance por evento |
 | [014](specs/014-portal-fotocheck-asistencia) | Portal del participante (código por correo, perfil con foto, asistencia), fotocheck virtual con código de credencial y asistencia por QR |
+| [015](specs/015-certificados) | Certificados: tipos, plantillas PDF con campos y vista previa, emisión (inscritos, individual, lista), generación en tandas, descarga para firmar, carga de firmados, portal y verificación pública (`/api/v1/public`); código de la API UNDC pendiente |
 
 ## Desarrollo local
 
@@ -51,15 +53,19 @@ config/env.ts                 variables de entorno validadas
 prisma/schema.prisma          modelos en español (@@map / @map)
 prisma/migrations/            migraciones (las de renombrado están escritas a mano)
 prisma/preflight/             verificaciones previas y conteos para producción
-src/core/                     errores, fechas (Lima), cifrado, plantillas, paginación
+src/core/                     errores, fechas (Lima), cifrado, plantillas, paginación, archivos, PDF
 src/middlewares/              auth por permisos, validación, uploads, rate limits, errores
 src/api/<módulo>/             controllers · routes · services · validation
   event · registration-type · inscription · activity · participant · papers · contact
   document-lookup · student-verification · integration · admin · catalog
   email-credential · access-token · system-settings · google-auth · participant-auth
-  participant-portal
+  participant-portal · certificate (+ pdf/ motor y fuentes, codigos/ proveedor del código)
 tests/                        Jest (*.test.ts)
 ```
+
+Archivos en `uploads/` (volumen de `/app/uploads`): vouchers, credenciales, ponencias, QR de pago,
+fotos y `certificados/` (plantillas, generados y **firmados, que no se pueden reponer**: respaldarlos
+tras cada carga, ver [`docs/operacion.md`](docs/operacion.md#certificados-flujo-operativo-y-respaldo)).
 
 ## Despliegue
 

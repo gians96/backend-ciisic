@@ -331,6 +331,11 @@ export async function archivoVoucher(id: number): Promise<string> {
 
 export async function eliminarInscripcion(id: number) {
     const inscripcion = await obtenerInscripcion(id)
+    // Un certificado vigente emitido desde la inscripción (spec 015) se anula antes: borrarla lo
+    // dejaría sin su origen
+    if (await prisma.certificado.count({ where: { inscripcionId: id, estado: { not: 'ANULADO' } } })) {
+        throw conflict('INSCRIPTION_HAS_CERTIFICATE', 'La inscripción tiene un certificado vigente: anúlalo antes de eliminarla.')
+    }
     await prisma.inscripcion.delete({ where: { id } })
     const voucher = inscripcion.voucherArchivo ? uploadedFilePath(inscripcion.voucherArchivo) : null
     if (voucher && fs.existsSync(voucher)) fs.unlinkSync(voucher)

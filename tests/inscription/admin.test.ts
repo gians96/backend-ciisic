@@ -12,6 +12,8 @@ jest.mock('../../src/database/prisma', () => ({
     prisma: {
         inscripcion: { findUnique: jest.fn(), findMany: jest.fn(), count: jest.fn(), update: jest.fn(), delete: jest.fn() },
         evento: { findUnique: jest.fn(), findFirst: jest.fn() },
+        // Borrar la inscripción revisa sus certificados vigentes (spec 015)
+        certificado: { count: jest.fn(async () => 0) },
     },
 }))
 

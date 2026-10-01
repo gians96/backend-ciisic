@@ -4,6 +4,7 @@ import { conflict } from '../../../core/http-error'
 import { cifrar, descifrar, sufijo } from '../../../core/crypto'
 import { establecerConfiguracion } from '../../../core/configuracion-sistema'
 import { asegurarDestinoPublico, validarUrlSaliente } from '../../../core/url-saliente'
+import { proveedorPorCodigo } from '../../certificate/codigos/proveedor'
 import type { ActualizarConfiguracionInput } from '../validation'
 
 const conEditor = { actualizadoPor: { select: { id: true, nombres: true, apellidos: true } } } satisfies Prisma.ConfiguracionSistemaInclude
@@ -24,6 +25,18 @@ export function aConfiguracion(fila: FilaConEditor) {
             ultimoEstado: fila.undcUltimoEstado,
             ultimoError: fila.undcUltimoError,
             ultimaPruebaEn: fila.undcUltimaPruebaEn,
+        },
+        // API de certificados de la UNDC (spec 015): pendiente hasta tener acceso (`disponible: false`)
+        certificadosUndc: {
+            url: fila.certificadosUndcUrl ?? null,
+            usuario: fila.certificadosUndcUsuario ?? null,
+            secretoEnmascarado: fila.certificadosUndcSecretoSufijo ? `••••${fila.certificadosUndcSecretoSufijo}` : null,
+            timeoutMs: fila.certificadosUndcTimeoutMs ?? 10000,
+            configurada: Boolean(fila.certificadosUndcUrl && fila.certificadosUndcUsuario && fila.certificadosUndcSecretoCifrado),
+            disponible: false,
+            ultimoEstado: fila.certificadosUndcUltimoEstado ?? null,
+            ultimoError: fila.certificadosUndcUltimoError ?? null,
+            ultimaPruebaEn: fila.certificadosUndcUltimaPruebaEn ?? null,
         },
         google: { clientId: fila.googleClientId, configurado: Boolean(fila.googleClientId) },
         urlPanel: fila.urlPanel,
@@ -71,6 +84,7 @@ export async function actualizarConfiguracion(input: ActualizarConfiguracionInpu
     if (input.googleClientId !== undefined) { data.googleClientId = input.googleClientId || null; cambios.push('googleClientId') }
     if (input.urlPanel !== undefined) { data.urlPanel = input.urlPanel ? normalizarUrlPanel(input.urlPanel) : null; cambios.push('urlPanel') }
     if (input.rutasLegacyActivas !== undefined) { data.rutasLegacyActivas = input.rutasLegacyActivas; cambios.push('rutasLegacyActivas') }
+    cambios.push(...credencialesCertificadosUndc(input, data))
     data.actualizadoPorId = adminId ?? null
 
     const fila = await prisma.configuracionSistema.upsert({
@@ -82,6 +96,48 @@ export async function actualizarConfiguracion(input: ActualizarConfiguracionInpu
     establecerConfiguracion(fila)
     if (cambios.length) console.log(`Configuración del sistema actualizada por el administrador ${adminId ?? '?'}: ${cambios.join(', ')}`)
     return aConfiguracion(fila)
+}
+
+/**
+ * Credenciales de la API de certificados de la UNDC (spec 015): URL https (anti-SSRF), usuario y
+ * secreto cifrado (solo se devuelve el sufijo; omitir = conservar, `null` = quitar). Cambiar el
+ * destino o la credencial borra el resultado de la última prueba. Devuelve los nombres cambiados.
+ */
+function credencialesCertificadosUndc(input: ActualizarConfiguracionInput, data: Prisma.ConfiguracionSistemaUncheckedUpdateInput): string[] {
+    const cambios: string[] = []
+    if (input.certificadosUndcUrl !== undefined) {
+        data.certificadosUndcUrl = input.certificadosUndcUrl ? validarUrlSaliente(input.certificadosUndcUrl, { campo: 'La URL de la API de certificados de la UNDC' }) : null
+        cambios.push('certificadosUndcUrl')
+    }
+    if (input.certificadosUndcUsuario !== undefined) {
+        data.certificadosUndcUsuario = input.certificadosUndcUsuario || null
+        cambios.push('certificadosUndcUsuario')
+    }
+    if (input.certificadosUndcSecreto !== undefined) {
+        data.certificadosUndcSecretoCifrado = input.certificadosUndcSecreto ? cifrar(input.certificadosUndcSecreto) : null
+        data.certificadosUndcSecretoSufijo = input.certificadosUndcSecreto ? sufijo(input.certificadosUndcSecreto) : null
+        cambios.push('certificadosUndcSecreto')
+    }
+    if (cambios.length) {
+        data.certificadosUndcUltimoEstado = null
+        data.certificadosUndcUltimoError = null
+        data.certificadosUndcUltimaPruebaEn = null
+    }
+    if (input.certificadosUndcTimeoutMs !== undefined) {
+        data.certificadosUndcTimeoutMs = input.certificadosUndcTimeoutMs
+        cambios.push('certificadosUndcTimeoutMs')
+    }
+    return cambios
+}
+
+/**
+ * Prueba la conexión con la API de certificados de la UNDC con el adaptador del proveedor. Pendiente:
+ * responde 501 `CERTIFICATE_PROVIDER_PENDING` hasta tener acceso a la API (no registra resultado).
+ * Cuando exista, `probarConexion` guardará `certificados_undc_ultimo_*` y aquí se devolverá.
+ */
+export async function probarCertificadosUndc() {
+    await proveedorPorCodigo('UNDC').probarConexion()
+    return { ok: true, configuracion: await obtenerConfiguracionAdmin() }
 }
 
 function mensajePorEstado(status: number): string {

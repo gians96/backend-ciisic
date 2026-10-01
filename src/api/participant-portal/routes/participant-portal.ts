@@ -20,6 +20,9 @@ const routes: AppRoute[] = [
     { method: 'get', path: '/v1/me/inscriptions/:id/badge', handler: controller.badge, middlewares: sesion },
     { method: 'get', path: '/v1/me/inscriptions/:id/credential', handler: controller.credential, middlewares: [requireParticipante, limiteCredencialPortal] },
     { method: 'get', path: '/v1/me/attendances', handler: controller.attendances, middlewares: sesion },
+    // Certificados (spec 015): solo los firmados propios
+    { method: 'get', path: '/v1/me/certificates', handler: controller.certificates, middlewares: sesion },
+    { method: 'get', path: '/v1/me/certificates/:id/file', handler: controller.certificateFile, middlewares: [requireParticipante, limiteCredencialPortal] },
 ]
 
 export default buildRouter(routes)

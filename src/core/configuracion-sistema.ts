@@ -1,6 +1,7 @@
-import type { ConfiguracionSistema } from '@prisma/client'
+import type { ConfiguracionSistema, ProveedorCertificados } from '@prisma/client'
 import { prisma } from '../database/prisma'
 import { descifrar } from './crypto'
+import { unprocessable } from './http-error'
 
 /**
  * Configuración global (spec 008) leída de la fila única `configuracion_sistema`, con caché en
@@ -15,10 +16,20 @@ export interface ConfiguracionVigente {
     googleClientId: string | null
     urlPanel: string | null
     rutasLegacyActivas: boolean
+    /** Certificados (spec 015): columnas `certificados_*`. */
+    certificadosProveedor: ProveedorCertificados
+    certificadosPrefijo: string
+    certificadosProveedorConfirmado: boolean
+    certificadosUndcUrl: string | null
+    certificadosUndcUsuario: string | null
+    certificadosUndcSecretoCifrado: string | null
+    certificadosUndcTimeoutMs: number
 }
 
 const TTL_MS = 30 * 1000
 const AVISO_ERROR_MS = 60 * 1000
+/** Prefijo del código local de certificados mientras no se configure otro. */
+export const PREFIJO_CERTIFICADOS_POR_DEFECTO = 'CIISIC'
 const POR_DEFECTO: ConfiguracionVigente = Object.freeze({
     undcApiUrl: null,
     undcApiKeyCifrada: null,
@@ -26,12 +37,20 @@ const POR_DEFECTO: ConfiguracionVigente = Object.freeze({
     googleClientId: null,
     urlPanel: null,
     rutasLegacyActivas: true,
+    certificadosProveedor: 'LOCAL',
+    certificadosPrefijo: PREFIJO_CERTIFICADOS_POR_DEFECTO,
+    certificadosProveedorConfirmado: false,
+    certificadosUndcUrl: null,
+    certificadosUndcUsuario: null,
+    certificadosUndcSecretoCifrado: null,
+    certificadosUndcTimeoutMs: 10000,
 })
 
 let cache: { valor: ConfiguracionVigente, expira: number } | null = null
 let enCurso: Promise<ConfiguracionVigente> | null = null
 let ultimoAvisoError = 0
 
+// Las columnas de certificados llevan respaldo por si la fila llega incompleta (pruebas con filas parciales)
 function aVigente(fila: ConfiguracionSistema): ConfiguracionVigente {
     return {
         undcApiUrl: fila.undcApiUrl,
@@ -40,6 +59,13 @@ function aVigente(fila: ConfiguracionSistema): ConfiguracionVigente {
         googleClientId: fila.googleClientId,
         urlPanel: fila.urlPanel,
         rutasLegacyActivas: fila.rutasLegacyActivas,
+        certificadosProveedor: fila.certificadosProveedor ?? POR_DEFECTO.certificadosProveedor,
+        certificadosPrefijo: fila.certificadosPrefijo ?? POR_DEFECTO.certificadosPrefijo,
+        certificadosProveedorConfirmado: fila.certificadosProveedorConfirmado ?? false,
+        certificadosUndcUrl: fila.certificadosUndcUrl ?? null,
+        certificadosUndcUsuario: fila.certificadosUndcUsuario ?? null,
+        certificadosUndcSecretoCifrado: fila.certificadosUndcSecretoCifrado ?? null,
+        certificadosUndcTimeoutMs: fila.certificadosUndcTimeoutMs ?? POR_DEFECTO.certificadosUndcTimeoutMs,
     }
 }
 
@@ -80,6 +106,54 @@ export async function configuracionUndc(): Promise<{ url: string, apiKey: string
     const c = await obtenerConfiguracion()
     if (!c.undcApiUrl || !c.undcApiKeyCifrada) return null
     return { url: c.undcApiUrl, apiKey: descifrar(c.undcApiKeyCifrada), timeoutMs: c.undcApiTimeoutMs }
+}
+
+// ─── Certificados (spec 015) ────────────────────────────────────────────────
+
+export interface ConfiguracionCertificados {
+    /** Quién asigna el código impreso: LOCAL (ahora) o UNDC (pendiente: 501). */
+    proveedor: ProveedorCertificados
+    /** Prefijo del código local (`^[A-Z0-9]{2,20}$`). */
+    prefijo: string
+    /** Sin confirmar no se descarga para firmar (409 `PROVIDER_NOT_CONFIRMED`). */
+    proveedorConfirmado: boolean
+    /** `<url_panel>/verificar`, o `null` si no hay URL del panel (Sistema). */
+    baseVerificacion: string | null
+}
+
+/** Configuración de certificados vigente (misma caché de 30 s). No incluye las credenciales UNDC. */
+export async function configuracionCertificados(): Promise<ConfiguracionCertificados> {
+    const c = await obtenerConfiguracion()
+    return {
+        proveedor: c.certificadosProveedor,
+        prefijo: c.certificadosPrefijo,
+        proveedorConfirmado: c.certificadosProveedorConfirmado,
+        baseVerificacion: c.urlPanel ? `${c.urlPanel.replace(/\/+$/, '')}/verificar` : null,
+    }
+}
+
+/**
+ * URL de verificación de un certificado: `<url_panel>/verificar/<código>`. Se calcula al generar y
+ * se congela en el certificado (`url_verificacion`): cambiar después la URL del panel no cambia lo ya
+ * impreso. Sin URL del panel → 422 `VERIFICATION_URL_NOT_CONFIGURED`.
+ */
+export function urlVerificacionCertificado(baseVerificacion: string | null, codigo: string): string {
+    if (!baseVerificacion) {
+        throw unprocessable('VERIFICATION_URL_NOT_CONFIGURED', 'Configura la URL del panel en Sistema antes de generar certificados: es la que se imprime en el QR de verificación.')
+    }
+    return `${baseVerificacion}/${encodeURIComponent(codigo)}`
+}
+
+/** URL, usuario, secreto (descifrado) y timeout de la API de certificados de la UNDC, o `null` si falta algo. */
+export async function credencialesUndcCertificados(): Promise<{ url: string, usuario: string, secreto: string, timeoutMs: number } | null> {
+    const c = await obtenerConfiguracion()
+    if (!c.certificadosUndcUrl || !c.certificadosUndcUsuario || !c.certificadosUndcSecretoCifrado) return null
+    return {
+        url: c.certificadosUndcUrl,
+        usuario: c.certificadosUndcUsuario,
+        secreto: descifrar(c.certificadosUndcSecretoCifrado),
+        timeoutMs: c.certificadosUndcTimeoutMs,
+    }
 }
 
 export interface ConfiguracionPublica {

@@ -17,8 +17,8 @@ Restaurar: `DROP DATABASE ciisic_vii; CREATE DATABASE ciisic_vii;` e importar el
 - Antes de una migración con datos: `prisma/preflight/verificar-esquema.sql` (bloqueantes en 0)
   y, después, `prisma/preflight/conteos-despues.sql`.
 - Nunca "arreglar a mano" una migración a medias: restaurar el respaldo y volver a la imagen
-  anterior, o usar el script de reversión o de completado que la migración documente (013 y 014,
-  abajo).
+  anterior, o usar el script de reversión o de completado que la migración documente (013, 014 y
+  015, abajo).
 
 ## Migración 013 (roles y permisos)
 
@@ -139,6 +139,121 @@ Pasos:
 Mientras dure la convivencia, `codigo_credencial` admite NULL; `NOT NULL` va en una migración
 posterior al 30-oct-2026.
 
+## Migración 015 (certificados)
+
+`20261001150000_certificados` es aditiva: crea `tipos_certificado` (con `PARTICIPANTE`,
+`ORGANIZADOR` y `PONENTE`), `plantillas_certificado` y `certificados` (con el CHECK
+`ck_certificados_clave_vigente`) y agrega a `configuracion_sistema` las 11 columnas
+`certificados_*` (proveedor `LOCAL` sin confirmar, prefijo `CIISIC`, sin credenciales UNDC). No toca
+datos existentes. La imagen anterior sigue funcionando con la BD migrada (no conoce las tablas
+nuevas). Ensayo (1-oct-2026, con la versión corregida que agrega `bytes_firmado` y `firmantes`) en
+una copia desechable recién hecha de `ciisic_ensayo`: aplicó las 4 migraciones pendientes (013,
+`administradores_solo_google`, 014 y 015) con `migrate diff --exit-code` en 0 y los mismos conteos
+(308 inscripciones, 308 participantes, 585 asistencias); el CHECK rechazó un PENDIENTE sin clave y
+un ANULADO con clave; `firmantes` guardó y devolvió el JSON (MySQL reordena sus claves);
+`revertir-015.sql` se corrió dos veces seguidas; con la migración marcada como fallida (P3009
+simulado), `migrate resolve --rolled-back` y otro `migrate deploy` la aplicaron de nuevo y el diff
+volvió a 0. `migrate resolve --rolled-back` solo acepta una migración **fallida**: sobre una aplicada
+responde «not in a failed state».
+
+**Cuándo**: después del VIII CIISIC (31-oct-2026 o más tarde): del 24 al 30-oct no se despliega
+(un push a `main` del backend despliega y migra). Primero el backend 015 (el panel actual no usa las
+rutas nuevas) y después el panel 010.
+
+Antes de desplegar:
+
+- El `Dockerfile` copia las fuentes: `src/api/certificate/pdf/fuentes` →
+  `dist/src/api/certificate/pdf/fuentes` (14 TTF y 7 licencias; `tsc` no copia binarios). Sin ellas
+  la vista previa y la generación fallan (`GENERATION_FAILED`). Comprobarlo con
+  `docker run --rm --entrypoint ls <imagen> dist/src/api/certificate/pdf/fuentes`.
+- El volumen de `/app/uploads` guarda también `uploads/certificados` (plantillas, generados,
+  firmados y `firmados/reemplazados/`, donde quedan los firmados reemplazados o quitados): los
+  **firmados no se pueden reponer**. Respaldo después de cada carga (abajo).
+- **Sistema → URL del panel** con la URL definitiva: la de verificación (`<url_panel>/verificar/<código>`)
+  queda impresa en el QR de cada certificado y congelada al generarlo.
+- El BFF del panel llama por la URL interna de Docker y reenvía la IP real (`X-Forwarded-For`): la
+  verificación pública tiene límites por IP. Las cargas de firmados son de hasta 25 MB por solicitud
+  y deben llevar `Content-Length` (revisar los límites y tiempos de espera del proxy en Dokploy).
+
+Pasos:
+
+1. **Respaldo** (arriba).
+2. **Desplegar** la imagen: `migrate deploy` aplica la migración al arrancar.
+3. **Verificar** (solo lectura):
+
+   ```sql
+   SELECT codigo, nombre, texto_impreso, activo FROM tipos_certificado ORDER BY orden;  -- PARTICIPANTE, ORGANIZADOR, PONENTE
+   SELECT certificados_proveedor, certificados_prefijo, certificados_proveedor_confirmado FROM configuracion_sistema;  -- LOCAL, CIISIC, 0
+   SELECT (SELECT COUNT(*) FROM plantillas_certificado) AS plantillas, (SELECT COUNT(*) FROM certificados) AS certificados;  -- 0, 0
+   SELECT constraint_name FROM information_schema.check_constraints
+    WHERE constraint_schema = DATABASE() AND constraint_name = 'ck_certificados_clave_vigente';  -- 1 fila
+   ```
+
+   Los conteos de inscripciones, participantes y asistencias, iguales a los del respaldo; y, desde un
+   contenedor puntual de la imagen,
+   `./node_modules/.bin/prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code`
+   debe salir 0.
+4. **Configurar** (panel): Certificados → Configuración: el prefijo (se bloquea en cuanto se genera
+   el primer PDF) y **confirmar el proveedor LOCAL** (sin confirmar no se descarga para firmar). Dar
+   a la Comisión «Ver» u «Operar» certificados solo a quien corresponda (nunca vienen marcados).
+5. **Si la migración falla a medias** (P3009: con `set -e` en `docker-entrypoint.sh` el contenedor
+   no arranca, tampoco con la imagen anterior): en un contenedor aparte con la misma imagen y
+   `DATABASE_URL`,
+   1. `mysql … ciisic_vii < prisma/preflight/revertir-015.sql` (usa `DELIMITER`; cada paso solo si el
+      objeto existe; se puede repetir);
+   2. `./node_modules/.bin/prisma migrate resolve --rolled-back 20261001150000_certificados`;
+   3. volver a desplegar (la migración se aplica desde cero).
+6. **Volver a la imagen anterior no exige revertir**: el esquema es aditivo. Revertir el esquema
+   **borra** tipos, plantillas, certificados (estados, códigos, firmas registradas) y la configuración
+   de certificados, incluidas las credenciales UNDC; los archivos de `uploads/certificados` quedan en
+   disco. Antes de revertir con certificados ya firmados: respaldo de la BD y de `uploads/certificados`.
+
+## Certificados: flujo operativo y respaldo
+
+1. **Plantilla** (Certificados → Plantillas, `certificados.gestionar`): subir el diseño en PDF (A4,
+   1–2 páginas, ≤5 MB —exportarlo como «tamaño reducido»—, sin rotar ni proteger), ubicar los campos
+   (nombre, tipo, texto, código, QR…), revisar la **vista previa** y sus avisos, e indicar las firmas
+   requeridas (1 por defecto) y las horas por defecto.
+2. **Emitir**: desde los inscritos aprobados (simular primero; asistencia mínima opcional), uno por
+   uno (organizadores, ponentes: DNI y **correo**) o por lista (en partes de 300 filas). Repetir una
+   emisión no duplica.
+3. **Generar** los pendientes: el panel pide tandas de 10 hasta terminar; si se corta, «Generar
+   pendientes» continúa. Requiere la URL del panel en Sistema.
+4. **Confirmar el proveedor** (Certificados → Configuración): LOCAL mientras la UNDC no dé acceso a su
+   API. Sin esto no se descarga para firmar (`409 PROVIDER_NOT_CONFIRMED`).
+5. **Descargar para firmar**: ZIP por partes (200 por defecto) con `<código>.pdf` y `manifiesto.csv`.
+6. **Firmar** con FirmaPerú o ReFirma (firma por lote). No editar los PDF ni quitar el código del
+   nombre del archivo (la herramienta puede agregar `[R]` o `_firmado`). La firma debe ser
+   **incremental** (la que hacen estas herramientas por defecto): si la herramienta reescribe el PDF,
+   cada archivo sale `SIGNED_REWRITTEN` y solo quien gestiona puede aceptarlo uno por uno. Si la
+   plantilla pide 2 firmas, el segundo firmante firma **sobre el PDF del primero** (ZIP «para firmar»
+   de los `EN_FIRMA`): dos firmantes que firman a la vez el mismo generado no suman firmas (se conserva
+   el primero que se sube).
+7. **Subir los firmados** (PDF sueltos o el ZIP; el panel envía tandas de ≤10 MB) y revisar el
+   reporte: `NO_COINCIDE` (se firmó una versión anterior o de otra persona: regenerar, descargar y
+   firmar de nuevo; forzar uno solo con motivo y tras revisarlo a mano), `NO_ENCONTRADO` (el nombre
+   perdió el código: subirlo desde el certificado), `SIN_FIRMA`, `INVALIDO`. Revisar en el detalle
+   los **firmantes** (nombre y emisor del certificado de firma): las firmas se verifican, pero no
+   contra la raíz de RENIEC, así que un firmante inesperado es una alerta.
+8. **Respaldo de `uploads/certificados` después de cada carga de firmados**, junto con un `mysqldump`
+   del mismo momento (la BD guarda los nombres y los hashes de los archivos; se restauran juntos):
+
+   ```bash
+   # sobre el volumen de /app/uploads (o desde un contenedor puntual que lo monte)
+   tar -czf certificados_$(date +%F_%H%M).tgz -C <ruta del volumen uploads> certificados
+   ```
+
+9. **Entrega**: el participante ve y descarga sus firmados en su portal (Google o código por correo)
+   y cualquiera verifica en `<url_panel>/verificar/<código>` (el QR).
+
+Correcciones: editar un certificado lo devuelve a PENDIENTE (hay que regenerarlo y firmarlo de
+nuevo; si ya se descargó para firmar, pide confirmación); un firmado equivocado se quita (vuelve a
+PREPARADO; el archivo pasa a `firmados/reemplazados/`); reemplazar un firmado es de quien gestiona
+los certificados; uno emitido por error se anula con motivo (sale del portal, la verificación lo
+muestra ANULADO y se puede volver a emitir con otro código). Un PENDIENTE nunca generado se puede
+borrar. Si se bajan las firmas requeridas de una plantilla, sus certificados `EN_FIRMA` que ya las
+tienen pasan solos a `FIRMADO`.
+
 ## Primer Owner
 
 ```bash
@@ -153,7 +268,7 @@ se crea en el panel (Equipo y administradores).
 
 | Secreto | Cómo rotar | Efecto |
 |---|---|---|
-| `JWT_SECRET` | Cambiar la variable y redeplegar; luego volver a guardar en el panel la API key de Brevo, los tokens DNI, la API key de API_UNDC y el token de deportes-fi | Se cierran las sesiones, caducan los tokens de verificación y los códigos de acceso por correo vigentes, y los secretos guardados no se pueden leer hasta volver a guardarlos. Los tokens de acceso de las landings **siguen sirviendo** |
+| `JWT_SECRET` | Cambiar la variable y redeplegar; luego volver a guardar en el panel la API key de Brevo, los tokens DNI, la API key de API_UNDC, el secreto de la API de certificados de la UNDC (si se configuró) y el token de deportes-fi | Se cierran las sesiones, caducan los tokens de verificación y los códigos de acceso por correo vigentes, y los secretos guardados no se pueden leer hasta volver a guardarlos. Los tokens de acceso de las landings **siguen sirviendo** |
 | API key de Brevo, tokens DNI, token de deportes-fi, API key de API_UNDC | Editar en el panel (Correo, Consultas DNI, Integraciones, Sistema) | Inmediato |
 | Token de acceso de una landing | Panel → Eventos → Acceso → generar uno nuevo, configurarlo en la landing y revocar el anterior | Inmediato |
 | Contraseña de la BD | Cambiarla en MySQL y en `DATABASE_URL` | Requiere redeplegar |
@@ -187,6 +302,25 @@ se crea en el panel (Equipo y administradores).
 | `422 LEGACY_QR_NOT_ALLOWED` en el escáner | QR anterior de una inscripción que ya tiene el código nuevo, o pasado el `fechaFin` del evento | Pedir el fotocheck del portal o marcar por documento |
 | Alguien se reinscribió con otro correo y no le llegó nada (`correoConservado: true`) | El formulario público nunca cambia el correo registrado (ni verificado con Google: evitaría una toma de cuenta con solo conocer el DNI); se avisa al correo registrado | Si la persona lo pide y se confirma su identidad, cambiar el correo en Participantes (se avisa al anterior) |
 | El escáner responde `422 LEGACY_QR_NOT_ALLOWED` a muchos QR anteriores tras una vuelta atrás | La imagen anterior emitió credenciales con el QR anterior en inscripciones que ya tenían código | `prisma/preflight/marcar-qr-legado-014.sql` |
+| `409 PROVIDER_NOT_CONFIRMED` al descargar certificados para firmar | El proveedor del código no está confirmado (o se cambió el proveedor o el prefijo, que lo desconfirma) | Certificados → Configuración → confirmar el proveedor LOCAL |
+| `422 VERIFICATION_URL_NOT_CONFIGURED` al generar certificados | Falta la URL del panel en Sistema | Sistema → URL del panel (la definitiva: queda impresa en el QR) |
+| `501 CERTIFICATE_PROVIDER_PENDING` | Se eligió el proveedor UNDC, cuya API aún no está disponible | Volver al proveedor LOCAL |
+| `503 GENERATION_BUSY` o `503 PDF_BUSY` (vista previa) | Ya hay 2 tandas (o 2 vistas previas) en curso en el proceso | El panel reintenta tras `Retry-After`; no abrir varias generaciones a la vez |
+| La generación devuelve `GENERATION_FAILED` en todos (log «No se pudo generar el certificado …») | La imagen no trae `dist/src/api/certificate/pdf/fuentes` o el diseño está dañado | Revisar el `COPY` de las fuentes en el `Dockerfile`; probar la vista previa de la plantilla |
+| Muchos `NO_COINCIDE` (`SIGNED_MISMATCH`) al subir firmados | Se firmó una versión anterior (se editó o regeneró después de descargar) o un PDF de otra persona | Regenerar, descargar y firmar de nuevo; forzar solo uno a uno, con motivo, tras revisarlo |
+| Todos salen `SIGNED_REWRITTEN` | La herramienta de firma reescribe el PDF en vez de firmar de forma incremental | Configurarla para firmar de forma incremental (o probar ReFirma/FirmaPerú); forzar solo uno a uno, con motivo |
+| `SIGNED_MODIFIED` | El PDF cambió después de generarse (otro contenido, anotaciones o recuadros agregados sin firma, xref alterado) | No aceptarlo: pedir que se firme el PDF descargado sin editarlo; forzar solo tras revisarlo a mano |
+| `INVALIDO` con `SIGNATURE_INVALID` o `PDF_ACTIVE_CONTENT` | Una firma no verifica (archivo dañado o alterado después de firmar) o el PDF trae JavaScript, adjuntos o multimedia | Volver a firmar el PDF descargado; estos no se pueden forzar |
+| `409 SIGNATURES_NOT_EXTENDED` o `PARCIAL` «no continúa sus firmas» | Se subió una copia vieja del parcial o dos firmantes firmaron a la vez el mismo PDF | El segundo firmante debe firmar el PDF del primero (ZIP «para firmar») |
+| `503 SIGNED_UPLOAD_BUSY` | Ya hay 2 cargas de firmados en curso y 4 en espera en el proceso | El panel reintenta tras `Retry-After` |
+| `422 PDF_HAS_FORM_FIELDS` o `PDF_ACTIVE_CONTENT` al subir un diseño | El diseño trae campos de formulario o firmas, o JavaScript, adjuntos o multimedia | Exportarlo de nuevo como PDF plano, sin firmar |
+| `NO_ENCONTRADO` al subir firmados | El nombre del archivo ya no tiene el código del certificado | Renombrarlo con el código o subirlo desde el certificado (uno a uno) |
+| Todos quedan `PARCIAL` / `EN_FIRMA` | La plantilla pide más firmas (`firmasRequeridas`) de las que tiene el PDF; los sellos de tiempo no cuentan | Agregar la firma que falta y volver a subir, o corregir las firmas requeridas de la plantilla |
+| `411 LENGTH_REQUIRED` o `413` al subir firmados | La subida no indica su tamaño (proxy con `Transfer-Encoding: chunked`) o pasa de 25 MB | Revisar que el BFF envíe `Content-Length`; subir en tandas más pequeñas |
+| `409 CERTIFICATE_SETTINGS_LOCKED` al cambiar el prefijo | Ya hay certificados con PDF generado o firmado con el prefijo actual | El prefijo se mantiene (los códigos impresos ya circulan) |
+| El manifiesto dice «El archivo no está en el servidor» o `404 CERTIFICATE_FILE_NOT_FOUND` | Falta el PDF en `uploads/certificados` (volumen perdido o restaurado a medias) | Restaurar el respaldo de `uploads/certificados` del mismo momento que la BD; si no estaba firmado, regenerarlo |
+| `409 EVENT_HAS_INSCRIPTIONS` al borrar un evento con certificados, `409 INSCRIPTION_HAS_CERTIFICATE` al borrar una inscripción | Los certificados no se borran con el evento ni con la inscripción | Archivar el evento; anular el certificado antes de borrar la inscripción |
+| `429 RATE_LIMITED` en `/verificar` | 30 verificaciones por minuto desde una IP, o (log «Tope global de verificaciones fallidas alcanzado») más de 1200 códigos inexistentes en un minuto en total: posible recorrido de códigos; los códigos reales siguen respondiendo | Esperar un minuto; revisar el log y el BFF del panel (que reenvíe la IP real) |
 
 ## Registros útiles
 
@@ -203,5 +337,13 @@ se crea en el panel (Equipo y administradores).
 - Avisos en diferido: `No se pudo enviar <aviso> (inscripción <id> | participante <id>): <tipo de
   error> [<código de Prisma>]`; si Brevo rechaza un aviso, el detalle queda en la credencial
   (`ultimoError`, en Correo), no en el log.
-- 503 de negocio (`PDF_BUSY`, `CODE_LOGIN_*`): `Servicio no disponible: <código>` (aviso); «Error
-  interno» queda solo para errores inesperados.
+- 5xx de negocio (`PDF_BUSY`, `CODE_LOGIN_*`, `GENERATION_BUSY`, `CERTIFICATE_PROVIDER_PENDING`):
+  `Servicio no disponible: <código>` (aviso); «Error interno» queda solo para errores inesperados.
+- Certificados (spec 015): `Configuración de certificados actualizada por el administrador <id>:
+  <campos>`, `Firmado forzado (FORZADO|METADATOS): certificado <id> por la cuenta <id>` y `Firmado
+  reemplazado: certificado <id> por la cuenta <id>` (avisos), `Firmado quitado: certificado <id> por
+  la cuenta <id>`, `Certificado <id> anulado por la cuenta <id>`, `Plantilla <id>: <n> certificado(s)
+  en firma pasaron a FIRMADO al bajar las firmas requeridas`, `No se pudo generar el certificado <id>
+  (evento <id>): <error>`, `No se pudo completar el ZIP de certificados del evento <id>: <causa>`,
+  `No se pudo archivar el firmado anterior del certificado <id>: <causa>` y `Tope global de
+  verificaciones fallidas alcanzado`. Nunca se registran documentos ni correos.

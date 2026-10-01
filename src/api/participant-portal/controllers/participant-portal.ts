@@ -62,3 +62,18 @@ export async function photo(req: AuthenticatedRequest, res: Response) {
 export async function deletePhoto(req: AuthenticatedRequest, res: Response) {
     responder(res, await service.borrarFoto(participanteId(req)))
 }
+
+/** Certificados firmados propios (spec 015). */
+export async function certificates(req: AuthenticatedRequest, res: Response) {
+    responder(res, await service.misCertificados(participanteId(req)))
+}
+
+export async function certificateFile(req: AuthenticatedRequest, res: Response) {
+    const { ruta, nombre } = await service.miCertificadoFirmado(participanteId(req), idParam(req.params.id))
+    // Un reemplazo del firmado borra el archivo anterior: se lee a memoria sin esperas
+    const pdf = leerArchivoServido(ruta, service.certificadoNoEncontrado)
+    res.setHeader('Cache-Control', 'private, no-store')
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `attachment; filename="${nombre}"`)
+    res.send(pdf)
+}

@@ -63,7 +63,7 @@ export const ETIQUETAS_PERMISO: Record<Permiso, string> = {
     'inscripciones.cancelar': 'Cancelar inscripciones',
     'inscripciones.cortesia': 'Registrar inscripciones de cortesía',
     'legacy.usar': 'Usar las rutas de la versión anterior',
-    'certificados.gestionar': 'Gestionar plantillas y emitir certificados',
+    'certificados.gestionar': 'Gestionar tipos, plantillas, emisión, anulación y proveedor de certificados',
 
     'resumen.ver': 'Ver el resumen del evento',
     'inscripciones.ver': 'Ver inscritos (nombre, documento, correo y celular)',
@@ -79,7 +79,7 @@ export const ETIQUETAS_PERMISO: Record<Permiso, string> = {
     'ponencias.ver': 'Ver y descargar ponencias',
     'mensajes.ver': 'Ver mensajes de contacto',
     'mensajes.eliminar': 'Eliminar mensajes de contacto',
-    'certificados.ver': 'Ver certificados',
+    'certificados.ver': 'Ver certificados y descargar los firmados',
     'certificados.operar': 'Generar, descargar para firmar y subir certificados firmados',
 }
 
@@ -116,7 +116,9 @@ const PERMISOS_TESORERO: readonly Permiso[] = [
 
 /**
  * Permisos que un Owner o Administrador puede marcar para una cuenta de la Comisión. Nunca incluye
- * pagos ni permisos globales. Los de certificados se habilitan con la spec 015.
+ * pagos ni permisos globales. Los de certificados (spec 015) se eligen a mano, nunca vienen marcados
+ * (los PDF pueden llevar el documento del participante); emitir, anular, plantillas y proveedor son
+ * de `certificados.gestionar`, que es global.
  */
 export const PERMISOS_ELEGIBLES_COMISION: readonly Permiso[] = [
     'asistencia.marcar',
@@ -130,6 +132,8 @@ export const PERMISOS_ELEGIBLES_COMISION: readonly Permiso[] = [
     'credenciales.reenviar',
     'ponencias.ver',
     'mensajes.ver',
+    'certificados.ver',
+    'certificados.operar',
 ]
 
 /** Permiso con el que se crea por defecto una cuenta de la Comisión. */
