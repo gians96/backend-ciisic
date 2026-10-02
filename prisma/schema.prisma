@@ -204,6 +204,7 @@ model TipoInscripcion {
   caracteristicas     Json?
   precio              Decimal              @db.Decimal(10, 2)
   precioInstitucional Decimal              @map("precio_institucional") @db.Decimal(10, 2)
+  disponiblePara      DisponibilidadTipo   @default(TODOS) @map("disponible_para")
   activo              Boolean              @default(true)
   orden               Int                  @default(0)
   categoria           CategoriaInscripcion @relation(fields: [categoriaId], references: [id], map: "fk_tipos_inscripcion_categoria")
@@ -211,6 +212,14 @@ model TipoInscripcion {
 
   @@unique([categoriaId, codigo], map: "uq_tipos_inscripcion_categoria_codigo")
   @@map("tipos_inscripcion")
+}
+
+/// A quién se ofrece un tipo de inscripción (spec 016). «Institucional» es la misma condición que da
+/// el precio institucional: estudiante UNDC verificado (categoría estudiantil) o correo del dominio.
+enum DisponibilidadTipo {
+  TODOS
+  INSTITUCIONAL
+  EXTERNOS
 }
 
 model Clasificacion {

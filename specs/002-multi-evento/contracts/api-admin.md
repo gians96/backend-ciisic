@@ -45,9 +45,12 @@ El JWT dura 1 h y lleva `user.rolCodigo`.
 | POST | `/events/:eventId/registration-categories` | `{ codigo, nombre, descripcion?, caracteristicas?, precioDesde?, esEstudiantil?, orden? }` |
 | PUT | `/registration-categories/:id` | Parcial. |
 | DELETE | `/registration-categories/:id` | 409 `CATEGORY_IN_USE` si tiene tipos. |
-| POST | `/registration-categories/:id/types` | `{ codigo, nombre, etiqueta?, descripcion?, caracteristicas?: [{icon,text}], precio, precioInstitucional, activo?, orden? }` |
+| POST | `/registration-categories/:id/types` | `{ codigo, nombre, etiqueta?, descripcion?, caracteristicas?: [{icon,text}], precio, precioInstitucional, disponiblePara?, activo?, orden? }` |
 | PUT | `/registration-types/:id` | Parcial (no borra `caracteristicas` si no se envían). |
 | DELETE | `/registration-types/:id` | 409 `REGISTRATION_TYPE_IN_USE` si tiene inscripciones (desactivar en su lugar). |
+
+`disponiblePara` (spec 016): `TODOS` (por defecto) | `INSTITUCIONAL` | `EXTERNOS`; otro valor → 422
+`VALIDATION_ERROR`. Sale en el listado aunque la cuenta no tenga `pagos.ver` (no es un precio).
 
 ## Inscripciones
 

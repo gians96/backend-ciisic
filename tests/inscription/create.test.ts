@@ -186,3 +186,58 @@ describe('crear inscripción', () => {
         expect(data.verificacionEstudiante).toMatchObject({ motivo: 'SERVICIO_NO_DISPONIBLE' })
     })
 })
+
+describe('disponibilidad del tipo (spec 016)', () => {
+    const sinKitExternos = { ...tipoGeneral, id: 4, precio: new Prisma.Decimal(80), precioInstitucional: new Prisma.Decimal(80), disponiblePara: 'EXTERNOS' }
+    const soloInstitucional = { ...tipoGeneral, id: 5, disponiblePara: 'INSTITUCIONAL' }
+    const externo = (extra: Partial<CrearInscripcionInput> = {}) => {
+        const datos = input(extra)
+        datos.participante.correo = 'persona@gmail.com'
+        return datos
+    }
+
+    it('rechaza un tipo solo para externos con correo del dominio institucional y no crea nada', async () => {
+        m.tipoInscripcion.findFirst.mockResolvedValue(sinKitExternos)
+        const error = crearInscripcion(evento, input({ tipoInscripcionId: 4 }), 'v.png')
+        await expect(error).rejects.toMatchObject({ status: 422, code: 'REGISTRATION_TYPE_NOT_AVAILABLE' })
+        await expect(error).rejects.toThrow('no está disponible para correos @undc.edu.pe')
+        expect(m.inscripcion.create).not.toHaveBeenCalled()
+    })
+
+    it('un tipo solo para externos se cobra al precio regular a un correo externo', async () => {
+        m.tipoInscripcion.findFirst.mockResolvedValue(sinKitExternos)
+        await crearInscripcion(evento, externo({ tipoInscripcionId: 4 }), 'v.png')
+        expect(datosCreados()).toMatchObject({ monto: 80, descuento: 0, esCorreoInstitucional: false })
+    })
+
+    it('un tipo solo institucional rechaza a un externo y acepta el correo del dominio', async () => {
+        m.tipoInscripcion.findFirst.mockResolvedValue(soloInstitucional)
+        await expect(crearInscripcion(evento, externo({ tipoInscripcionId: 5 }), 'v.png'))
+            .rejects.toMatchObject({ status: 422, code: 'REGISTRATION_TYPE_NOT_AVAILABLE', message: expect.stringContaining('es solo para correos @undc.edu.pe') })
+        await crearInscripcion(evento, input({ tipoInscripcionId: 5 }), 'v.png')
+        expect(datosCreados().monto).toBe(120)
+    })
+
+    it('categoría estudiantil: decide la verificación de estudiante, no el dominio', async () => {
+        m.tipoInscripcion.findFirst.mockResolvedValue({ ...tipoEstudiante, disponiblePara: 'EXTERNOS' })
+        await expect(crearInscripcion(evento, input({ verificacionToken: tokenValido() }), 'v.png'))
+            .rejects.toMatchObject({ code: 'REGISTRATION_TYPE_NOT_AVAILABLE', message: expect.stringContaining('estudiantes verificados') })
+        // Sin verificación es un estudiante externo, aunque su correo sea del dominio
+        await crearInscripcion(evento, input(), 'v.png')
+        expect(datosCreados().monto).toBe(120)
+    })
+
+    it('usa el correo con que queda la inscripción: el registrado del dominio no puede tomar un tipo para externos', async () => {
+        m.tipoInscripcion.findFirst.mockResolvedValue(sinKitExternos)
+        m.participante.findUnique.mockImplementation(({ where }) => Promise.resolve(where.correo ? null : { id: 10, correo: 'docente@undc.edu.pe' }))
+        await expect(crearInscripcion(evento, externo({ tipoInscripcionId: 4 }), 'v.png'))
+            .rejects.toMatchObject({ code: 'REGISTRATION_TYPE_NOT_AVAILABLE', message: expect.stringContaining('se usa el correo con el que estás registrado') })
+        expect(m.inscripcion.create).not.toHaveBeenCalled()
+    })
+
+    it('también aplica en la ruta legacy', async () => {
+        m.tipoInscripcion.findFirst.mockResolvedValue(sinKitExternos)
+        await expect(crearInscripcion(evento, input({ tipoInscripcionId: 4 }), null, { legacy: true }))
+            .rejects.toMatchObject({ code: 'REGISTRATION_TYPE_NOT_AVAILABLE' })
+    })
+})

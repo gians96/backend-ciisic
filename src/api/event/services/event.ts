@@ -178,6 +178,7 @@ export async function crearEvento(input: CrearEventoInput) {
                         caracteristicas: tipo.caracteristicas ?? Prisma.JsonNull,
                         precio: tipo.precio,
                         precioInstitucional: tipo.precioInstitucional,
+                        disponiblePara: tipo.disponiblePara,
                         activo: tipo.activo,
                         orden: tipo.orden,
                     })),

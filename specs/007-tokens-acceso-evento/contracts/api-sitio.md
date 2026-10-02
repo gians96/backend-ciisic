@@ -83,13 +83,19 @@ Categorías (ordenadas por `orden`) con sus tipos **activos**. `categoria` es op
           "descripcion": "…",
           "caracteristicas": [{ "icon": "heroicons:gift", "text": "Kit de Merchandising Oficial" }],
           "precio": 120,
-          "precioInstitucional": 100
+          "precioInstitucional": 100,
+          "disponiblePara": "TODOS"
         }
       ]
     }
   ]
 }
 ```
+
+`disponiblePara` (spec 016): `TODOS` | `INSTITUCIONAL` (solo a quien recibe el precio institucional) |
+`EXTERNOS` (nunca a quien lo recibe). La landing oculta el tipo a quien no corresponde con la misma
+regla del precio (estudiante verificado en la categoría estudiantil; correo del dominio en las demás);
+un cliente que no conozca el campo puede ignorarlo: el backend rechaza igual la inscripción.
 
 ## GET `/catalogs`
 
@@ -151,7 +157,9 @@ Respuesta `201`:
 ```
 
 Errores: `409 REGISTRATION_CLOSED`, `422 VALIDATION_ERROR`,
-`422 REGISTRATION_TYPE_INVALID`, `422 VOUCHER_REQUIRED`, `422 INVALID_FILE_CONTENT`,
+`422 REGISTRATION_TYPE_INVALID`, `422 REGISTRATION_TYPE_NOT_AVAILABLE` (spec 016: el tipo no se ofrece a
+quien recibe —o no— el precio institucional, decidido con el correo con que queda la inscripción),
+`422 VOUCHER_REQUIRED`, `422 INVALID_FILE_CONTENT`,
 `409 ALREADY_REGISTERED`, `409 EMAIL_IN_USE`, `409 OPERATION_ALREADY_REGISTERED`,
 `413 UPLOAD_LIMIT_EXCEEDED`.
 

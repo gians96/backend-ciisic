@@ -285,6 +285,21 @@ panel. La respuesta `201` de `POST /api/v1/site/inscriptions` (y de la legacy
 - `numeroOperacion` con el prefijo `CORTESIA-` queda reservado (`422 VALIDATION_ERROR`).
 - `GET /api/v1/site/config` **no cambia** (`{ google, urlPanel }`).
 
+### Disponibilidad de los tipos de inscripción (spec 016)
+
+Definido en `backend-ciisic/specs/016-disponibilidad-tipos/contracts/api-tipos.md`. Cada tipo de
+`GET /api/v1/site/registration-types` trae `disponiblePara`: `TODOS` | `INSTITUCIONAL` (solo a quien
+recibe el precio institucional) | `EXTERNOS` (nunca a quien lo recibe). Ejemplo: en el VIII CIISIC,
+«Profesionales y público general sin kit» es `EXTERNOS`, así un correo `@undc.edu.pe` solo ve el plan
+con kit a su precio institucional.
+
+- La landing oculta el tipo con la **misma regla del precio**: estudiante verificado (categoría
+  estudiantil) o correo del dominio institucional (las demás). Campo ausente = `TODOS`.
+- `POST /api/v1/site/inscriptions` (y la legacy) responde `422 REGISTRATION_TYPE_NOT_AVAILABLE` si el
+  tipo no corresponde, decidido con el correo con que queda la inscripción (el registrado si se conserva).
+- **Cambio compatible**: los tipos existentes quedan en `TODOS`; una landing que ignore el campo sigue
+  funcionando (solo vería el error al enviar).
+
 ## Contrato 4 — API administrativa del congreso (panel)
 
 Definido en `backend-ciisic/specs/002-multi-evento/contracts/api-admin.md`, en las specs
