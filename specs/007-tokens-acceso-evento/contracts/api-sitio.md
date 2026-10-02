@@ -160,7 +160,9 @@ Errores: `409 REGISTRATION_CLOSED`, `422 VALIDATION_ERROR`,
 `422 REGISTRATION_TYPE_INVALID`, `422 REGISTRATION_TYPE_NOT_AVAILABLE` (spec 016: el tipo no se ofrece a
 quien recibe —o no— el precio institucional, decidido con el correo con que queda la inscripción),
 `422 VOUCHER_REQUIRED`, `422 INVALID_FILE_CONTENT`,
-`409 ALREADY_REGISTERED`, `409 EMAIL_IN_USE`, `409 OPERATION_ALREADY_REGISTERED`,
+`409 ALREADY_REGISTERED` (la persona ya tiene una inscripción `PENDIENTE`, `EN_REVISION` o `APROBADO`
+en el evento; una `RECHAZADO` o `CANCELADO` se reutiliza con los datos nuevos y vuelve a `PENDIENTE`,
+spec 017), `409 EMAIL_IN_USE`, `409 OPERATION_ALREADY_REGISTERED`,
 `413 UPLOAD_LIMIT_EXCEEDED`.
 
 ## POST `/student-verification`

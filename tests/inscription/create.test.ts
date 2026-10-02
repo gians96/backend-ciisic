@@ -1,7 +1,9 @@
+import fs from 'fs'
 import type { Evento } from '@prisma/client'
 import { Prisma } from '@prisma/client'
 import { prisma } from '../../src/database/prisma'
 import { crearInscripcion } from '../../src/api/inscription/services/inscription'
+import { borrarCredenciales } from '../../src/api/inscription/utils/generatePdf'
 import { firmarVerificacion } from '../../src/api/student-verification/services/verification-token'
 import { verificarEstudiante } from '../../src/api/student-verification/services/student-verification'
 import type { CrearInscripcionInput } from '../../src/api/inscription/validation'
@@ -12,7 +14,8 @@ jest.mock('../../src/database/prisma', () => {
         clasificacion: { findUnique: jest.fn() },
         personaConsultada: { findUnique: jest.fn() },
         participante: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
-        inscripcion: { findUnique: jest.fn(), create: jest.fn() },
+        inscripcion: { findUnique: jest.fn(), create: jest.fn(), updateMany: jest.fn(), findUniqueOrThrow: jest.fn() },
+        estadoInscripcion: { findMany: jest.fn() },
     }
     mock.$transaction = jest.fn((fn: (tx: unknown) => unknown) => fn(mock))
     return { prisma: mock }
@@ -23,9 +26,16 @@ jest.mock('../../src/api/student-verification/services/student-verification', ()
     verificarEstudiante: jest.fn(),
 }))
 
+jest.mock('../../src/api/inscription/utils/generatePdf', () => ({
+    ...jest.requireActual('../../src/api/inscription/utils/generatePdf'),
+    borrarCredenciales: jest.fn(),
+}))
+
 const m = prisma as unknown as {
     tipoInscripcion: { findFirst: jest.Mock }, clasificacion: { findUnique: jest.Mock }, personaConsultada: { findUnique: jest.Mock }
-    participante: { findUnique: jest.Mock, create: jest.Mock, update: jest.Mock }, inscripcion: { findUnique: jest.Mock, create: jest.Mock }
+    participante: { findUnique: jest.Mock, create: jest.Mock, update: jest.Mock }
+    inscripcion: { findUnique: jest.Mock, create: jest.Mock, updateMany: jest.Mock, findUniqueOrThrow: jest.Mock }
+    estadoInscripcion: { findMany: jest.Mock }
 }
 
 const evento = {
@@ -125,10 +135,12 @@ describe('crear inscripción', () => {
         await expect(crearInscripcion({ ...evento, inscripcionesAbiertas: false }, input(), 'v.png')).rejects.toMatchObject({ status: 409, code: 'REGISTRATION_CLOSED' })
     })
 
-    it('no permite dos inscripciones de la misma persona en el mismo evento', async () => {
+    it.each(['PENDIENTE', 'EN_REVISION', 'APROBADO'])('no permite dos inscripciones de la misma persona en el mismo evento (anterior %s)', async (codigo) => {
         m.participante.findUnique.mockImplementation(({ where }) => Promise.resolve(where.correo ? { id: 10 } : { id: 10 }))
-        m.inscripcion.findUnique.mockResolvedValue({ id: 5 })
+        m.inscripcion.findUnique.mockResolvedValue({ id: 5, voucherArchivo: 'v-anterior.png', estado: { codigo } })
         await expect(crearInscripcion(evento, input(), 'v.png')).rejects.toMatchObject({ status: 409, code: 'ALREADY_REGISTERED' })
+        expect(m.inscripcion.updateMany).not.toHaveBeenCalled()
+        expect(m.inscripcion.create).not.toHaveBeenCalled()
     })
 
     it('reutiliza al participante de un evento anterior', async () => {
@@ -239,5 +251,67 @@ describe('disponibilidad del tipo (spec 016)', () => {
         m.tipoInscripcion.findFirst.mockResolvedValue(sinKitExternos)
         await expect(crearInscripcion(evento, input({ tipoInscripcionId: 4 }), null, { legacy: true }))
             .rejects.toMatchObject({ code: 'REGISTRATION_TYPE_NOT_AVAILABLE' })
+    })
+})
+
+describe('reinscripción tras un rechazo o una cancelación (spec 017)', () => {
+    const ESTADOS = [{ id: 1, codigo: 'PENDIENTE' }, { id: 3, codigo: 'RECHAZADO' }, { id: 5, codigo: 'CANCELADO' }]
+    let existe: jest.SpyInstance
+    let borrarArchivo: jest.SpyInstance
+
+    beforeEach(() => {
+        m.participante.findUnique.mockImplementation(({ where }) => Promise.resolve(where.correo ? null : { id: 10, correo: '2020123456@undc.edu.pe' }))
+        m.estadoInscripcion.findMany.mockResolvedValue(ESTADOS)
+        m.inscripcion.updateMany.mockResolvedValue({ count: 1 })
+        m.inscripcion.findUniqueOrThrow.mockResolvedValue({ id: 5 })
+        existe = jest.spyOn(fs, 'existsSync').mockReturnValue(true)
+        borrarArchivo = jest.spyOn(fs, 'unlinkSync').mockImplementation(() => undefined)
+    })
+
+    afterEach(() => {
+        existe.mockRestore()
+        borrarArchivo.mockRestore()
+    })
+
+    it.each(['RECHAZADO', 'CANCELADO'])('reutiliza la inscripción %s: vuelve a PENDIENTE con los datos nuevos', async (codigo) => {
+        m.inscripcion.findUnique.mockResolvedValue({ id: 5, voucherArchivo: 'voucher-anterior.png', estado: { codigo } })
+        const inscripcion = await crearInscripcion(evento, input({ numeroOperacion: 'OP-NUEVA' }), 'voucher-nuevo.png')
+
+        expect(inscripcion.id).toBe(5)
+        expect(m.inscripcion.create).not.toHaveBeenCalled()
+        const [{ where, data }] = m.inscripcion.updateMany.mock.calls[0]
+        // Solo cambia la fila si sigue rechazada o cancelada
+        expect(where).toEqual({ id: 5, estadoId: { in: [3, 5] } })
+        expect(data).toMatchObject({
+            estadoId: 1, tipoInscripcionId: 1, clasificacionId: null, monto: 120, numeroOperacion: 'OP-NUEVA', voucherArchivo: 'voucher-nuevo.png',
+            motivoRechazo: null, revisadoPorId: null, revisadoEn: null, credencialEnviadaEn: null, esQrLegado: false,
+        })
+        expect(data.creadoEn).toBeInstanceOf(Date)
+        expect(data.codigoCredencial).toMatch(/^[0-9A-Z]{10}$/)
+        // El voucher y la credencial anteriores ya no corresponden
+        expect(borrarArchivo).toHaveBeenCalledWith(expect.stringContaining('voucher-anterior.png'))
+        expect(borrarCredenciales).toHaveBeenCalledWith(5)
+    })
+
+    it('si otro envío ya la reactivó responde ALREADY_REGISTERED y no borra nada', async () => {
+        m.inscripcion.findUnique.mockResolvedValue({ id: 5, voucherArchivo: 'voucher-anterior.png', estado: { codigo: 'RECHAZADO' } })
+        m.inscripcion.updateMany.mockResolvedValue({ count: 0 })
+        await expect(crearInscripcion(evento, input(), 'voucher-nuevo.png')).rejects.toMatchObject({ status: 409, code: 'ALREADY_REGISTERED' })
+        expect(borrarArchivo).not.toHaveBeenCalled()
+        expect(borrarCredenciales).not.toHaveBeenCalled()
+    })
+
+    it('calcula el precio con los datos nuevos (verificación de estudiante incluida)', async () => {
+        m.inscripcion.findUnique.mockResolvedValue({ id: 5, voucherArchivo: null, estado: { codigo: 'CANCELADO' } })
+        await crearInscripcion(evento, input({ verificacionToken: tokenValido() }), 'v.png')
+        expect(m.inscripcion.updateMany.mock.calls[0][0].data).toMatchObject({ monto: 100, descuento: 20, esEstudianteUndc: true })
+        expect(borrarArchivo).not.toHaveBeenCalled()
+    })
+
+    it('un número de operación de otra inscripción sigue siendo un duplicado', async () => {
+        m.inscripcion.findUnique.mockResolvedValue({ id: 5, voucherArchivo: 'voucher-anterior.png', estado: { codigo: 'RECHAZADO' } })
+        m.inscripcion.updateMany.mockRejectedValue(new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x', meta: { target: 'uq_inscripciones_numero_operacion' } }))
+        await expect(crearInscripcion(evento, input(), 'voucher-nuevo.png')).rejects.toMatchObject({ status: 409, code: 'OPERATION_ALREADY_REGISTERED' })
+        expect(borrarArchivo).not.toHaveBeenCalled()
     })
 })

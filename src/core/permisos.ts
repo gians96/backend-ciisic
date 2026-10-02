@@ -5,7 +5,8 @@ import { ROL, type CodigoRol } from './catalogos'
  * (`requirePermiso`) y el panel usa los mismos códigos para menús y botones.
  *
  * Alcance:
- * - `G` (global): solo lo tienen los roles globales (Owner y Administrador del sistema).
+ * - `G` (global): solo lo tienen los roles globales (Owner y Administrador del sistema); los de
+ *   `PERMISOS_SOLO_OWNER`, solo el Owner.
  * - `E` (por evento): una cuenta con eventos asignados (Tesorero, Comisión) lo ejerce solo en esos
  *   eventos; la ruta debe resolver el evento del recurso o filtrar por actor.
  */
@@ -135,9 +136,15 @@ export const PERMISOS_ELEGIBLES_COMISION: readonly Permiso[] = [
 /** Permiso con el que se crea por defecto una cuenta de la Comisión. */
 export const PERMISOS_COMISION_POR_DEFECTO: readonly Permiso[] = ['asistencia.marcar']
 
+/**
+ * Permisos que solo tiene el Owner: configurar el sistema y eliminar inscripciones (spec 017; borra
+ * la fila, el voucher y la credencial sin vuelta atrás). El Administrador del sistema tiene el resto.
+ */
+export const PERMISOS_SOLO_OWNER: readonly Permiso[] = ['sistema.configurar', 'inscripciones.eliminar']
+
 export const PERMISOS_POR_ROL: Record<CodigoRol, readonly Permiso[]> = {
     [ROL.OWNER]: TODOS,
-    [ROL.ADMINISTRADOR]: TODOS.filter((p) => p !== 'sistema.configurar'),
+    [ROL.ADMINISTRADOR]: TODOS.filter((p) => !PERMISOS_SOLO_OWNER.includes(p)),
     [ROL.TESORERO]: PERMISOS_TESORERO,
     // La Comisión no tiene permisos propios del rol: son los elegidos para cada cuenta
     [ROL.COMISION]: [],

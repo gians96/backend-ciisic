@@ -50,6 +50,49 @@ async function exigirCorreoLibre(tx: Prisma.TransactionClient, correo: string, p
 }
 
 /**
+ * Estados que liberan el lugar en el evento (spec 017): quien tiene su inscripción rechazada o
+ * cancelada puede volver a inscribirse. Se reutiliza la misma fila (índice único evento-participante).
+ */
+const ESTADOS_REINSCRIBIBLES: readonly CodigoEstadoInscripcion[] = ['RECHAZADO', 'CANCELADO']
+
+const yaInscrito = () => conflict('ALREADY_REGISTERED', 'Ya tienes una inscripción registrada en este evento.')
+
+/** Inscripción rechazada o cancelada que se reutiliza al volver a inscribirse (spec 017). */
+interface InscripcionAnterior {
+    id: number
+    voucherArchivo: string | null
+}
+
+/**
+ * Vuelve a PENDIENTE una inscripción rechazada o cancelada con los datos nuevos. Es una sola
+ * sentencia que solo cambia la fila si sigue en uno de esos estados: de dos envíos a la vez, el
+ * segundo recibe `ALREADY_REGISTERED`, igual que al crear.
+ */
+async function reinscribir(tx: Prisma.TransactionClient, id: number, datos: Prisma.InscripcionUncheckedUpdateManyInput) {
+    const estados = await tx.estadoInscripcion.findMany({ where: { codigo: { in: ['PENDIENTE', ...ESTADOS_REINSCRIBIBLES] } }, select: { id: true, codigo: true } })
+    const pendiente = estados.find((estado) => estado.codigo === 'PENDIENTE')
+    if (!pendiente) throw new Error('Falta el estado PENDIENTE en el catálogo de estados de inscripción')
+    const liberan = estados.filter((estado) => estado.codigo !== 'PENDIENTE').map((estado) => estado.id)
+    const { count } = await tx.inscripcion.updateMany({ where: { id, estadoId: { in: liberan } }, data: { ...datos, estadoId: pendiente.id } })
+    if (count !== 1) throw yaInscrito()
+    return tx.inscripcion.findUniqueOrThrow({ where: { id }, include: detalleInclude })
+}
+
+/** Borra el voucher y los PDF de credencial que quedaron de la inscripción reutilizada (spec 017). */
+function limpiarInscripcionAnterior(anterior: InscripcionAnterior, voucherNuevo: string | null): void {
+    try {
+        if (anterior.voucherArchivo && anterior.voucherArchivo !== voucherNuevo) {
+            const ruta = uploadedFilePath(anterior.voucherArchivo)
+            if (fs.existsSync(ruta)) fs.unlinkSync(ruta)
+        }
+        borrarCredenciales(anterior.id)
+    } catch {
+        // La reinscripción ya quedó guardada: un archivo que no se pudo borrar no la deshace
+        console.warn(`[inscripciones] No se pudieron borrar los archivos anteriores de la inscripción ${anterior.id}`)
+    }
+}
+
+/**
  * Crea una inscripción (spec 002): valida evento y tipo, calcula el precio en el servidor,
  * reutiliza al participante por documento y crea la inscripción en estado PENDIENTE.
  *
@@ -60,6 +103,11 @@ async function exigirCorreoLibre(tx: Prisma.TransactionClient, correo: string, p
  * (correo y celular registrados), `correoConservado` es `true` y se avisa al correo registrado. El
  * precio por dominio institucional y `esCorreoInstitucional` salen del correo con que queda la
  * inscripción. Cambiar el correo lo hace el staff (`PUT /v1/participants/:id`, con aviso al anterior).
+ *
+ * Reinscripción (spec 017): si la persona ya tiene en el evento una inscripción RECHAZADA o
+ * CANCELADA, se reutiliza esa fila con los datos nuevos y vuelve a PENDIENTE (fecha de hoy, código de
+ * credencial nuevo, sin la revisión anterior) y se borran su voucher y su credencial anteriores. Con
+ * una inscripción en otro estado se responde `409 ALREADY_REGISTERED`, como siempre.
  */
 export async function crearInscripcion(evento: Evento, input: CrearInscripcionInput, voucherArchivo: string | null, opciones: OpcionesCreacion = {}): Promise<InscripcionCreada> {
     if (!inscripcionesAbiertas(evento)) throw conflict('REGISTRATION_CLOSED', 'Las inscripciones para este evento están cerradas.')
@@ -113,17 +161,24 @@ export async function crearInscripcion(evento: Evento, input: CrearInscripcionIn
 
     try {
         // Si el código de la credencial choca con otro (improbable), se repite la transacción con uno nuevo
-        const { inscripcion: creada, correoConservado } = await conReintentoDeCodigo(() => prisma.$transaction(async (tx) => {
+        const { inscripcion: creada, correoConservado, anterior } = await conReintentoDeCodigo(() => prisma.$transaction(async (tx) => {
             let participante = await tx.participante.findUnique({
                 where: { tipoDocumentoId_numeroDocumento: { tipoDocumentoId: p.tipoDocumento, numeroDocumento: p.numeroDocumento } },
             })
             let conservado = false
             // Correo con que queda la inscripción: el ingresado o, si se conserva, el registrado
             let correoFinal = correo
+            let anterior: InscripcionAnterior | null = null
 
             if (participante) {
-                const existente = await tx.inscripcion.findUnique({ where: { eventoId_participanteId: { eventoId: evento.id, participanteId: participante.id } } })
-                if (existente) throw conflict('ALREADY_REGISTERED', 'Ya tienes una inscripción registrada en este evento.')
+                const existente = await tx.inscripcion.findUnique({
+                    where: { eventoId_participanteId: { eventoId: evento.id, participanteId: participante.id } },
+                    select: { id: true, voucherArchivo: true, estado: { select: { codigo: true } } },
+                })
+                if (existente) {
+                    if (!ESTADOS_REINSCRIBIBLES.includes(existente.estado?.codigo as CodigoEstadoInscripcion)) throw yaInscrito()
+                    anterior = { id: existente.id, voucherArchivo: existente.voucherArchivo }
+                }
                 conservado = participante.correo.toLowerCase() !== correo
                 correoFinal = participante.correo
                 if (conservado) {
@@ -151,37 +206,55 @@ export async function crearInscripcion(evento: Evento, input: CrearInscripcionIn
             }
             // La verificación con Google es del correo ingresado: si se conservó el registrado, no aplica
             const correoVerificado = conservado ? null : verificacionCorreo
-            const inscripcion = await tx.inscripcion.create({
-                data: {
-                    evento: { connect: { id: evento.id } },
-                    participante: { connect: { id: participante.id } },
-                    tipoInscripcion: { connect: { id: tipo.id } },
-                    ...(input.clasificacionId ? { clasificacion: { connect: { id: input.clasificacionId } } } : {}),
-                    estado: { connect: { codigo: 'PENDIENTE' } },
-                    codigoCredencial: nuevoCodigoCredencial(),
-                    modalidadPago: input.modalidadPago,
-                    banco: input.modalidadPago === 'banco' ? input.banco ?? null : null,
-                    tipoOperacion: input.modalidadPago === 'banco' ? input.tipoOperacion ?? null : null,
-                    billeteraDigital: input.modalidadPago === 'billetera' ? input.billeteraDigital ?? null : null,
-                    numeroOperacion: input.numeroOperacion.trim(),
-                    fechaPago: aColumnaFecha(input.fechaPago),
-                    voucherArchivo,
-                    monto: precio.monto,
-                    descuento: precio.descuento,
-                    tieneDescuento: precio.descuento > 0,
-                    esCorreoInstitucional: precio.correoInstitucional,
-                    esEstudianteUndc: verificacion?.esEstudianteUndc ?? false,
-                    codigoEstudiante: verificacion?.esEstudianteUndc ? verificacion.codigoEstudiante : null,
-                    verificacionEstudiante: snapshot ?? Prisma.JsonNull,
-                    esCorreoVerificado: Boolean(correoVerificado),
-                    verificacionCorreo: correoVerificado
-                        ? { metodo: correoVerificado.metodo, tipoCuenta: correoVerificado.tipoCuenta, hd: correoVerificado.hd, verificadoEn: correoVerificado.verificadoEn }
-                        : Prisma.JsonNull,
-                },
-                include: detalleInclude,
-            })
-            return { inscripcion, correoConservado: conservado }
+            // Lo mismo al crear y al reinscribir (spec 017)
+            const datos = {
+                codigoCredencial: nuevoCodigoCredencial(),
+                modalidadPago: input.modalidadPago,
+                banco: input.modalidadPago === 'banco' ? input.banco ?? null : null,
+                tipoOperacion: input.modalidadPago === 'banco' ? input.tipoOperacion ?? null : null,
+                billeteraDigital: input.modalidadPago === 'billetera' ? input.billeteraDigital ?? null : null,
+                numeroOperacion: input.numeroOperacion.trim(),
+                fechaPago: aColumnaFecha(input.fechaPago),
+                voucherArchivo,
+                monto: precio.monto,
+                descuento: precio.descuento,
+                tieneDescuento: precio.descuento > 0,
+                esCorreoInstitucional: precio.correoInstitucional,
+                esEstudianteUndc: verificacion?.esEstudianteUndc ?? false,
+                codigoEstudiante: verificacion?.esEstudianteUndc ? verificacion.codigoEstudiante : null,
+                verificacionEstudiante: snapshot ?? Prisma.JsonNull,
+                esCorreoVerificado: Boolean(correoVerificado),
+                verificacionCorreo: correoVerificado
+                    ? { metodo: correoVerificado.metodo, tipoCuenta: correoVerificado.tipoCuenta, hd: correoVerificado.hd, verificadoEn: correoVerificado.verificadoEn }
+                    : Prisma.JsonNull,
+            }
+            const inscripcion = anterior
+                ? await reinscribir(tx, anterior.id, {
+                    ...datos,
+                    tipoInscripcionId: tipo.id,
+                    clasificacionId: input.clasificacionId ?? null,
+                    // Es una inscripción nueva: fecha de hoy y sin la revisión ni la credencial anteriores
+                    creadoEn: new Date(),
+                    motivoRechazo: null,
+                    revisadoPorId: null,
+                    revisadoEn: null,
+                    credencialEnviadaEn: null,
+                    esQrLegado: false,
+                })
+                : await tx.inscripcion.create({
+                    data: {
+                        evento: { connect: { id: evento.id } },
+                        participante: { connect: { id: participante.id } },
+                        tipoInscripcion: { connect: { id: tipo.id } },
+                        ...(input.clasificacionId ? { clasificacion: { connect: { id: input.clasificacionId } } } : {}),
+                        estado: { connect: { codigo: 'PENDIENTE' } },
+                        ...datos,
+                    },
+                    include: detalleInclude,
+                })
+            return { inscripcion, correoConservado: conservado, anterior }
         }))
+        if (anterior) limpiarInscripcionAnterior(anterior, voucherArchivo)
         if (correoConservado) {
             const ingresado = enmascararCorreo(correo)
             enDiferido(`el aviso de correo conservado (inscripción ${creada.id})`, () => enviarAvisoCorreoConservado(creada, ingresado))
@@ -229,7 +302,8 @@ export async function listarInscripciones(eventoId: number, filtros: FiltrosInsc
     const where = construirFiltro(eventoId, filtros, conPago)
     const [total, filas] = await Promise.all([
         prisma.inscripcion.count({ where }),
-        prisma.inscripcion.findMany({ where, include: detalleInclude, orderBy: { id: 'desc' }, skip: paginacion.skip, take: paginacion.take }),
+        // Por fecha de registro: una reinscripción (spec 017) conserva su id pero aparece como nueva
+        prisma.inscripcion.findMany({ where, include: detalleInclude, orderBy: [{ creadoEn: 'desc' }, { id: 'desc' }], skip: paginacion.skip, take: paginacion.take }),
     ])
     return { data: filas.map((fila) => aFilaLista(fila, conPago)), meta: pageMeta(paginacion, total) }
 }

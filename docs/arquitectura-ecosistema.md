@@ -300,6 +300,16 @@ con kit a su precio institucional.
 - **Cambio compatible**: los tipos existentes quedan en `TODOS`; una landing que ignore el campo sigue
   funcionando (solo vería el error al enviar).
 
+### Reinscripción tras un rechazo o una cancelación (spec 017)
+
+- `POST /api/v1/site/inscriptions` (y la legacy) ya no responde `409 ALREADY_REGISTERED` cuando la
+  inscripción anterior de la persona en el evento está `RECHAZADO` o `CANCELADO`: reutiliza esa fila
+  (mismo `id`) con los datos nuevos y la deja `PENDIENTE`. Con `PENDIENTE`, `EN_REVISION` o `APROBADO`
+  sigue respondiendo `409 ALREADY_REGISTERED`.
+- **Cambio compatible**: la respuesta `201` tiene la misma forma; la landing no necesita cambios.
+- Eliminar inscripciones (`DELETE /api/v1/inscriptions/:id`) pasa a ser **solo del Owner**
+  (`inscripciones.eliminar` sale del Administrador del sistema).
+
 ## Contrato 4 — API administrativa del congreso (panel)
 
 Definido en `backend-ciisic/specs/002-multi-evento/contracts/api-admin.md`, en las specs

@@ -7,6 +7,7 @@ import {
     PERMISOS_COMISION_POR_DEFECTO,
     PERMISOS_ELEGIBLES_COMISION,
     PERMISOS_POR_ROL,
+    PERMISOS_SOLO_OWNER,
     alcanceDeRol,
     cierre,
     esPermiso,
@@ -58,17 +59,19 @@ describe('permisosEfectivos por rol', () => {
         expect(ordenados(permisosEfectivos(ROL.OWNER))).toEqual([...PERMISOS].sort())
     })
 
-    it('el Administrador del sistema tiene todo menos sistema.configurar', () => {
+    it('el Administrador del sistema tiene todo menos sistema.configurar e inscripciones.eliminar', () => {
         const admin = permisosEfectivos(ROL.ADMINISTRADOR)
         expect(admin.has('sistema.configurar')).toBe(false)
-        expect(ordenados(admin)).toEqual(PERMISOS.filter((p) => p !== 'sistema.configurar').sort())
+        expect(admin.has('inscripciones.eliminar')).toBe(false)
+        expect(ordenados(admin)).toEqual(PERMISOS.filter((p) => !PERMISOS_SOLO_OWNER.includes(p)).sort())
         expect(admin.has('correo.configurar')).toBe(true)
         expect(admin.has('eventos.eliminar')).toBe(true)
         expect(admin.has('administradores.gestionar')).toBe(true)
+        expect(admin.has('inscripciones.cancelar')).toBe(true)
     })
 
-    it('solo el Owner tiene sistema.configurar', () => {
-        expect(ROLES.filter((rol) => permisosEfectivos(rol, [...PERMISOS]).has('sistema.configurar'))).toEqual([ROL.OWNER])
+    it.each(['sistema.configurar', 'inscripciones.eliminar'] as Permiso[])('solo el Owner tiene %s', (permiso) => {
+        expect(ROLES.filter((rol) => permisosEfectivos(rol, [...PERMISOS]).has(permiso))).toEqual([ROL.OWNER])
     })
 
     it('el Tesorero valida pagos en sus eventos pero no cancela ni configura', () => {

@@ -92,8 +92,13 @@ y Google. Documentación: [`docs/`](docs/README.md).
   un dato que salga en ellos (el `numeroOperacion` de una cortesía es aleatorio e independiente). El
   QR anterior (id del participante) solo vale con `es_qr_legado` y hasta el `fechaFin` del evento.
 - Staff (spec 013): Owner (`SUPERADMIN`) y Administrador del sistema (`ADMIN`) son globales;
-  Tesorero y Comisión solo operan en sus eventos. Solo el Owner configura Sistema y gestiona Owners
-  y Administradores. Sin `pagos.ver` no salen montos ni datos de pago (van en `null`).
+  Tesorero y Comisión solo operan en sus eventos. Solo el Owner configura Sistema, elimina
+  inscripciones (`PERMISOS_SOLO_OWNER`) y gestiona Owners y Administradores. Sin `pagos.ver` no
+  salen montos ni datos de pago (van en `null`).
+- Una persona tiene una sola inscripción por evento (índice único evento-participante). Si está
+  `RECHAZADO` o `CANCELADO` y vuelve a inscribirse, se **reutiliza la fila** (spec 017): vuelve a
+  `PENDIENTE` con los datos nuevos, fecha de hoy y código de credencial nuevo, y se borran su voucher
+  y su credencial anteriores; la actualización solo cambia la fila si sigue en uno de esos estados.
 - Reglas del dominio institucional fijas en `src/core/correo-institucional.ts` (`undc.edu.pe`,
   parte local numérica = estudiante).
 - Las rutas legacy existen para la landing anterior y se apagan desde el panel (Sistema).
@@ -172,7 +177,7 @@ con ambos sistemas levantados.
 
 Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Cada cambio
 empieza en `specs/NNN-nombre/` (spec → plan → tasks → contracts) y se marcan las tasks al
-implementar. Specs actuales: 001–014 y 016 (ver [README](README.md)); la 015 (certificados) tiene
+implementar. Specs actuales: 001–014, 016 y 017 (ver [README](README.md)); la 015 (certificados) tiene
 solo su diseño (`research.md`).
 
 ## Antes de dar por terminado

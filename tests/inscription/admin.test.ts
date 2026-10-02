@@ -302,9 +302,14 @@ describe('rutas reservadas a las cuentas globales', () => {
         expect(m.inscripcion.delete).not.toHaveBeenCalled()
     })
 
-    it('el Administrador del sistema elimina inscripciones', async () => {
-        const r = await request(app).delete('/api/v1/inscriptions/5').set(con(tokenDeRol('ADMIN')))
-        expect(r.status).toBe(200)
+    it('solo el Owner elimina inscripciones (spec 017): el Administrador del sistema recibe 403', async () => {
+        const admin = await request(app).delete('/api/v1/inscriptions/5').set(con(tokenDeRol('ADMIN')))
+        expect(admin.status).toBe(403)
+        expect(admin.body.code).toBe('FORBIDDEN')
+        expect(m.inscripcion.delete).not.toHaveBeenCalled()
+
+        const owner = await request(app).delete('/api/v1/inscriptions/5').set(con(tokenDeRol('SUPERADMIN')))
+        expect(owner.status).toBe(200)
         expect(m.inscripcion.delete).toHaveBeenCalledWith({ where: { id: 5 } })
     })
 
