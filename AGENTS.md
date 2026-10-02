@@ -70,6 +70,9 @@ y Google. Documentación: [`docs/`](docs/README.md).
 - El servidor calcula precios, estados y montos; ignora `estadoId`, `pago`, `descuento` y rutas
   de archivo enviadas por el cliente. Precio UNDC en la categoría estudiantil solo con un token
   de verificación de estudiante válido y coincidente.
+- Un tipo con `disponiblePara` `INSTITUCIONAL` o `EXTERNOS` solo se ofrece a quien recibe (o no) el
+  precio institucional, decidido con el mismo `aplicaInstitucional` y el correo final de la
+  inscripción (spec 016): `422 REGISTRATION_TYPE_NOT_AVAILABLE`. Las cortesías no lo aplican.
 - Aprobar genera la credencial y envía el correo; si el correo falla, la aprobación se mantiene.
 - Google en la landing es **opcional** y no cambia precios; en el panel entra una cuenta de staff
   activa (cualquier dominio) o un participante inscrito (portal), este con Google **o con un código
@@ -169,8 +172,8 @@ con ambos sistemas levantados.
 
 Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Cada cambio
 empieza en `specs/NNN-nombre/` (spec → plan → tasks → contracts) y se marcan las tasks al
-implementar. Specs actuales: 001–014 (ver [README](README.md)); la 015 (certificados) tiene solo
-su diseño (`research.md`).
+implementar. Specs actuales: 001–014 y 016 (ver [README](README.md)); la 015 (certificados) tiene
+solo su diseño (`research.md`).
 
 ## Antes de dar por terminado
 

@@ -30,6 +30,7 @@ virtual, asistencia y perfil con foto).
 | [012](specs/012-qr-billeteras) | Imagen del QR de las billeteras: subida desde el panel y entrega a la landing |
 | [013](specs/013-roles-permisos) | Roles (Owner, Administrador del sistema, Tesorero, Comisión), permisos por ruta y alcance por evento |
 | [014](specs/014-portal-fotocheck-asistencia) | Portal del participante (código por correo, perfil con foto, asistencia), fotocheck virtual con código de credencial y asistencia por QR |
+| [016](specs/016-disponibilidad-tipos) | Disponibilidad de los tipos de inscripción: para todos, solo la comunidad UNDC o solo externos |
 
 ## Desarrollo local
 

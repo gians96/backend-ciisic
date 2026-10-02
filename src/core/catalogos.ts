@@ -29,6 +29,13 @@ export function esCodigoRol(valor: unknown): valor is CodigoRol {
 export const METODOS_ASISTENCIA = ['QR', 'QR_LEGADO', 'DOCUMENTO', 'MANUAL'] as const
 export type MetodoAsistencia = typeof METODOS_ASISTENCIA[number]
 
+/**
+ * A quién se ofrece un tipo de inscripción (spec 016): a todos, solo a quien recibe el precio
+ * institucional (estudiante UNDC verificado o correo del dominio) o solo a los externos.
+ */
+export const DISPONIBILIDADES_TIPO = ['TODOS', 'INSTITUCIONAL', 'EXTERNOS'] as const
+export type DisponibilidadTipo = typeof DISPONIBILIDADES_TIPO[number]
+
 export const CATEGORIA_ESTUDIANTES = 'ESTUDIANTES'
 export const CATEGORIA_PUBLICO_GENERAL = 'PUBLICO_GENERAL'
 

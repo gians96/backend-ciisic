@@ -21,6 +21,7 @@ export function aTipo(tipo: TipoInscripcion, totalInscripciones?: number) {
         caracteristicas: tipo.caracteristicas ?? null,
         precio: monto(tipo.precio),
         precioInstitucional: monto(tipo.precioInstitucional),
+        disponiblePara: tipo.disponiblePara,
         activo: tipo.activo,
         orden: tipo.orden,
         ...(totalInscripciones !== undefined ? { totalInscripciones } : {}),
@@ -66,6 +67,8 @@ export async function tiposPublicos(eventoId: number, categoria?: string) {
             caracteristicas: tipo.caracteristicas ?? null,
             precio: monto(tipo.precio),
             precioInstitucional: monto(tipo.precioInstitucional),
+            // Spec 016: la landing oculta el tipo a quien no corresponde (el backend igual lo rechaza)
+            disponiblePara: tipo.disponiblePara,
         })),
     }))
 }
@@ -192,6 +195,7 @@ export async function crearTipo(categoriaId: number, input: CrearTipoInput) {
             caracteristicas: json(input.caracteristicas ?? null),
             precio: input.precio,
             precioInstitucional: input.precioInstitucional,
+            disponiblePara: input.disponiblePara ?? 'TODOS',
             activo: input.activo ?? true,
             orden: input.orden ?? 0,
         },
@@ -214,6 +218,7 @@ export async function actualizarTipo(id: number, input: ActualizarTipoInput) {
     if (input.caracteristicas !== undefined) data.caracteristicas = json(input.caracteristicas)
     if (input.precio !== undefined) data.precio = input.precio
     if (input.precioInstitucional !== undefined) data.precioInstitucional = input.precioInstitucional
+    if (input.disponiblePara !== undefined) data.disponiblePara = input.disponiblePara
     if (input.activo !== undefined) data.activo = input.activo
     if (input.orden !== undefined) data.orden = input.orden
     const tipo = await prisma.tipoInscripcion.update({ where: { id }, data })

@@ -1,4 +1,5 @@
 import * as yup from 'yup'
+import { DISPONIBILIDADES_TIPO, type DisponibilidadTipo } from '../../core/catalogos'
 
 const caracteristicasSchema = yup.array().of(yup.object({
     icon: yup.string().trim().max(80).required(),
@@ -34,6 +35,8 @@ const camposTipo = {
     caracteristicas: caracteristicasSchema,
     precio: yup.number().min(0).max(99999999),
     precioInstitucional: yup.number().min(0).max(99999999),
+    // Spec 016: a quién se ofrece (sin enviar: TODOS al crear, se conserva al actualizar)
+    disponiblePara: yup.mixed<DisponibilidadTipo>().oneOf([...DISPONIBILIDADES_TIPO], 'Elige a quién se ofrece: TODOS, INSTITUCIONAL o EXTERNOS'),
     activo: yup.boolean(),
     orden: yup.number().integer().min(0).max(1000),
 }

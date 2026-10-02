@@ -1,4 +1,4 @@
-import { calcularPrecio, esCorreoInstitucional } from '../../src/api/inscription/services/pricing'
+import { calcularPrecio, esCorreoInstitucional, mensajeTipoNoDisponible, tipoDisponible } from '../../src/api/inscription/services/pricing'
 
 const base = { precio: 120, precioInstitucional: 100 }
 
@@ -27,5 +27,26 @@ describe('reglas de precio', () => {
         expect(esCorreoInstitucional('2020123456@UNDC.edu.pe', 'undc.edu.pe')).toBe(true)
         expect(esCorreoInstitucional('alguien@undc.edu.pe.evil.com', 'undc.edu.pe')).toBe(false)
         expect(esCorreoInstitucional('sin-arroba', 'undc.edu.pe')).toBe(false)
+    })
+})
+
+describe('disponibilidad del tipo (spec 016)', () => {
+    it.each([
+        ['TODOS', true, true],
+        ['TODOS', false, true],
+        ['INSTITUCIONAL', true, true],
+        ['INSTITUCIONAL', false, false],
+        ['EXTERNOS', true, false],
+        ['EXTERNOS', false, true],
+        [null, true, true],
+        [undefined, false, true],
+    ] as const)('%s con aplicaInstitucional=%s → disponible=%s', (disponiblePara, aplicaInstitucional, esperado) => {
+        expect(tipoDisponible(disponiblePara, aplicaInstitucional)).toBe(esperado)
+    })
+
+    it('el mensaje dice a quién se ofrece según la categoría', () => {
+        expect(mensajeTipoNoDisponible('EXTERNOS', false, 'undc.edu.pe')).toContain('no está disponible para correos @undc.edu.pe')
+        expect(mensajeTipoNoDisponible('INSTITUCIONAL', false, 'undc.edu.pe')).toContain('es solo para correos @undc.edu.pe')
+        expect(mensajeTipoNoDisponible('INSTITUCIONAL', true, 'undc.edu.pe')).toContain('es solo para estudiantes verificados con su correo @undc.edu.pe')
     })
 })
