@@ -266,6 +266,8 @@ export async function resumenEvento(id: number, conPago = true) {
 
     // Spec 018: por cómo se asiste. Una inscripción sin tipo (cortesía) cuenta como PRESENCIAL, así que la
     // suma de `inscripciones` es el total del evento. Parte de las mismas filas agrupadas que `porTipo`.
+    // Siempre trae las dos filas (contrato): un evento sin tipos virtuales trae VIRTUAL en cero y es el
+    // consumidor quien oculta el bloque mientras no haya actividad virtual.
     const modalidadDelTipo = new Map(tipos.map((tipo) => [tipo.id, modalidadDe(tipo.modalidad)]))
     const modalidadDeLaFila = (tipoInscripcionId: number | null) => (tipoInscripcionId === null ? 'PRESENCIAL' : modalidadDelTipo.get(tipoInscripcionId) ?? 'PRESENCIAL')
     const porModalidad = MODALIDADES_ASISTENCIA.map((modalidad) => {

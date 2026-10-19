@@ -53,6 +53,13 @@ forma congelada **no** llevan `modalidad`.
   `modalidad` opcional: `PRESENCIAL` | `VIRTUAL`. Otro valor, o `null`, responde `422 VALIDATION_ERROR`
   con `fields.modalidad`. Al crear sin ella, nace `PRESENCIAL`; al actualizar sin ella, se conserva. Las
   respuestas de crear y actualizar la incluyen.
+- La modalidad se lee **del tipo en tiempo real**, no se guarda en cada inscripción como el precio.
+  Cambiarla en un tipo que ya tiene inscripciones es válido (sirve para corregir un error) pero es
+  **retroactivo**: de inmediato cambian para todas esas inscripciones el filtro y la columna del CSV, el
+  resumen, el aviso del escáner, el rótulo de la credencial PDF (se regenera por la huella) y el párrafo
+  del correo en los reenvíos. La respuesta de actualizar trae `totalInscripciones` para que el panel lo
+  avise. No hay `409`: un candado impediría corregir un tipo marcado por error. Para pasar a una persona
+  de un tipo a otro hay que rechazar o cancelar y reinscribir (spec 017).
 - `GET /api/v1/registration-types` (legacy) no cambia.
 
 ### Inscripciones
@@ -89,6 +96,11 @@ forma congelada **no** llevan `modalidad`.
   todas las inscripciones de esa modalidad (las de tipo `null` cuentan como `PRESENCIAL`, así la suma es
   `totales.inscripciones`); `aprobadas` y `montoAprobado` son las `APROBADO`.
 - Sin `pagos.ver`, `montoAprobado` va en `null`, igual que los demás montos.
+- Un evento sin tipos virtuales (por ejemplo, uno anterior) trae igualmente las dos filas, con `VIRTUAL`
+  en cero. Para que ese evento se vea igual que antes, el consumidor **debe mostrar el bloque «por
+  modalidad» solo si hay actividad virtual**: `inscripciones > 0` en la fila `VIRTUAL` o algún
+  `porTipo[].modalidad` igual a `VIRTUAL`. Ocultarlo es decisión del consumidor (panel); el contrato no
+  cambia la forma de la respuesta.
 
 ## Portal del inscrito y escáner
 
@@ -127,8 +139,16 @@ promete certificado ni horas.
 
 - Backend nuevo + frontends viejos: el campo extra se ignora; los tipos virtuales aparecen como planes
   normales (con la etiqueta «VIRTUAL») y la inscripción funciona igual.
-- Frontends nuevos + backend viejo: sin `modalidad` todo se lee `PRESENCIAL`; el filtro `?modalidad=` lo
-  ignora el backend anterior (los frontends no deben depender de él hasta desplegar el backend).
+- Frontends nuevos + backend viejo: sin errores, pero sin modalidad. Sin `modalidad` todo se lee
+  `PRESENCIAL`; el filtro `?modalidad=` lo ignora el backend anterior (los frontends no deben depender de
+  él hasta desplegar el backend). **Aviso**: el backend anterior descarta en silencio la `modalidad` que
+  envía el panel al crear o editar un tipo (`validateBody` quita los campos que no conoce) y responde
+  `200`/`201` sin ella: el tipo queda `PRESENCIAL` aunque el panel diga `VIRTUAL`, con su precio de 30 o
+  50 y la etiqueta «VIRTUAL». Por eso el **backend se despliega primero** y el selector de modalidad del
+  panel no se usa hasta entonces (`verificar-virtual.sql` avisa de los tipos «VIRTUAL» que no lo son).
+- Orden de despliegue: respaldo → backend → panel y landing → crear los tipos virtuales → verificar. Los
+  tipos nacen activos y la landing anterior los listaría como planes normales, sin separarlos; por eso se
+  crean cuando la landing nueva ya está publicada (o con `@activo = 0` y se activan después).
 - Preguntas de negocio abiertas (entrega del acceso, certificados y asistencia de los virtuales,
   constancia de estudiante): ver `spec.md`. Hasta que se respondan, los textos son neutros y nada se
   bloquea.

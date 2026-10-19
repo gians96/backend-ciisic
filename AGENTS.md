@@ -81,7 +81,9 @@ y Google. Documentación: [`docs/`](docs/README.md).
   nunca en la raíz de una inscripción: no es `modalidadPago` / `pago.modalidad` (`banco`, `billetera`,
   `cortesia`), ni el «fotocheck virtual» del portal. Ausente, `null` o desconocida = `PRESENCIAL`
   (`modalidadDe`, también el tipo `null` de una cortesía). Nada se bloquea por ser virtual: el escáner solo
-  avisa. No se agrega a la forma LEGACY congelada.
+  avisa. No se agrega a la forma LEGACY congelada. Se lee del tipo en tiempo real: cambiarla en un tipo con
+  inscripciones es válido pero retroactivo (CSV, resumen, escáner, PDF y correo). Despliegue: backend
+  primero (el anterior descarta la `modalidad` del panel en silencio) y los tipos virtuales al final.
 - Aprobar genera la credencial y envía el correo; si el correo falla, la aprobación se mantiene.
 - Google en la landing es **opcional** y no cambia precios; en el panel entra una cuenta de staff
   activa (cualquier dominio) o un participante inscrito (portal), este con Google **o con un código

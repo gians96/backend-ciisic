@@ -415,23 +415,31 @@ desconocida = `PRESENCIAL` (también una cortesía sin tipo).
   `PUT /api/v1/registration-types/:id` aceptan `modalidad` (`PRESENCIAL` | `VIRTUAL`; otro valor o
   `null` → `422 VALIDATION_ERROR` con `fields.modalidad`; al crear sin ella, `PRESENCIAL`; al
   actualizar sin ella, se conserva). Las respuestas de crear y actualizar la incluyen. Crear un evento
-  copiando otro (`copiarDeEventoId`) copia la modalidad de cada tipo.
+  copiando otro (`copiarDeEventoId`) copia la modalidad de cada tipo. La modalidad se lee del tipo en
+  tiempo real: cambiarla en un tipo con inscripciones es válido pero **retroactivo** (filtro, CSV,
+  resumen, escáner, credencial y correo de todas sus inscripciones); la respuesta de actualizar trae
+  `totalInscripciones` para que el panel lo avise.
 - **Inscripciones**: `tipoInscripcion.modalidad` en la lista, el detalle y la creación. Filtro nuevo
   `?modalidad=PRESENCIAL|VIRTUAL` en `GET /events/:eventId/inscriptions` y en `/export` (se combina con
   `?categoria=`; otro valor → `422`). CSV: columna **«Modalidad de asistencia»** (también sin
   `pagos.ver`); la columna «Modalidad» de siempre es la de **pago** y no se renombra.
 - **Resumen**: `GET /api/v1/events/:id/summary` → `porTipo[].modalidad` y
   `totales.porModalidad = [{ modalidad, inscripciones, aprobadas, montoAprobado }]` (siempre las dos;
-  `montoAprobado` en `null` sin `pagos.ver`).
+  `montoAprobado` en `null` sin `pagos.ver`). Un evento sin tipos virtuales trae `VIRTUAL` en cero: el
+  panel muestra el bloque «por modalidad» solo si hay actividad virtual (`inscripciones > 0` en
+  `VIRTUAL` o algún `porTipo[].modalidad` `VIRTUAL`), para que un evento anterior se vea igual.
 - **Portal y escáner**: `GET /me/inscriptions` y `GET /me/inscriptions/:id/badge` →
   `tipoInscripcion.modalidad`; `POST /activities/:id/attendances` → `inscripcion.tipoInscripcion.modalidad`.
   El escáner solo avisa «participante virtual»: la marca se registra igual (sin `403` ni `409` nuevos).
 - **Credencial y correo**: el PDF lleva «Modalidad: VIRTUAL» solo si el tipo es virtual (entra en la
   huella; `VERSION_PLANTILLA` 3, así que los PDF guardados se regeneran al pedirlos) y el correo de
   aprobación agrega un párrafo neutro solo para virtuales.
-- **Orden de despliegue**: respaldo → backend (`migrate deploy`) → crear los tipos virtuales
-  (`prisma/preflight/configurar-virtual.sql` o el panel) → panel y landing → verificar
-  (`verificar-virtual.sql`). Cualquier orden entre backend y frontends es seguro. Detalle y reversión en
+- **Orden de despliegue**: respaldo → backend (`migrate deploy`) → panel y landing → crear los tipos
+  virtuales (`prisma/preflight/configurar-virtual.sql` o el panel) → verificar (`verificar-virtual.sql`).
+  Ningún orden da errores (el campo es aditivo), pero **el backend va primero**: el anterior descarta en
+  silencio la `modalidad` que envía el panel, y un tipo creado o editado desde el panel antes queda
+  `PRESENCIAL` (`verificar-virtual.sql` lo detecta). Los tipos van al final porque nacen activos y la
+  landing anterior los mostraría como planes normales, sin separarlos. Detalle y reversión en
   `docs/operacion.md` (Migración 018).
 
 ---

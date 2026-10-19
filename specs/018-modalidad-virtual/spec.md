@@ -77,8 +77,12 @@ persona: solo hay texto libre en la etiqueta del tipo.
 
 - `modalidad` ausente, `null` o desconocida (de un backend o cliente anterior) = `PRESENCIAL`.
 - Una cortesía sin tipo (`tipoInscripcion = null`) se trata como `PRESENCIAL`.
-- Los tipos existentes quedan `PRESENCIAL` (valor por defecto de la columna): nada cambia hasta que se
-  cree un tipo virtual.
+- Los tipos existentes quedan `PRESENCIAL` (valor por defecto de la columna): el comportamiento no cambia
+  hasta que se cree un tipo virtual. Lo único visible desde el primer día es el campo nuevo
+  `totales.porModalidad` del resumen, que trae siempre las dos filas (`VIRTUAL` en cero): el panel debe
+  ocultar ese bloque mientras no haya actividad virtual para que un evento anterior se vea igual.
+- Cambiar la modalidad de un tipo que ya tiene inscripciones es válido y **retroactivo**: se lee del tipo
+  en tiempo real (a diferencia del precio, que se guarda en cada inscripción). Ver el contrato.
 - `modalidad` con un valor distinto de `PRESENCIAL`/`VIRTUAL` (o `null`) al crear o actualizar un tipo:
   `422 VALIDATION_ERROR` con `fields.modalidad`.
 - `?modalidad=` con un valor desconocido en el listado o el CSV: `422 VALIDATION_ERROR` con
@@ -117,7 +121,9 @@ persona: solo hay texto libre en la etiqueta del tipo.
   `PUBLICO_GENERAL` (no hay categoría nueva): se reutilizan el ciclo, la verificación SIVIRENO y la
   marca «validar» para el revisor.
 - **FR-011**: todo es aditivo y tolerante: «backend nuevo + frontends viejos» y «frontends nuevos +
-  backend viejo» funcionan sin errores. Sin variables de entorno nuevas.
+  backend viejo» funcionan sin errores. Con el backend viejo, eso sí, la modalidad que envía el panel se
+  descarta en silencio (el tipo queda `PRESENCIAL`): el backend se despliega primero y los tipos virtuales
+  se crean al final, con la landing nueva ya publicada. Sin variables de entorno nuevas.
 - **FR-012**: textos neutros: no hay enlaces, ni promesas de horas o certificado.
 
 ## Preguntas de negocio abiertas
@@ -135,6 +141,7 @@ La organización aún no las responde; por eso los textos son neutros y nada se 
   pagan lo mismo (30 o 50) y el descuento es 0.
 - **SC-002**: el staff puede filtrar, exportar y resumir por modalidad sin interpretar texto libre.
 - **SC-003**: las inscripciones y tipos anteriores no cambian de comportamiento (`PRESENCIAL`); los
-  clientes que ignoran el campo siguen funcionando.
+  clientes que ignoran el campo siguen funcionando. Un evento sin tipos virtuales se ve igual que antes
+  en el panel (el bloque «por modalidad» del resumen se oculta hasta que haya actividad virtual).
 - **SC-004**: sin variables de entorno nuevas; la migración es aditiva y la imagen anterior sigue
   funcionando con el esquema nuevo.

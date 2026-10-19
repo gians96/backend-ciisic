@@ -42,7 +42,8 @@
   `registrarAsistencia`. No bloquea nada.
 - `src/database/seed.ts`: tipos virtuales de demostración (`--demo`).
 - `prisma/preflight/configurar-virtual.sql` y `verificar-virtual.sql`: datos de producción con un script
-  idempotente y no destructivo (los ejecuta el dueño del proyecto, nunca el código).
+  idempotente y no destructivo (los ejecuta el dueño del proyecto, nunca el código); la verificación avisa
+  de los tipos «VIRTUAL» que no lo son (creados desde el panel con el backend anterior).
 - Documentación: `docs/data-model.md`, `docs/operacion.md` (sección «Migración 018»),
   `docs/arquitectura-ecosistema.md` (contratos 3 y 4), `docs/api.md`, contratos de las specs 002, 007 y
   014, `README.md` y `AGENTS.md`.
@@ -51,23 +52,40 @@
 
 ## Orden de despliegue (cada repositorio se despliega solo con el push a `main`)
 
-1. Respaldo `mysqldump`. 2. Backend (la imagen aplica `prisma migrate deploy`). 3. Crear los tipos
-   virtuales (script o panel). 4. Panel y landing. 5. Verificar. Cualquier orden entre backend y
-   frontends es seguro: el campo es aditivo y su ausencia significa `PRESENCIAL`.
+1. Respaldo `mysqldump`. 2. Backend (la imagen aplica `prisma migrate deploy`). 3. Panel y landing.
+4. Crear los tipos virtuales (script o panel). 5. Verificar.
+
+- **Backend primero.** El campo es aditivo y su ausencia significa `PRESENCIAL`, así que ningún orden
+  produce errores, pero el backend anterior **descarta en silencio** la `modalidad` que envía el panel
+  (`validateBody` usa `stripUnknown` y su esquema no la conoce): un tipo creado o editado desde el panel
+  antes de desplegar el backend queda `PRESENCIAL`. No se usa el selector del panel hasta entonces;
+  `verificar-virtual.sql` avisa de los tipos «VIRTUAL» que no lo son.
+- **Tipos al final.** Nacen activos y la landing anterior ignora la modalidad: los listaría como planes
+  normales, mezclados con los presenciales. Se crean cuando la landing nueva ya está publicada (o con
+  `@activo = 0` y se activan desde el panel después).
+- **Resumen.** `totales.porModalidad` trae siempre las dos filas (contrato): el panel oculta el bloque
+  «por modalidad» mientras no haya actividad virtual, para que un evento sin tipos virtuales se vea igual.
+- **Cambiar la modalidad de un tipo con inscripciones** es válido y retroactivo (se lee del tipo, no de la
+  inscripción). No se bloquea con un `409` para no impedir corregir un error; se documenta en el contrato y
+  en `docs/operacion.md`.
 
 ## Pruebas
 
+- `tests/core/modalidad.test.ts`: `MODALIDADES_ASISTENCIA` (`PRESENCIAL` primero) y `esModalidadAsistencia`
+  (solo los dos valores exactos).
 - `tests/registration-type/modalidad.test.ts`: crear con `VIRTUAL`, sin enviarla `PRESENCIAL`, valor
   desconocido y `null` → `422` con `fields.modalidad`, actualizar solo la modalidad, listado del panel con
   y sin `pagos.ver` y `GET /site/registration-types`; la forma LEGACY no la lleva.
 - `tests/inscription/create.test.ts`: tipo virtual 30/30 y 50/50 con correo del dominio y externo (mismo
   monto, descuento 0, `tieneDescuento` falso, también en la categoría estudiantil sin token).
 - `tests/inscription/pricing.test.ts`: fila con precio igual al institucional.
-- `tests/inscription/admin.test.ts`: filtro `?modalidad=` solo y combinado con `?categoria=`, desconocido
-  → `422`, CSV (columna nueva con y sin `pagos.ver`, la de pago intacta), lista y detalle.
-- `tests/event/event.test.ts`: `porTipo[].modalidad`, `totales.porModalidad` (con y sin `pagos.ver`) y la
-  copia de un evento con `copiarDeEventoId`.
-- `tests/participant-portal` y `tests/activity`: `modalidad` en lista, fotocheck y escáner (los `toEqual`
-  estrictos se actualizan; el escáner sigue marcando a un virtual).
-- `tests/inscription/credencial.test.ts` y `tests/email`: rótulo y huella; párrafo del correo solo para
-  virtuales y con el texto escapado.
+- `tests/inscription/modalidad.test.ts`: `tipoInscripcion.modalidad` en la lista, el detalle y la creación;
+  filtro `?modalidad=` solo y combinado con `?categoria=` (una sola clave `tipoInscripcion`), desconocido
+  → `422`, y el CSV (columna nueva con y sin `pagos.ver`, la de pago intacta).
+- `tests/event/modalidad.test.ts`: la copia de un evento con `copiarDeEventoId`, `porTipo[].modalidad` y
+  `totales.porModalidad` (con y sin `pagos.ver`, y las dos filas aunque no haya tipos virtuales).
+- `tests/participant-portal/fotocheck-asistencia.test.ts` y `tests/activity/asistencia.test.ts`:
+  `modalidad` en lista, fotocheck y escáner (los `toEqual` estrictos se actualizan; el escáner sigue
+  marcando a un virtual).
+- `tests/inscription/credencial.test.ts` y `tests/email/credenciales.test.ts`: rótulo y huella; párrafo del
+  correo solo para virtuales y con el texto escapado.

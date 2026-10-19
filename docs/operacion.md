@@ -147,6 +147,12 @@ todos los tipos existentes quedan `PRESENCIAL`. La imagen anterior sigue funcion
 migrada (no lee la columna y el valor por defecto cubre sus inserciones). Lo contrario no vale: la
 imagen nueva necesita la columna, y por eso el backend se despliega **antes** que los tipos virtuales.
 
+**El backend va primero, también antes que el panel.** Ningún orden produce errores, pero el backend
+anterior descarta en silencio la `modalidad` que envía el panel (la validación quita los campos que no
+conoce) y responde `200`/`201` sin ella: un tipo creado o editado desde el panel con Modalidad =
+Virtual antes de desplegar el backend queda `PRESENCIAL`, con su precio de 30 o 50 y la etiqueta
+«VIRTUAL». No uses el selector de modalidad del panel hasta que el backend esté desplegado.
+
 La modalidad es de **asistencia** (presencial o virtual) y no tiene relación con `modalidad_pago`
 (banco, billetera, cortesía). Los tipos virtuales son datos del evento: no los crea el código sino el
 dueño del proyecto (script o panel), siempre con `precio = precio_institucional` (30 y 50) y
@@ -158,7 +164,15 @@ Orden:
 2. **Desplegar el backend** (push a `main` del backend; `migrate deploy` aplica la migración al
    arrancar). Verificar con `mysql … ciisic_vii < prisma/preflight/verificar-virtual.sql` (solo
    lectura): la columna existe y todos los tipos siguen `PRESENCIAL`.
-3. **Crear los dos tipos virtuales** en el evento `ciisic-viii-2026`, de **una** de estas formas:
+3. **Desplegar el panel y la landing**, con el backend ya desplegado (cada repositorio se despliega con
+   su push a `main`; el orden entre ellos no importa). Mientras no exista ningún tipo virtual no cambia
+   nada visible: la landing no tiene qué separar y el bloque «por modalidad» del resumen del panel se
+   oculta sin actividad virtual (el backend trae siempre las dos filas, con `VIRTUAL` en cero).
+4. **Crear los dos tipos virtuales** en el evento `ciisic-viii-2026`, de **una** de estas formas. Se
+   hace al final porque nacen activos y la landing anterior ignora la modalidad: los listaría como
+   planes normales, mezclados con los presenciales, y alguien podría inscribirse antes de que la
+   landing nueva explique las condiciones. Si por algún motivo hay que crearlos antes de publicar la
+   landing nueva, hazlo con `@activo = 0` (o con **Activo** apagado en el panel) y actívalos después.
    - Script: `mysql --default-character-set=utf8mb4 … ciisic_vii < prisma/preflight/configurar-virtual.sql`.
      Es idempotente y no destructivo (solo `INSERT … SELECT … WHERE NOT EXISTS`, en una transacción),
      y se detiene sin escribir nada si falta la columna, el evento o una de las categorías
@@ -173,12 +187,11 @@ Orden:
 
      Características: «Participación virtual en las ponencias transmitidas» y «No incluye kit ni
      ingreso presencial». La descripción no promete certificado ni horas.
-4. **Desplegar el panel y la landing** (cada repositorio se despliega con su push a `main`; el campo
-   es aditivo y el orden entre ellos no importa). Con el backend sin desplegar, un cliente nuevo ve
-   todo `PRESENCIAL`.
 5. **Verificar** (solo lectura): `verificar-virtual.sql` otra vez. Esperado: dos tipos virtuales con
-   `precio = precio_institucional`, `disponible_para = TODOS`, las anomalías en 0 y los conteos de
-   inscripciones, participantes y tipos anteriores sin cambios. Desde un contenedor puntual de la
+   `precio = precio_institucional`, `disponible_para = TODOS`, las anomalías en 0, **ningún** tipo
+   «VIRTUAL» con otra modalidad (la comprobación 5 debe salir vacía: si aparece uno, se creó desde el
+   panel con el backend anterior y hay que corregir su Modalidad) y los conteos de inscripciones,
+   participantes y tipos anteriores sin cambios. Desde un contenedor puntual de la
    imagen, `./node_modules/.bin/prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code`
    debe salir 0. En la landing, `/estudiantes` y `/general` muestran el plan virtual; una inscripción
    de prueba paga 30 o 50 con cualquier correo y, aprobada, su credencial dice «Modalidad: VIRTUAL».
@@ -196,12 +209,31 @@ Efectos al desplegar:
   virtuales, constancia de estudiante): hasta que se respondan, los textos son neutros y nada se
   bloquea; el escáner de asistencia solo muestra un aviso. Cambiar a alguien de presencial a virtual
   exige rechazar o cancelar y reinscribir (spec 017): no hay endpoint para mover una inscripción.
+- **Cambiar la modalidad de un tipo que ya tiene inscripciones es retroactivo.** La modalidad se lee
+  del tipo en tiempo real (el precio, en cambio, se guarda en cada inscripción). Al editar el tipo
+  cambian de inmediato, para todas sus inscripciones, el filtro y la columna «Modalidad de asistencia»
+  del CSV, el resumen por modalidad, el aviso «virtual» del escáner del día del evento, el rótulo de la
+  credencial PDF (se regenera, porque la modalidad está en la huella) y el párrafo del correo en los
+  reenvíos. Es válido para corregir un error, pero no lo hagas a la ligera con inscripciones aprobadas:
+  la respuesta de editar trae `totalInscripciones` y el panel debería avisarlo. Para pasar a una persona
+  de un tipo a otro, ver arriba (rechazar o cancelar y reinscribir).
 
 Reversión (el esquema es aditivo; **volver a la imagen anterior no exige revertir**):
 
 - Desactivar los tipos virtuales sin tocar el esquema: en el panel, **Activo** apagado en cada uno
-  (dejan de ofrecerse y las inscripciones ya hechas se conservan), o
-  `UPDATE tipos_inscripcion SET activo = 0 WHERE codigo IN ('estudiantes_virtual', 'general_virtual');`
+  (dejan de ofrecerse y las inscripciones ya hechas se conservan), o por SQL, **acotado al evento**
+  (crear un evento copiando otro conserva los códigos, así que otros eventos pueden tener tipos con los
+  mismos códigos y un `UPDATE` solo por código los desactivaría también):
+
+  ```sql
+  UPDATE tipos_inscripcion t
+    JOIN categorias_inscripcion c ON c.id = t.categoria_id
+    JOIN eventos e ON e.id = c.evento_id
+     SET t.activo = 0
+   WHERE e.codigo = 'ciisic-viii-2026'
+     AND t.codigo IN ('estudiantes_virtual', 'general_virtual');
+  ```
+
   (un tipo con inscripciones no se puede eliminar, solo desactivar).
 - Revertir el esquema: **primero** desactivar o eliminar los tipos virtuales (la imagen anterior los
   trataría como presenciales), luego `ALTER TABLE tipos_inscripcion DROP COLUMN modalidad;` y
