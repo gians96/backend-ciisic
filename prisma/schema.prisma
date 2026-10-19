@@ -205,6 +205,7 @@ model TipoInscripcion {
   precio              Decimal              @db.Decimal(10, 2)
   precioInstitucional Decimal              @map("precio_institucional") @db.Decimal(10, 2)
   disponiblePara      DisponibilidadTipo   @default(TODOS) @map("disponible_para")
+  modalidad           ModalidadAsistencia  @default(PRESENCIAL) @map("modalidad")
   activo              Boolean              @default(true)
   orden               Int                  @default(0)
   categoria           CategoriaInscripcion @relation(fields: [categoriaId], references: [id], map: "fk_tipos_inscripcion_categoria")
@@ -220,6 +221,13 @@ enum DisponibilidadTipo {
   TODOS
   INSTITUCIONAL
   EXTERNOS
+}
+
+/// Cómo se asiste al evento con un tipo de inscripción (spec 018). No es la modalidad de pago
+/// (`Inscripcion.modalidadPago`: banco, billetera, cortesía), que es otra cosa.
+enum ModalidadAsistencia {
+  PRESENCIAL
+  VIRTUAL
 }
 
 model Clasificacion {

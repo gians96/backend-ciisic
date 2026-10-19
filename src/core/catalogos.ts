@@ -36,6 +36,25 @@ export type MetodoAsistencia = typeof METODOS_ASISTENCIA[number]
 export const DISPONIBILIDADES_TIPO = ['TODOS', 'INSTITUCIONAL', 'EXTERNOS'] as const
 export type DisponibilidadTipo = typeof DISPONIBILIDADES_TIPO[number]
 
+/**
+ * Cómo se asiste con un tipo de inscripción (spec 018). No es la modalidad de pago
+ * (`modalidadPago`: banco, billetera, cortesía). Lo existente es `PRESENCIAL`.
+ */
+export const MODALIDADES_ASISTENCIA = ['PRESENCIAL', 'VIRTUAL'] as const
+export type ModalidadAsistencia = typeof MODALIDADES_ASISTENCIA[number]
+
+export function esModalidadAsistencia(valor: unknown): valor is ModalidadAsistencia {
+    return typeof valor === 'string' && (MODALIDADES_ASISTENCIA as readonly string[]).includes(valor)
+}
+
+/**
+ * Modalidad de un tipo leída con tolerancia: solo `VIRTUAL` exacto es virtual; ausente, `null` (una
+ * cortesía sin tipo) o desconocida es `PRESENCIAL`.
+ */
+export function modalidadDe(valor: unknown): ModalidadAsistencia {
+    return valor === 'VIRTUAL' ? 'VIRTUAL' : 'PRESENCIAL'
+}
+
 export const CATEGORIA_ESTUDIANTES = 'ESTUDIANTES'
 export const CATEGORIA_PUBLICO_GENERAL = 'PUBLICO_GENERAL'
 
