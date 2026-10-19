@@ -6,7 +6,7 @@ import app from '../../src/app'
 import { prisma } from '../../src/database/prisma'
 import { descifrar } from '../../src/core/crypto'
 import { credencialParaEvento } from '../../src/api/email-credential/services/email-credential'
-import { enviarCorreoAprobacion } from '../../src/api/inscription/utils/sendEmail'
+import { enviarCorreoAprobacion, parrafoModalidad, TEXTO_MODALIDAD_VIRTUAL } from '../../src/api/inscription/utils/sendEmail'
 import type { InscripcionDetalle } from '../../src/api/inscription/services/mappers'
 import { PERMISOS_ELEGIBLES_COMISION } from '../../src/core/permisos'
 import { tokenDeRol } from '../helpers/tokens'
@@ -173,6 +173,47 @@ describe('correo de aprobación', () => {
             attachment: [{ name: 'credencial-ciisic-viii-2026-44.pdf', content: Buffer.from('%PDF-1.4 prueba').toString('base64') }],
         })
         expect(cuerpo.htmlContent).toContain('Ana')
+    })
+
+    describe('modalidad de asistencia (spec 018)', () => {
+        const enviar = async (tipoInscripcion: unknown) => {
+            const { cifrar } = await import('../../src/core/crypto')
+            m.findFirst.mockResolvedValue(credencial({ apiKeyCifrada: cifrar('xkeysib-envio') }))
+            fetchMock.mockReturnValueOnce(respuesta(201, { messageId: '<id@brevo>' }))
+            expect(await enviarCorreoAprobacion({ ...inscripcion, tipoInscripcion } as unknown as InscripcionDetalle, pdf)).toBe(true)
+            return JSON.parse(fetchMock.mock.calls[0][1].body).htmlContent as string
+        }
+
+        it('agrega el párrafo solo para un tipo virtual, sin dejar variables ni escapar su HTML', async () => {
+            const html = await enviar({ nombre: 'ESTUDIANTES', etiqueta: 'VIRTUAL', modalidad: 'VIRTUAL' })
+            expect(TEXTO_MODALIDAD_VIRTUAL).toBe('Tu inscripción es en modalidad VIRTUAL: la organización te compartirá las indicaciones para conectarte a la transmisión del congreso.')
+            expect(html).toContain(`<p style="margin: 15px 0 0 0; padding: 0">${TEXTO_MODALIDAD_VIRTUAL}</p>`)
+            expect(html).not.toContain('{{')
+            expect(html).not.toContain('&lt;p')
+            // El resto del correo sigue igual
+            expect(html).toContain('Ana')
+            expect(html).toContain('Es todo, solo esperar el día del evento')
+        })
+
+        it.each([
+            ['presencial', { nombre: 'CON KIT', etiqueta: 'CON KIT', modalidad: 'PRESENCIAL' }],
+            ['sin la columna', { nombre: 'CON KIT', etiqueta: 'CON KIT' }],
+            ['con un valor desconocido', { nombre: 'CON KIT', etiqueta: 'CON KIT', modalidad: 'HIBRIDA' }],
+            ['sin tipo (cortesía)', null],
+        ])('no agrega nada con un tipo %s', async (_caso, tipo) => {
+            const html = await enviar(tipo)
+            expect(html).not.toContain('modalidad VIRTUAL')
+            expect(html).not.toContain('{{')
+            expect(html).toContain('Ana')
+        })
+
+        it('el párrafo es neutro: sin enlaces ni promesas de horas o certificado, y el texto va escapado', () => {
+            const parrafo = parrafoModalidad({ modalidad: 'VIRTUAL' })
+            expect(parrafo).not.toMatch(/href|https?:|certific|horas|[0-9] ?h/i)
+            expect(parrafoModalidad({ modalidad: 'PRESENCIAL' })).toBe('')
+            expect(parrafoModalidad(null)).toBe('')
+            expect(parrafoModalidad(undefined)).toBe('')
+        })
     })
 
     it('no lanza y devuelve false si no hay credencial o Brevo falla', async () => {

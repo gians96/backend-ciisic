@@ -315,3 +315,60 @@ describe('reinscripción tras un rechazo o una cancelación (spec 017)', () => {
         expect(borrarArchivo).not.toHaveBeenCalled()
     })
 })
+
+describe('tipos virtuales: el mismo precio con cualquier correo (spec 018)', () => {
+    // precio == precioInstitucional y disponiblePara TODOS: la modalidad no entra en el cálculo del monto
+    const virtualEstudiante = {
+        id: 21, activo: true, precio: new Prisma.Decimal(30), precioInstitucional: new Prisma.Decimal(30), disponiblePara: 'TODOS', modalidad: 'VIRTUAL',
+        categoria: { id: 1, eventoId: 1, codigo: 'ESTUDIANTES', esEstudiantil: true },
+    }
+    const virtualGeneral = {
+        id: 22, activo: true, precio: new Prisma.Decimal(50), precioInstitucional: new Prisma.Decimal(50), disponiblePara: 'TODOS', modalidad: 'VIRTUAL',
+        categoria: { id: 2, eventoId: 1, codigo: 'PUBLICO_GENERAL', esEstudiantil: false },
+    }
+    const conCorreo = (correo: string, extra: Partial<CrearInscripcionInput> = {}) => {
+        const base = input(extra)
+        base.participante.correo = correo
+        return base
+    }
+
+    it.each([
+        ['estudiantes virtual', 30, '2020123456@undc.edu.pe', true],
+        ['estudiantes virtual', 30, 'ana@gmail.com', false],
+        ['general virtual', 50, '2020123456@undc.edu.pe', true],
+        ['general virtual', 50, 'ana@gmail.com', false],
+    ])('%s: paga %s con %s, sin descuento', async (nombre, esperado, correo, institucional) => {
+        const tipo = nombre === 'estudiantes virtual' ? virtualEstudiante : virtualGeneral
+        m.tipoInscripcion.findFirst.mockResolvedValue(tipo)
+        await crearInscripcion(evento, conCorreo(correo, { tipoInscripcionId: tipo.id }), 'v.png')
+        const data = datosCreados()
+        expect(data.monto).toBe(esperado)
+        expect(data.descuento).toBe(0)
+        expect(data.tieneDescuento).toBe(false)
+        expect(data.esCorreoInstitucional).toBe(institucional)
+        expect(data.tipoInscripcion).toEqual({ connect: { id: tipo.id } })
+    })
+
+    it('categoría estudiantil sin token de verificación: 30, sin descuento y con la evidencia «sin verificación»', async () => {
+        m.tipoInscripcion.findFirst.mockResolvedValue(virtualEstudiante)
+        await crearInscripcion(evento, conCorreo('2020123456@undc.edu.pe', { tipoInscripcionId: 21 }), 'v.png')
+        const data = datosCreados()
+        expect(data).toMatchObject({ monto: 30, descuento: 0, tieneDescuento: false, esEstudianteUndc: false })
+        expect(data.verificacionEstudiante).toMatchObject({ esEstudianteUndc: false, motivo: 'SIN_VERIFICACION' })
+    })
+
+    it('categoría estudiantil con un estudiante verificado: también 30 (la verificación solo da el precio institucional, que es el mismo)', async () => {
+        m.tipoInscripcion.findFirst.mockResolvedValue(virtualEstudiante)
+        await crearInscripcion(evento, conCorreo('2020123456@undc.edu.pe', { tipoInscripcionId: 21, verificacionToken: tokenValido() }), 'v.png')
+        expect(datosCreados()).toMatchObject({ monto: 30, descuento: 0, tieneDescuento: false, esEstudianteUndc: true, codigoEstudiante: '2020123456' })
+    })
+
+    it('el tipo virtual se ofrece a todos: no hay REGISTRATION_TYPE_NOT_AVAILABLE con ningún correo', async () => {
+        m.tipoInscripcion.findFirst.mockResolvedValue(virtualGeneral)
+        for (const correo of ['2020123456@undc.edu.pe', 'externo@gmail.com']) {
+            m.inscripcion.create.mockClear()
+            await expect(crearInscripcion(evento, conCorreo(correo, { tipoInscripcionId: 22 }), 'v.png')).resolves.toBeDefined()
+            expect(m.inscripcion.create).toHaveBeenCalledTimes(1)
+        }
+    })
+})

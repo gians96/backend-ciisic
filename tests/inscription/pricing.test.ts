@@ -19,6 +19,20 @@ describe('reglas de precio', () => {
         expect(calcularPrecio({ precio: 140, precioInstitucional: 120, esEstudiantil: false, estudianteUndcVerificado: false, correoInstitucional: false }).monto).toBe(140)
     })
 
+    // Spec 018: los tipos virtuales llevan precio == precioInstitucional (30/30 y 50/50)
+    it.each([
+        [30, 'estudiantil verificado', { esEstudiantil: true, estudianteUndcVerificado: true, correoInstitucional: true }],
+        [30, 'estudiantil sin verificar', { esEstudiantil: true, estudianteUndcVerificado: false, correoInstitucional: true }],
+        [30, 'estudiante externo', { esEstudiantil: true, estudianteUndcVerificado: false, correoInstitucional: false }],
+        [50, 'general con correo del dominio', { esEstudiantil: false, estudianteUndcVerificado: false, correoInstitucional: true }],
+        [50, 'general externo', { esEstudiantil: false, estudianteUndcVerificado: false, correoInstitucional: false }],
+        [50, 'legacy con correo del dominio', { esEstudiantil: false, estudianteUndcVerificado: false, correoInstitucional: true, legacy: true }],
+    ])('precio igual al institucional (%s): mismo monto y descuento 0 (%s)', (valor, _caso, contexto) => {
+        const precio = calcularPrecio({ precio: valor, precioInstitucional: valor, ...contexto })
+        expect(precio.monto).toBe(valor)
+        expect(precio.descuento).toBe(0)
+    })
+
     it('modo legacy conserva la regla histórica por dominio', () => {
         expect(calcularPrecio({ ...base, esEstudiantil: true, estudianteUndcVerificado: false, correoInstitucional: true, legacy: true }).monto).toBe(100)
     })

@@ -7,7 +7,7 @@ import QRCode from 'qrcode'
 import { prisma } from '../../src/database/prisma'
 import { DIRECTORIO_FOTOS, DIRECTORIO_UPLOADS, nuevoNombreFoto } from '../../src/core/almacenamiento'
 import { REGEX_CODIGO_CREDENCIAL } from '../../src/core/codigos'
-import { borrarCredenciales, generarCredencialPdf, huellaCredencial, rutaCredencial } from '../../src/api/inscription/utils/generatePdf'
+import { borrarCredenciales, generarCredencialPdf, huellaCredencial, rutaCredencial, VERSION_PLANTILLA } from '../../src/api/inscription/utils/generatePdf'
 import { archivoCredencial, cambiarEstado, crearInscripcion, eliminarInscripcion, reenviarCredencial } from '../../src/api/inscription/services/inscription'
 import { enviarCorreoAprobacion } from '../../src/api/inscription/utils/sendEmail'
 import type { InscripcionDetalle } from '../../src/api/inscription/services/mappers'
@@ -148,6 +148,41 @@ describe('PDF de la credencial (spec 014)', () => {
         }
         // No se imprimen: la cuenta de Google, la hora exacta de revisión ni la marca del QR anterior
         expect(huellaCredencial(inscripcion({ esQrLegado: true, revisadoEn: new Date('2026-09-21T16:00:00Z') }, { googleSub: 'g-1', actualizadoEn: new Date() }))).toBe(base)
+    })
+
+    describe('modalidad de asistencia (spec 018)', () => {
+        const tipo = (modalidad?: string) => ({
+            tipoInscripcion: { id: 7, nombre: 'General', etiqueta: 'CON KIT', ...(modalidad ? { modalidad } : {}), categoria: { id: 3, codigo: 'PUBLICO_GENERAL', nombre: 'Público general', esEstudiantil: false } },
+        })
+
+        it('la modalidad entra en la huella: pasar un tipo de presencial a virtual regenera el PDF', () => {
+            const presencial = huellaCredencial(inscripcion(tipo('PRESENCIAL')))
+            expect(huellaCredencial(inscripcion(tipo('VIRTUAL')))).not.toBe(presencial)
+            // Sin el campo (fila de antes de la 018), con un valor desconocido o sin tipo se lee PRESENCIAL
+            expect(huellaCredencial(inscripcion(tipo()))).toBe(presencial)
+            expect(huellaCredencial(inscripcion(tipo('HIBRIDA')))).toBe(presencial)
+        })
+
+        it('subió VERSION_PLANTILLA: los PDF guardados de la plantilla anterior no se reutilizan', () => {
+            expect(VERSION_PLANTILLA).toBeGreaterThanOrEqual(3)
+        })
+
+        it('imprime «Modalidad: VIRTUAL» solo para los tipos virtuales', async () => {
+            await generarCredencialPdf(inscripcion(tipo('VIRTUAL')))
+            expect(htmlImpresos[0]).toContain('<strong>Modalidad:</strong> VIRTUAL')
+            expect(htmlImpresos[0]).toContain('<strong>Inscripción:</strong> General · CON KIT')
+            expect(htmlImpresos[0]).not.toContain('{{')
+        })
+
+        it.each([
+            ['presencial', tipo('PRESENCIAL')],
+            ['sin la columna', tipo()],
+            ['sin tipo (cortesía)', { tipoInscripcion: null }],
+        ])('no imprime el rótulo con un tipo %s', async (_caso, cambios) => {
+            await generarCredencialPdf(inscripcion(cambios))
+            expect(htmlImpresos[0]).not.toContain('Modalidad:')
+            expect(htmlImpresos[0]).not.toContain('{{')
+        })
     })
 
     it('al generar una versión nueva borra las anteriores de esa inscripción y solo de ella', async () => {
