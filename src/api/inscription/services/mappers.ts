@@ -1,6 +1,6 @@
 import type { Prisma } from '@prisma/client'
 import { fechaSoloDia } from '../../../core/fechas'
-import { monto } from '../../../core/catalogos'
+import { modalidadDe, monto } from '../../../core/catalogos'
 import { enmascararCorreo } from '../../../core/codigos'
 import { mimeDeArchivo } from '../../../middlewares/upload'
 
@@ -82,6 +82,8 @@ export function aDetalle(i: InscripcionDetalle, conPago = true) {
                 codigo: i.tipoInscripcion.codigo,
                 nombre: i.tipoInscripcion.nombre,
                 etiqueta: i.tipoInscripcion.etiqueta,
+                // Spec 018: cómo se asiste. Vive dentro del tipo: `pago.modalidad` es la modalidad de PAGO
+                modalidad: modalidadDe(i.tipoInscripcion.modalidad),
                 precio: conPago ? monto(i.tipoInscripcion.precio) : null,
                 precioInstitucional: conPago ? monto(i.tipoInscripcion.precioInstitucional) : null,
                 categoria: {
@@ -118,7 +120,9 @@ export function aFilaLista(i: InscripcionDetalle, conPago = true) {
         id: d.id,
         creadoEn: d.creadoEn,
         participante: d.participante,
-        tipoInscripcion: d.tipoInscripcion ? { id: d.tipoInscripcion.id, nombre: d.tipoInscripcion.nombre, etiqueta: d.tipoInscripcion.etiqueta, categoria: d.tipoInscripcion.categoria.codigo } : null,
+        tipoInscripcion: d.tipoInscripcion
+            ? { id: d.tipoInscripcion.id, nombre: d.tipoInscripcion.nombre, etiqueta: d.tipoInscripcion.etiqueta, modalidad: d.tipoInscripcion.modalidad, categoria: d.tipoInscripcion.categoria.codigo }
+            : null,
         clasificacion: d.clasificacion,
         estado: d.estado,
         monto: d.pago.monto,
@@ -171,7 +175,7 @@ export function aCreada(i: InscripcionDetalle, correoConservado = false) {
             ...contactoVisible(i, correoConservado),
         },
         tipoInscripcion: d.tipoInscripcion
-            ? { id: d.tipoInscripcion.id, nombre: d.tipoInscripcion.nombre, etiqueta: d.tipoInscripcion.etiqueta, categoria: d.tipoInscripcion.categoria.codigo }
+            ? { id: d.tipoInscripcion.id, nombre: d.tipoInscripcion.nombre, etiqueta: d.tipoInscripcion.etiqueta, modalidad: d.tipoInscripcion.modalidad, categoria: d.tipoInscripcion.categoria.codigo }
             : null,
         clasificacion: d.clasificacion,
         monto: pago.monto,

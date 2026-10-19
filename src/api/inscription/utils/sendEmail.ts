@@ -1,13 +1,26 @@
 import fs from 'fs'
 import path from 'path'
 import { Prisma, type Evento } from '@prisma/client'
-import { renderTemplate } from '../../../core/html'
+import { escapeHtml, renderTemplate } from '../../../core/html'
+import { modalidadDe } from '../../../core/catalogos'
 import { credencialParaEvento, enviarConCredencial } from '../../email-credential/services/email-credential'
 import type { InscripcionDetalle } from '../services/mappers'
 
 const ASUNTO_POR_DEFECTO = 'Tu inscripción ha sido aprobada'
 /** Remitente y organizador de los avisos que no pertenecen a un evento. */
 const ORGANIZADOR_POR_DEFECTO = 'CIISIC'
+
+/** Texto neutro para quien se inscribe a distancia (spec 018): sin enlaces ni promesas de horas o certificado. */
+export const TEXTO_MODALIDAD_VIRTUAL = 'Tu inscripción es en modalidad VIRTUAL: la organización te compartirá las indicaciones para conectarte a la transmisión del congreso.'
+
+/**
+ * Párrafo extra del correo de aprobación, solo para los tipos virtuales. `renderTemplate` no tiene
+ * condicionales: el bloque se compone aquí (texto escapado) y se pasa como `raw`; para los demás, vacío.
+ */
+export function parrafoModalidad(tipo: { modalidad?: unknown } | null | undefined): string {
+    if (modalidadDe(tipo?.modalidad) !== 'VIRTUAL') return ''
+    return `<p style="margin: 15px 0 0 0; padding: 0">${escapeHtml(TEXTO_MODALIDAD_VIRTUAL)}</p>`
+}
 
 function plantilla(nombre: string): string {
     return fs.readFileSync(path.join(__dirname, 'templates', nombre), 'utf8')
@@ -43,7 +56,8 @@ export async function enviarCorreoAprobacion(inscripcion: InscripcionDetalle, pd
             EVENTO_NOMBRE_CORTO: evento.nombreCorto,
             EVENTO_CORREO: evento.correoContacto ?? credencial.remitenteCorreo,
             ANIO: evento.fechaInicio.getUTCFullYear(),
-        })
+            AVISO_MODALIDAD: parrafoModalidad(inscripcion.tipoInscripcion),
+        }, ['AVISO_MODALIDAD'])
         error = await enviarConCredencial(credencial, {
             remitente: { email: credencial.remitenteCorreo, name: evento.remitenteNombre || credencial.remitenteNombre || evento.nombreCorto },
             para: [{ email: inscripcion.participante.correo }],

@@ -5,7 +5,7 @@ import type { Evento } from '@prisma/client'
 import { prisma } from '../../../database/prisma'
 import { conflict, notFound, unprocessable } from '../../../core/http-error'
 import { aColumnaFecha, fechaLima } from '../../../core/fechas'
-import { monto, type CodigoEstadoInscripcion } from '../../../core/catalogos'
+import { monto, type CodigoEstadoInscripcion, type ModalidadAsistencia } from '../../../core/catalogos'
 import { pageMeta, type Pagination } from '../../../core/pagination'
 import {
     asegurarCodigoCredencial, conReintentoDeCodigo, enmascararCorreo, INDICE_CODIGO_CREDENCIAL, nuevoCodigoCredencial,
@@ -271,6 +271,8 @@ export interface FiltrosInscripcion {
     estado?: string
     tipoInscripcionId?: number
     categoria?: string
+    /** Spec 018: cómo se asiste (del tipo). `PRESENCIAL` incluye lo que no tiene tipo (cortesías). */
+    modalidad?: ModalidadAsistencia
     esEstudianteUndc?: boolean
     q?: string
 }
@@ -278,11 +280,21 @@ export interface FiltrosInscripcion {
 /** Sin `conPago` la búsqueda libre no mira el número de operación (es un dato de pago). */
 export function construirFiltro(eventoId: number, filtros: FiltrosInscripcion, conPago = true): Prisma.InscripcionWhereInput {
     const q = filtros.q?.trim()
+    // La categoría y la modalidad condicionan al mismo tipo: van en UNA sola clave `tipoInscripcion`
+    // (dos propiedades con la misma clave se pisarían y el filtro combinado ignoraría una de las dos).
+    const delTipo: Prisma.TipoInscripcionWhereInput = {
+        ...(filtros.categoria ? { categoria: { codigo: filtros.categoria } } : {}),
+        ...(filtros.modalidad ? { modalidad: filtros.modalidad } : {}),
+    }
+    // Sin tipo (cortesía) se lee como PRESENCIAL, igual que en el resumen; con categoría o tipo concreto no aplica
+    const presencialIncluyeSinTipo = filtros.modalidad === 'PRESENCIAL' && !filtros.categoria && !filtros.tipoInscripcionId
     return {
         eventoId,
         ...(filtros.estado ? { estado: { codigo: filtros.estado } } : {}),
         ...(filtros.tipoInscripcionId ? { tipoInscripcionId: filtros.tipoInscripcionId } : {}),
-        ...(filtros.categoria ? { tipoInscripcion: { categoria: { codigo: filtros.categoria } } } : {}),
+        ...(presencialIncluyeSinTipo
+            ? { AND: [{ OR: [{ tipoInscripcionId: null }, { tipoInscripcion: delTipo }] }] }
+            : Object.keys(delTipo).length ? { tipoInscripcion: delTipo } : {}),
         ...(filtros.esEstudianteUndc !== undefined ? { esEstudianteUndc: filtros.esEstudianteUndc } : {}),
         ...(q
             ? {
@@ -532,6 +544,8 @@ const COLUMNAS_CSV: Array<{ titulo: string, pago?: true, valor: (d: ReturnType<t
     { titulo: 'Categoría', valor: (d) => d.tipoInscripcion?.categoria.nombre },
     { titulo: 'Tipo de inscripción', valor: (d) => d.tipoInscripcion?.nombre },
     { titulo: 'Etiqueta', valor: (d) => d.tipoInscripcion?.etiqueta },
+    // Spec 018: cómo se asiste (no es un dato de pago). La columna «Modalidad» de más abajo es la de PAGO
+    { titulo: 'Modalidad de asistencia', valor: (d) => d.tipoInscripcion?.modalidad ?? 'PRESENCIAL' },
     { titulo: 'Clasificación', valor: (d) => d.clasificacion?.nombre },
     { titulo: 'Monto', pago: true, valor: (d) => d.pago.monto?.toFixed(2) },
     { titulo: 'Descuento', pago: true, valor: (d) => d.pago.descuento?.toFixed(2) },

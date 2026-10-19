@@ -5,7 +5,7 @@ import type { Participante, Prisma } from '@prisma/client'
 import { prisma } from '../../../database/prisma'
 import { conflict, notFound, unprocessable } from '../../../core/http-error'
 import { fechaSoloDia, horaLima } from '../../../core/fechas'
-import { monto } from '../../../core/catalogos'
+import { modalidadDe, monto } from '../../../core/catalogos'
 import { asegurarCodigoCredencial } from '../../../core/codigos'
 import { DIRECTORIO_FOTOS, nuevoNombreFoto, rutaFoto } from '../../../core/almacenamiento'
 import { limpiarMetadatos, MIME_POR_TIPO, TIPO_POR_MIME, tipoDeImagen, type TipoFoto } from '../../../core/imagenes'
@@ -43,7 +43,7 @@ export function aInscripcionPortal(i: InscripcionPortal) {
             sede: i.evento.sede,
         },
         tipoInscripcion: i.tipoInscripcion
-            ? { nombre: i.tipoInscripcion.nombre, etiqueta: i.tipoInscripcion.etiqueta, categoria: i.tipoInscripcion.categoria.nombre }
+            ? { nombre: i.tipoInscripcion.nombre, etiqueta: i.tipoInscripcion.etiqueta, modalidad: modalidadDe(i.tipoInscripcion.modalidad), categoria: i.tipoInscripcion.categoria.nombre }
             : null,
         clasificacion: i.clasificacion ? { nombre: i.clasificacion.nombre } : null,
         monto: monto(i.monto),
@@ -128,7 +128,7 @@ export async function miFotocheck(participanteId: number, inscripcionId: number)
             estado: { select: { codigo: true } },
             evento: { select: { nombre: true, nombreCorto: true, fechaInicio: true, fechaFin: true, sede: true } },
             participante: { select: { nombres: true, apellidos: true, tipoDocumentoId: true, numeroDocumento: true, fotoArchivo: true } },
-            tipoInscripcion: { select: { nombre: true, etiqueta: true } },
+            tipoInscripcion: { select: { nombre: true, etiqueta: true, modalidad: true } },
         },
     })
     if (!i) throw inscripcionNoEncontrada()
@@ -153,7 +153,9 @@ export async function miFotocheck(participanteId: number, inscripcionId: number)
             tipoDocumento: p.tipoDocumentoId,
             documentoEnmascarado: enmascararDocumento(p.numeroDocumento),
         },
-        tipoInscripcion: i.tipoInscripcion ? { nombre: i.tipoInscripcion.nombre, etiqueta: i.tipoInscripcion.etiqueta } : null,
+        tipoInscripcion: i.tipoInscripcion
+            ? { nombre: i.tipoInscripcion.nombre, etiqueta: i.tipoInscripcion.etiqueta, modalidad: modalidadDe(i.tipoInscripcion.modalidad) }
+            : null,
         foto: { tiene: Boolean(p.fotoArchivo) },
     }
 }

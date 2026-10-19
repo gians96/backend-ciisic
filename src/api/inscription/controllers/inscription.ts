@@ -1,7 +1,7 @@
 import { Request, Response } from 'express'
 import { HttpError, idParam, notFound, unprocessable } from '../../../core/http-error'
 import { leerArchivoServido } from '../../../core/almacenamiento'
-import { ESTADO_POR_ID_LEGACY, type CodigoEstadoInscripcion } from '../../../core/catalogos'
+import { ESTADO_POR_ID_LEGACY, esModalidadAsistencia, type CodigoEstadoInscripcion, type ModalidadAsistencia } from '../../../core/catalogos'
 import { parsePagination } from '../../../core/pagination'
 import { mimeDeArchivo } from '../../../middlewares/upload'
 import type { Actor } from '../../../core/actor'
@@ -114,6 +114,17 @@ export async function legacyUpdateStatus(req: AuthenticatedRequest, res: Respons
 
 // ─── Administración ─────────────────────────────────────────────────────────
 
+/** `?modalidad=` (spec 018): vacío = sin filtro; un valor desconocido no se ignora (el CSV saldría sin filtrar). */
+function modalidadDeLaConsulta(valor: unknown): ModalidadAsistencia | undefined {
+    if (valor === undefined) return undefined
+    const texto = typeof valor === 'string' ? valor.trim().toUpperCase() : null
+    if (texto === '') return undefined
+    if (texto === null || !esModalidadAsistencia(texto)) {
+        throw unprocessable('VALIDATION_ERROR', 'Los filtros no son válidos', { modalidad: 'Debe ser PRESENCIAL o VIRTUAL' })
+    }
+    return texto
+}
+
 function filtros(query: Request['query']): service.FiltrosInscripcion {
     const texto = (valor: unknown) => (typeof valor === 'string' && valor.trim() ? valor.trim() : undefined)
     const tipo = Number(query.tipoInscripcionId)
@@ -121,6 +132,7 @@ function filtros(query: Request['query']): service.FiltrosInscripcion {
         estado: texto(query.estado)?.toUpperCase(),
         tipoInscripcionId: Number.isSafeInteger(tipo) && tipo > 0 ? tipo : undefined,
         categoria: texto(query.categoria)?.toUpperCase(),
+        modalidad: modalidadDeLaConsulta(query.modalidad),
         esEstudianteUndc: query.esEstudianteUndc === 'true' ? true : query.esEstudianteUndc === 'false' ? false : undefined,
         q: texto(query.q)?.slice(0, 100),
     }

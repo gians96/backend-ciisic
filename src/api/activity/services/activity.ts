@@ -3,7 +3,7 @@ import type { Actividad } from '@prisma/client'
 import { prisma } from '../../../database/prisma'
 import { conflict, HttpError, notFound, unprocessable } from '../../../core/http-error'
 import { aColumnaFecha, fechaLima, fechaSoloDia, horaLima, instanteLima } from '../../../core/fechas'
-import type { MetodoAsistencia } from '../../../core/catalogos'
+import { modalidadDe, type MetodoAsistencia } from '../../../core/catalogos'
 import { tienePermiso, type Actor } from '../../../core/actor'
 import { rutaFoto } from '../../../core/almacenamiento'
 import { obtenerEventoPorId } from '../../event/services/public-event'
@@ -160,7 +160,7 @@ const DATOS_INSCRIPCION = {
     esQrLegado: true,
     estado: { select: { codigo: true } },
     evento: { select: { fechaFin: true } },
-    tipoInscripcion: { select: { nombre: true, etiqueta: true } },
+    tipoInscripcion: { select: { nombre: true, etiqueta: true, modalidad: true } },
     participante: { select: { ...DATOS_PERSONA, fotoArchivo: true } },
 } as const
 
@@ -290,7 +290,8 @@ export async function registrarAsistencia(actividadId: number, input: RegistrarA
         inscripcion: {
             id: inscripcion.id,
             tipoInscripcion: inscripcion.tipoInscripcion
-                ? { nombre: inscripcion.tipoInscripcion.nombre, etiqueta: inscripcion.tipoInscripcion.etiqueta }
+                // Spec 018: el escáner solo avisa si es virtual; la marca se registra igual
+                ? { nombre: inscripcion.tipoInscripcion.nombre, etiqueta: inscripcion.tipoInscripcion.etiqueta, modalidad: modalidadDe(inscripcion.tipoInscripcion.modalidad) }
                 : null,
         },
     }

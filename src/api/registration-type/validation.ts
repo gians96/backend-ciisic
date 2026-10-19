@@ -1,5 +1,5 @@
 import * as yup from 'yup'
-import { DISPONIBILIDADES_TIPO, type DisponibilidadTipo } from '../../core/catalogos'
+import { DISPONIBILIDADES_TIPO, MODALIDADES_ASISTENCIA, type DisponibilidadTipo, type ModalidadAsistencia } from '../../core/catalogos'
 
 const caracteristicasSchema = yup.array().of(yup.object({
     icon: yup.string().trim().max(80).required(),
@@ -37,6 +37,8 @@ const camposTipo = {
     precioInstitucional: yup.number().min(0).max(99999999),
     // Spec 016: a quién se ofrece (sin enviar: TODOS al crear, se conserva al actualizar)
     disponiblePara: yup.mixed<DisponibilidadTipo>().oneOf([...DISPONIBILIDADES_TIPO], 'Elige a quién se ofrece: TODOS, INSTITUCIONAL o EXTERNOS'),
+    // Spec 018: cómo se asiste (sin enviar: PRESENCIAL al crear, se conserva al actualizar). No es la modalidad de pago
+    modalidad: yup.mixed<ModalidadAsistencia>().oneOf([...MODALIDADES_ASISTENCIA], 'Elige la modalidad de asistencia: PRESENCIAL o VIRTUAL'),
     activo: yup.boolean(),
     orden: yup.number().integer().min(0).max(1000),
 }

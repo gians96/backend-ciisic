@@ -3,7 +3,8 @@ import fs from 'fs'
 import path from 'path'
 import QRCode from 'qrcode'
 import puppeteer from 'puppeteer'
-import { renderTemplate } from '../../../core/html'
+import { escapeHtml, renderTemplate } from '../../../core/html'
+import { modalidadDe } from '../../../core/catalogos'
 import { ZONA_HORARIA } from '../../../core/fechas'
 import { limitarConcurrencia } from '../../../core/concurrencia'
 import { rutaFoto } from '../../../core/almacenamiento'
@@ -16,14 +17,14 @@ const formatear = (date?: Date | null) => (date ? formatoFecha.format(date) : '-
 const instante = (date?: Date | null) => (date ? new Date(date).getTime() : 0)
 
 /** Sube al cambiar la plantilla o lo que se imprime: así los PDF guardados dejan de reutilizarse. */
-export const VERSION_PLANTILLA = 2
+export const VERSION_PLANTILLA = 3
 
 const DIRECTORIO_CREDENCIALES = path.join(uploadsDir, 'credenciales')
 
 /**
  * Huella (12 hex) de todo lo que se imprime en la credencial (spec 014): código, datos de la
- * persona y su foto, tipo de inscripción, fechas y la última edición del evento (nombre, contacto,
- * logo). Si cambia algo de eso, cambia el nombre del archivo y el PDF se vuelve a generar.
+ * persona y su foto, tipo de inscripción y su modalidad de asistencia (spec 018), fechas y la última
+ * edición del evento (nombre, contacto, logo). Si cambia algo de eso, cambia el nombre del archivo y el PDF se vuelve a generar.
  */
 export function huellaCredencial(inscripcion: InscripcionDetalle): string {
     const p = inscripcion.participante
@@ -31,7 +32,7 @@ export function huellaCredencial(inscripcion: InscripcionDetalle): string {
     const datos = [
         VERSION_PLANTILLA, inscripcion.id, inscripcion.codigoCredencial ?? '',
         p.nombres, p.apellidos, p.tipoDocumentoId, p.numeroDocumento, p.correo, p.celular ?? '', p.fotoArchivo ?? '',
-        tipo?.id ?? null, tipo?.nombre ?? '', tipo?.etiqueta ?? '',
+        tipo?.id ?? null, tipo?.nombre ?? '', tipo?.etiqueta ?? '', modalidadDe(tipo?.modalidad),
         instante(inscripcion.evento.actualizadoEn), formatear(inscripcion.creadoEn), inscripcion.revisadoEn ? formatear(inscripcion.revisadoEn) : '',
     ]
     return crypto.createHash('sha256').update(JSON.stringify(datos)).digest('hex').slice(0, 12)
@@ -87,6 +88,15 @@ function fotoEnBase64(fotoArchivo: string | null | undefined): string {
     return `data:${MIME_POR_TIPO[tipo]};base64,${fs.readFileSync(ruta).toString('base64')}`
 }
 
+/**
+ * Rótulo «Modalidad: VIRTUAL» (spec 018): solo los tipos virtuales lo llevan. `renderTemplate` no tiene
+ * condicionales, así que el servidor compone el bloque (con el texto escapado) y lo pasa como `raw`.
+ */
+export function bloqueModalidad(tipo: { modalidad?: unknown } | null | undefined): string {
+    const modalidad = modalidadDe(tipo?.modalidad)
+    return modalidad === 'VIRTUAL' ? `<div class="info-item"><strong>Modalidad:</strong> ${escapeHtml(modalidad)}</div>` : ''
+}
+
 async function htmlDeCredencial(inscripcion: InscripcionDetalle, codigo: string): Promise<string> {
     const plantilla = fs.readFileSync(path.join(__dirname, 'templates', 'inscription.html'), 'utf8')
     const tipo = inscripcion.tipoInscripcion
@@ -109,9 +119,10 @@ async function htmlDeCredencial(inscripcion: InscripcionDetalle, codigo: string)
         CORREO: inscripcion.participante.correo,
         CELULAR: inscripcion.participante.celular || '---',
         TIPO_INSCRIPCION: tipo ? [tipo.nombre, tipo.etiqueta].filter(Boolean).join(' · ') : '---',
+        BLOQUE_MODALIDAD: bloqueModalidad(tipo),
         FECHA_CREACION: formatear(inscripcion.creadoEn),
         FECHA_APROBADA: formatear(inscripcion.revisadoEn ?? new Date()),
-    }, ['LOGO', 'QR'])
+    }, ['LOGO', 'QR', 'BLOQUE_MODALIDAD'])
 }
 
 /** Tope de cada paso de puppeteer: un navegador colgado no retiene para siempre uno de los 2 turnos. */

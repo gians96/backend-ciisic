@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client'
 import type { CategoriaInscripcion, TipoInscripcion } from '@prisma/client'
 import { prisma } from '../../../database/prisma'
 import { conflict, notFound } from '../../../core/http-error'
-import { aNumero, monto } from '../../../core/catalogos'
+import { aNumero, modalidadDe, monto } from '../../../core/catalogos'
 import { obtenerEventoPorId } from '../../event/services/public-event'
 import type { ActualizarCategoriaInput, ActualizarTipoInput, CrearCategoriaInput, CrearTipoInput } from '../validation'
 
@@ -22,6 +22,8 @@ export function aTipo(tipo: TipoInscripcion, totalInscripciones?: number) {
         precio: monto(tipo.precio),
         precioInstitucional: monto(tipo.precioInstitucional),
         disponiblePara: tipo.disponiblePara,
+        // Spec 018: cómo se asiste. No es un precio: sale también sin «pagos.ver»
+        modalidad: modalidadDe(tipo.modalidad),
         activo: tipo.activo,
         orden: tipo.orden,
         ...(totalInscripciones !== undefined ? { totalInscripciones } : {}),
@@ -69,6 +71,8 @@ export async function tiposPublicos(eventoId: number, categoria?: string) {
             precioInstitucional: monto(tipo.precioInstitucional),
             // Spec 016: la landing oculta el tipo a quien no corresponde (el backend igual lo rechaza)
             disponiblePara: tipo.disponiblePara,
+            // Spec 018: la landing separa lo presencial de lo virtual con este campo (ausente = PRESENCIAL)
+            modalidad: modalidadDe(tipo.modalidad),
         })),
     }))
 }
@@ -196,6 +200,7 @@ export async function crearTipo(categoriaId: number, input: CrearTipoInput) {
             precio: input.precio,
             precioInstitucional: input.precioInstitucional,
             disponiblePara: input.disponiblePara ?? 'TODOS',
+            modalidad: input.modalidad ?? 'PRESENCIAL',
             activo: input.activo ?? true,
             orden: input.orden ?? 0,
         },
@@ -219,6 +224,7 @@ export async function actualizarTipo(id: number, input: ActualizarTipoInput) {
     if (input.precio !== undefined) data.precio = input.precio
     if (input.precioInstitucional !== undefined) data.precioInstitucional = input.precioInstitucional
     if (input.disponiblePara !== undefined) data.disponiblePara = input.disponiblePara
+    if (input.modalidad !== undefined) data.modalidad = input.modalidad
     if (input.activo !== undefined) data.activo = input.activo
     if (input.orden !== undefined) data.orden = input.orden
     const tipo = await prisma.tipoInscripcion.update({ where: { id }, data })

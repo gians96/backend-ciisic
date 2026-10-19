@@ -64,7 +64,8 @@ describe('fotocheck virtual', () => {
             qr: qrDe('K7Q2M9X4TB'),
             evento: { nombre: 'VIII Congreso Internacional', nombreCorto: 'VIII CIISIC 2026', fechaInicio: '2026-10-26', fechaFin: '2026-10-30', sede: 'Cañete' },
             participante: { nombres: 'ANA', apellidos: 'PEREZ', tipoDocumento: 'dni', documentoEnmascarado: '****9999' },
-            tipoInscripcion: { nombre: 'ESTUDIANTES', etiqueta: 'CON KIT' },
+            // La fila de prueba no trae modalidad (como una de antes de la spec 018): se lee PRESENCIAL
+            tipoInscripcion: { nombre: 'ESTUDIANTES', etiqueta: 'CON KIT', modalidad: 'PRESENCIAL' },
             foto: { tiene: true },
         })
         expect(JSON.stringify(r.body)).not.toMatch(/70009999|foto-|revisadoPor|correo/)
@@ -72,6 +73,16 @@ describe('fotocheck virtual', () => {
         const consulta = m.inscripcion.findFirst.mock.calls[0][0]
         expect(consulta.where).toEqual({ id: 29, participanteId: 50 })
         expect(consulta.select.revisadoPor).toBeUndefined()
+        // Spec 018: la modalidad se pide al tipo (miFotocheck pide solo lo que muestra)
+        expect(consulta.select.tipoInscripcion).toEqual({ select: { nombre: true, etiqueta: true, modalidad: true } })
+    })
+
+    it('un tipo virtual lo dice en tipoInscripcion.modalidad y sigue entregando el QR (spec 018)', async () => {
+        m.inscripcion.findFirst.mockResolvedValue(fila({ tipoInscripcion: { nombre: 'ESTUDIANTES', etiqueta: 'VIRTUAL', modalidad: 'VIRTUAL' } }))
+        const r = await request(app).get('/api/v1/me/inscriptions/29/badge').set('Authorization', SESION)
+        expect(r.status).toBe(200)
+        expect(r.body.data.tipoInscripcion).toEqual({ nombre: 'ESTUDIANTES', etiqueta: 'VIRTUAL', modalidad: 'VIRTUAL' })
+        expect(r.body.data.qr).toBe(qrDe('K7Q2M9X4TB'))
     })
 
     it('si la inscripción aún no tiene código (imagen anterior), lo asigna y lo marca como QR anterior', async () => {
@@ -104,6 +115,27 @@ describe('fotocheck virtual', () => {
         const r = await request(app).get('/api/v1/me/inscriptions').set('Authorization', SESION)
         expect(r.status).toBe(200)
         expect(r.body.data.map((i: { fotocheck: unknown }) => i.fotocheck)).toEqual([{ disponible: true }, { disponible: false }])
+    })
+
+    it('GET /me/inscriptions trae la modalidad dentro del tipo (spec 018); sin tipo, null', async () => {
+        const base = {
+            participanteId: 50, evento: { ...evento, codigo: 'ciisic-viii-2026' }, monto: 30, descuento: 0, modalidadPago: 'billetera', banco: null, tipoOperacion: null,
+            billeteraDigital: 'yape', numeroOperacion: 'OP-1', fechaPago: new Date('2026-09-29T00:00:00Z'), motivoRechazo: null, revisadoEn: null, credencialEnviadaEn: null,
+            creadoEn: new Date('2026-09-28T15:00:00Z'), clasificacion: null, estado: { codigo: 'APROBADO', nombre: 'Aprobado' },
+        }
+        const tipo = (etiqueta: string, modalidad?: string) => ({ nombre: 'ESTUDIANTES', etiqueta, categoria: { nombre: 'ESTUDIANTES' }, ...(modalidad ? { modalidad } : {}) })
+        m.inscripcion.findMany.mockResolvedValue([
+            { ...base, id: 31, tipoInscripcion: tipo('VIRTUAL', 'VIRTUAL') },
+            { ...base, id: 32, tipoInscripcion: tipo('CON KIT', 'PRESENCIAL') },
+            { ...base, id: 33, tipoInscripcion: tipo('SIN KIT') },
+            { ...base, id: 34, tipoInscripcion: null },
+        ])
+        const r = await request(app).get('/api/v1/me/inscriptions').set('Authorization', SESION)
+        expect(r.status).toBe(200)
+        expect(r.body.data.map((i: { tipoInscripcion: { modalidad: string } | null }) => i.tipoInscripcion?.modalidad ?? null)).toEqual(['VIRTUAL', 'PRESENCIAL', 'PRESENCIAL', null])
+        // La clave vive dentro del tipo: no se confunde con pago.modalidad (banco, billetera, cortesía)
+        expect(r.body.data[0].pago.modalidad).toBe('billetera')
+        expect(r.body.data[0]).not.toHaveProperty('modalidad')
     })
 
     it('un token de staff no ve fotochecks ni asistencias (403)', async () => {

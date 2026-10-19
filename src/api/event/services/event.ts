@@ -3,7 +3,7 @@ import type { Evento } from '@prisma/client'
 import { prisma } from '../../../database/prisma'
 import { conflict, unprocessable } from '../../../core/http-error'
 import { aColumnaFecha, fechaLima, fechaSoloDia } from '../../../core/fechas'
-import { monto } from '../../../core/catalogos'
+import { MODALIDADES_ASISTENCIA, modalidadDe, monto } from '../../../core/catalogos'
 import type { Actor } from '../../../core/actor'
 import { obtenerEventoPorId } from './public-event'
 import { limpiarQrs, qrsDe, verificarQrs } from '../../payment-qr/services/payment-qr'
@@ -179,6 +179,8 @@ export async function crearEvento(input: CrearEventoInput) {
                         precio: tipo.precio,
                         precioInstitucional: tipo.precioInstitucional,
                         disponiblePara: tipo.disponiblePara,
+                        // Spec 018: sin esto un tipo virtual copiado volvería a PRESENCIAL (valor por defecto)
+                        modalidad: tipo.modalidad,
                         activo: tipo.activo,
                         orden: tipo.orden,
                     })),
@@ -255,7 +257,23 @@ export async function resumenEvento(id: number, conPago = true) {
             nombre: tipo.nombre,
             etiqueta: tipo.etiqueta,
             categoria: tipo.categoria.codigo,
+            modalidad: modalidadDe(tipo.modalidad),
             total: filas.reduce((suma, item) => suma + item._count._all, 0),
+            aprobadas: aprobadas.reduce((suma, item) => suma + item._count._all, 0),
+            montoAprobado: importe(aprobadas.reduce((suma, item) => suma + monto(item._sum.monto), 0)),
+        }
+    })
+
+    // Spec 018: por cómo se asiste. Una inscripción sin tipo (cortesía) cuenta como PRESENCIAL, así que la
+    // suma de `inscripciones` es el total del evento. Parte de las mismas filas agrupadas que `porTipo`.
+    const modalidadDelTipo = new Map(tipos.map((tipo) => [tipo.id, modalidadDe(tipo.modalidad)]))
+    const modalidadDeLaFila = (tipoInscripcionId: number | null) => (tipoInscripcionId === null ? 'PRESENCIAL' : modalidadDelTipo.get(tipoInscripcionId) ?? 'PRESENCIAL')
+    const porModalidad = MODALIDADES_ASISTENCIA.map((modalidad) => {
+        const filas = porTipo.filter((item) => modalidadDeLaFila(item.tipoInscripcionId) === modalidad)
+        const aprobadas = filas.filter((item) => codigoDeEstado.get(item.estadoId) === 'APROBADO')
+        return {
+            modalidad,
+            inscripciones: filas.reduce((suma, item) => suma + item._count._all, 0),
             aprobadas: aprobadas.reduce((suma, item) => suma + item._count._all, 0),
             montoAprobado: importe(aprobadas.reduce((suma, item) => suma + monto(item._sum.monto), 0)),
         }
@@ -278,6 +296,7 @@ export async function resumenEvento(id: number, conPago = true) {
             montoAprobado: importe(montoDe('APROBADO')),
             montoPendiente: importe(montoDe('PENDIENTE') + montoDe('EN_REVISION')),
             estudiantesUndc,
+            porModalidad,
         },
         porEstado: resumenEstados.map((estado) => ({ ...estado, monto: importe(estado.monto) })),
         porTipo: resumenTipos,

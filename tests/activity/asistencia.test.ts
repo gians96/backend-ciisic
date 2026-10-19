@@ -61,7 +61,7 @@ const NUEVA = persona(105, '44443333')
 const PERSONAS = [ANA, LUIS, DE_OTRO_EVENTO, DNI_REPETIDO, CE_REPETIDO, NUEVA]
 
 const APROBADO = { codigo: 'APROBADO' }
-const ESTUDIANTE = { nombre: 'Estudiante', etiqueta: 'UNDC' }
+const ESTUDIANTE = { nombre: 'Estudiante', etiqueta: 'UNDC', modalidad: 'PRESENCIAL' }
 const INSCRIPCIONES = [
     { id: 500, eventoId: 2, participante: ANA, estado: APROBADO, codigoCredencial: 'ANA0000001', esQrLegado: true, tipoInscripcion: ESTUDIANTE },
     { id: 501, eventoId: 2, participante: LUIS, estado: { codigo: 'PENDIENTE' }, codigoCredencial: 'LUIS000001', esQrLegado: false, tipoInscripcion: null },
@@ -208,7 +208,7 @@ describe('marcar asistencia', () => {
             alerta: null,
             // Sin `inscripciones.ver` el documento va enmascarado; la foto se pide con GET /v1/inscriptions/:id/photo
             participante: { id: ANA.id, nombres: 'Persona', apellidos: 'Prueba 100', tipoDocumento: 'dni', numeroDocumento: '****5678', foto: { tiene: true } },
-            inscripcion: { id: 500, tipoInscripcion: { nombre: 'Estudiante', etiqueta: 'UNDC' } },
+            inscripcion: { id: 500, tipoInscripcion: { nombre: 'Estudiante', etiqueta: 'UNDC', modalidad: 'PRESENCIAL' } },
         })
         expect(fila(3)).toMatchObject({ actividadId: EN_CURSO, participanteId: ANA.id, registradoPorId: 41, metodo: 'QR', esFueraDeHorario: false, anuladoEn: null })
         expect(m.inscripcion.findUnique.mock.calls[0][0].where).toEqual({ codigoCredencial: 'ANA0000001' })
@@ -360,6 +360,37 @@ describe('marcar asistencia', () => {
 
 // ─── Spec 014: código, QR anterior, método y tolerancia ──────────────────────
 
+describe('marcar a un inscrito virtual (spec 018)', () => {
+    const virtual = () => ({
+        ...conEvento(INSCRIPCIONES[5]),
+        tipoInscripcion: { nombre: 'ESTUDIANTES', etiqueta: 'VIRTUAL', modalidad: 'VIRTUAL' },
+    })
+
+    it('no se bloquea: la marca se registra y la respuesta avisa la modalidad', async () => {
+        m.inscripcion.findUnique.mockResolvedValueOnce(virtual())
+        const r = await marcar(EN_CURSO, { codigo: 'K7Q2M9X4TB' }, comision())
+        expect(r.status).toBe(201)
+        expect(r.body.data).toMatchObject({
+            metodo: 'QR',
+            alerta: null,
+            inscripcion: { id: 505, tipoInscripcion: { nombre: 'ESTUDIANTES', etiqueta: 'VIRTUAL', modalidad: 'VIRTUAL' } },
+        })
+        expect(fila(r.body.data.id)).toMatchObject({ actividadId: EN_CURSO, participanteId: NUEVA.id, anuladoEn: null })
+    })
+
+    it('el select pide la modalidad del tipo', async () => {
+        await marcar(EN_CURSO, { codigo: 'ANA0000001' }, comision())
+        expect(m.inscripcion.findUnique.mock.calls[0][0].select.tipoInscripcion).toEqual({ select: { nombre: true, etiqueta: true, modalidad: true } })
+    })
+
+    it('una fila sin modalidad (tipo anterior) se lee PRESENCIAL', async () => {
+        m.inscripcion.findUnique.mockResolvedValueOnce({ ...virtual(), tipoInscripcion: { nombre: 'Estudiante', etiqueta: 'UNDC' } })
+        const r = await marcar(EN_CURSO, { codigo: 'K7Q2M9X4TB' }, comision())
+        expect(r.status).toBe(201)
+        expect(r.body.data.inscripcion.tipoInscripcion.modalidad).toBe('PRESENCIAL')
+    })
+})
+
 describe('marcar con el código de la credencial (spec 014)', () => {
     it('acepta minúsculas y espacios del lector y lo busca en mayúsculas', async () => {
         const r = await marcar(EN_CURSO, { codigo: ' k7q2m9x4tb\r\n' }, comision())
@@ -430,7 +461,7 @@ describe('QR anterior (participanteId) (spec 014)', () => {
             metodo: 'QR_LEGADO',
             alerta: 'QR_LEGADO',
             participante: { id: ANA.id, foto: { tiene: true } },
-            inscripcion: { id: 500, tipoInscripcion: { nombre: 'Estudiante', etiqueta: 'UNDC' } },
+            inscripcion: { id: 500, tipoInscripcion: { nombre: 'Estudiante', etiqueta: 'UNDC', modalidad: 'PRESENCIAL' } },
         })
         expect(fila(r.body.data.id)).toMatchObject({ metodo: 'QR_LEGADO', registradoPorId: 41 })
     })
