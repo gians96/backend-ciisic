@@ -73,6 +73,15 @@ y Google. Documentación: [`docs/`](docs/README.md).
 - Un tipo con `disponiblePara` `INSTITUCIONAL` o `EXTERNOS` solo se ofrece a quien recibe (o no) el
   precio institucional, decidido con el mismo `aplicaInstitucional` y el correo final de la
   inscripción (spec 016): `422 REGISTRATION_TYPE_NOT_AVAILABLE`. Las cortesías no lo aplican.
+- Modalidad de asistencia (spec 018): cada tipo es `PRESENCIAL` (por defecto, todo lo existente) o
+  `VIRTUAL`, y no cambia el precio: los tipos virtuales llevan `precio == precioInstitucional` y
+  `disponiblePara = TODOS` (30 y 50), así el monto es el mismo con cualquier correo y **no** se usa
+  `disponiblePara` para esto. Viven dentro de las categorías `ESTUDIANTES` y `PUBLICO_GENERAL`. La clave
+  `modalidad` va siempre **dentro del objeto del tipo** (`tipo.modalidad`, `tipoInscripcion.modalidad`),
+  nunca en la raíz de una inscripción: no es `modalidadPago` / `pago.modalidad` (`banco`, `billetera`,
+  `cortesia`), ni el «fotocheck virtual» del portal. Ausente, `null` o desconocida = `PRESENCIAL`
+  (`modalidadDe`, también el tipo `null` de una cortesía). Nada se bloquea por ser virtual: el escáner solo
+  avisa. No se agrega a la forma LEGACY congelada.
 - Aprobar genera la credencial y envía el correo; si el correo falla, la aprobación se mantiene.
 - Google en la landing es **opcional** y no cambia precios; en el panel entra una cuenta de staff
   activa (cualquier dominio) o un participante inscrito (portal), este con Google **o con un código
@@ -177,7 +186,7 @@ con ambos sistemas levantados.
 
 Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Cada cambio
 empieza en `specs/NNN-nombre/` (spec → plan → tasks → contracts) y se marcan las tasks al
-implementar. Specs actuales: 001–014, 016 y 017 (ver [README](README.md)); la 015 (certificados) tiene
+implementar. Specs actuales: 001–014 y 016–018 (ver [README](README.md)); la 015 (certificados) tiene
 solo su diseño (`research.md`).
 
 ## Antes de dar por terminado

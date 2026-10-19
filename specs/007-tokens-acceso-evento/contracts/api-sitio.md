@@ -84,7 +84,8 @@ Categorías (ordenadas por `orden`) con sus tipos **activos**. `categoria` es op
           "caracteristicas": [{ "icon": "heroicons:gift", "text": "Kit de Merchandising Oficial" }],
           "precio": 120,
           "precioInstitucional": 100,
-          "disponiblePara": "TODOS"
+          "disponiblePara": "TODOS",
+          "modalidad": "PRESENCIAL"
         }
       ]
     }
@@ -96,6 +97,12 @@ Categorías (ordenadas por `orden`) con sus tipos **activos**. `categoria` es op
 `EXTERNOS` (nunca a quien lo recibe). La landing oculta el tipo a quien no corresponde con la misma
 regla del precio (estudiante verificado en la categoría estudiantil; correo del dominio en las demás);
 un cliente que no conozca el campo puede ignorarlo: el backend rechaza igual la inscripción.
+
+`modalidad` (spec 018): `PRESENCIAL` | `VIRTUAL`, cómo se asiste con ese tipo. Va **dentro del tipo**
+(no confundir con `modalidadPago`, que es banco/billetera). Campo ausente o desconocido = `PRESENCIAL`.
+Los tipos virtuales viven dentro de las categorías existentes (`ESTUDIANTES`, `PUBLICO_GENERAL`) con
+`precio == precioInstitucional` y `disponiblePara = TODOS`, así que el monto es el mismo con cualquier
+correo. Contrato en `specs/018-modalidad-virtual/contracts/api-modalidad.md`.
 
 ## GET `/catalogs`
 
@@ -138,7 +145,7 @@ Respuesta `201`:
     "id": 123,
     "evento": { "codigo": "ciisic-viii-2026", "nombreCorto": "VIII CIISIC 2026" },
     "participante": { "tipoDocumento": "dni", "numeroDocumento": "12345678", "nombres": "…", "apellidos": "…", "correo": "…", "celular": "…" },
-    "tipoInscripcion": { "id": 1, "nombre": "ESTUDIANTES", "etiqueta": "CON KIT", "categoria": "ESTUDIANTES" },
+    "tipoInscripcion": { "id": 1, "nombre": "ESTUDIANTES", "etiqueta": "CON KIT", "modalidad": "PRESENCIAL", "categoria": "ESTUDIANTES" },
     "clasificacion": { "id": 4, "nombre": "ESTUDIANTE - IV CICLO" },
     "monto": 100,
     "precioRegular": 120,

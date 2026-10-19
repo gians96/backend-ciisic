@@ -55,7 +55,7 @@ Cuerpo con **exactamente uno** de los identificadores, más `fueraDeHorario?: bo
   "id": 3, "registradoEn": "2026-10-26T14:05:00.000Z", "metodo": "QR", "esFueraDeHorario": false,
   "alerta": null,
   "participante": { "id": 100, "nombres": "ANA", "apellidos": "PÉREZ GARCÍA", "tipoDocumento": "dni", "numeroDocumento": "70001234", "foto": { "tiene": true } },
-  "inscripcion": { "id": 500, "tipoInscripcion": { "nombre": "ESTUDIANTES", "etiqueta": "CON KIT" } } } }
+  "inscripcion": { "id": 500, "tipoInscripcion": { "nombre": "ESTUDIANTES", "etiqueta": "CON KIT", "modalidad": "PRESENCIAL" } } } }
 ```
 
 - `alerta: "QR_LEGADO"` con el QR anterior: el escáner muestra el resultado en ámbar y pide
@@ -63,6 +63,9 @@ Cuerpo con **exactamente uno** de los identificadores, más `fueraDeHorario?: bo
 - `numeroDocumento` sale `****1234` si la cuenta no tiene `inscripciones.ver`.
 - `foto.tiene` indica que hay un nombre de foto válido (no comprueba el archivo); la imagen se pide
   con `GET /inscriptions/:id/photo` usando `inscripcion.id`. `tipoInscripcion` puede ser `null`.
+- `inscripcion.tipoInscripcion.modalidad` (spec 018): `PRESENCIAL` | `VIRTUAL` (ausente o `tipoInscripcion`
+  `null` = `PRESENCIAL`). Con `VIRTUAL` el escáner solo muestra un aviso: la marca se registra igual, no hay
+  `403` ni `409` nuevos.
 
 | Estado | Código | Cuándo |
 |---|---|---|
@@ -104,11 +107,14 @@ Foto del participante de la inscripción, para el escáner y el panel. Guarda:
 
 - QR del código, código impreso en texto y foto si existe. Archivo
   `uploads/credenciales/<evento>/<id>-<huella>.pdf`: la huella (12 hex) resume código, nombres,
-  apellidos, documento, correo, celular, foto, tipo de inscripción, `evento.actualizadoEn`, fechas
-  impresas y `VERSION_PLANTILLA` (2). Si cambian, se genera otro y se borran las versiones viejas
+  apellidos, documento, correo, celular, foto, tipo de inscripción y su modalidad de asistencia (spec 018),
+  `evento.actualizadoEn`, fechas impresas y `VERSION_PLANTILLA` (3 desde la spec 018). Si cambian, se genera otro y se borran las versiones viejas
   (las escritas por generaciones que empezaron antes; una que termina tarde con datos anteriores no
   borra la más nueva); borrar la inscripción borra todas. Cambiar o quitar la foto borra los PDF
   guardados del participante.
+- Spec 018: solo los tipos `VIRTUAL` llevan el rótulo «Modalidad: VIRTUAL» junto a la inscripción; el QR y el
+  código se entregan igual. El correo de aprobación agrega, solo para ellos, un párrafo neutro (sin enlaces
+  ni promesas de horas o certificado).
 - Las descargas y el adjunto del correo se leen a memoria en cuanto el PDF está listo (un cambio de
   foto simultáneo no los deja sin archivo).
 - Como mucho 2 generaciones a la vez y 30 en cola (Puppeteer, cada paso con un tope de 30 s). Con

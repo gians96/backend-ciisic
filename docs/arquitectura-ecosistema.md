@@ -300,6 +300,32 @@ con kit a su precio institucional.
 - **Cambio compatible**: los tipos existentes quedan en `TODOS`; una landing que ignore el campo sigue
   funcionando (solo vería el error al enviar).
 
+### Modalidad de asistencia (spec 018)
+
+Definido en `backend-ciisic/specs/018-modalidad-virtual/contracts/api-modalidad.md`. Cada tipo de
+`GET /api/v1/site/registration-types` trae `modalidad`: `PRESENCIAL` | `VIRTUAL` (cómo se asiste con
+ese tipo). Ejemplo: en el VIII CIISIC los tipos `estudiantes_virtual` (S/ 30) y `general_virtual`
+(S/ 50) viven **dentro de las categorías existentes** `ESTUDIANTES` y `PUBLICO_GENERAL`, con
+`precio == precioInstitucional` y `disponiblePara = TODOS`: el monto es el mismo con cualquier correo y
+el descuento es 0. La modalidad **no cambia el precio** ni el significado de `disponiblePara`.
+
+- La clave `modalidad` va **siempre dentro del objeto del tipo** (`tipo.modalidad`,
+  `tipoInscripcion.modalidad`), nunca en la raíz de una inscripción: `pago.modalidad` / `modalidadPago`
+  (`banco` | `billetera` | `cortesia`) es otra cosa. Tampoco es el «fotocheck virtual» (credencial
+  digital del portal) ni las «Modalidad 01/02/03» de `/planes` (categorías de precios).
+- La landing separa los tipos presenciales de los virtuales con este campo (no interpreta etiquetas ni
+  nombres). Campo ausente, `null` o desconocido = `PRESENCIAL`.
+- `POST /api/v1/site/inscriptions` (201) agrega `tipoInscripcion.modalidad`. La verificación de
+  estudiante (SIVIRENO) y el flujo de la categoría estudiantil no cambian. No hay errores nuevos.
+- **Cambio compatible**: backend nuevo + landing anterior → el tipo virtual aparece como un plan más
+  (etiqueta «VIRTUAL») y la inscripción funciona; landing nueva + backend anterior → todo se lee
+  `PRESENCIAL`. La forma LEGACY (`GET /api/v1/registration-types`, rutas de la landing anterior) está
+  congelada y **no** lleva `modalidad`: mientras estén encendidas, los tipos virtuales aparecen en ella
+  como planes normales.
+- Textos neutros hasta que la organización responda (entrega del acceso a la transmisión,
+  certificado y asistencia de los virtuales, constancia de estudiante): sin enlaces, sin promesas de
+  horas ni de certificado; nada se bloquea.
+
 ### Reinscripción tras un rechazo o una cancelación (spec 017)
 
 - `POST /api/v1/site/inscriptions` (y la legacy) ya no responde `409 ALREADY_REGISTERED` cuando la
@@ -378,6 +404,35 @@ Definido en `specs/014-portal-fotocheck-asistencia/contracts/api-asistencia.md` 
 - **Orden de despliegue**: primero (o a la vez) el panel 009, que lee los dos formatos de QR; nunca
   el backend 014 solo. Con el panel anterior, cada credencial que se apruebe, reenvíe o descargue
   lleva el QR nuevo y su escáner lo rechaza en el navegador («usa DNI / documento»).
+
+### Modalidad de asistencia (spec 018)
+
+Definido en `specs/018-modalidad-virtual/contracts/api-modalidad.md`. Todo aditivo; ausente, `null` o
+desconocida = `PRESENCIAL` (también una cortesía sin tipo).
+
+- **Tipos**: `GET /api/v1/events/:eventId/registration-categories` → `tipos[].modalidad` (también sin
+  `pagos.ver`: no es un precio). `POST /api/v1/registration-categories/:id/types` y
+  `PUT /api/v1/registration-types/:id` aceptan `modalidad` (`PRESENCIAL` | `VIRTUAL`; otro valor o
+  `null` → `422 VALIDATION_ERROR` con `fields.modalidad`; al crear sin ella, `PRESENCIAL`; al
+  actualizar sin ella, se conserva). Las respuestas de crear y actualizar la incluyen. Crear un evento
+  copiando otro (`copiarDeEventoId`) copia la modalidad de cada tipo.
+- **Inscripciones**: `tipoInscripcion.modalidad` en la lista, el detalle y la creación. Filtro nuevo
+  `?modalidad=PRESENCIAL|VIRTUAL` en `GET /events/:eventId/inscriptions` y en `/export` (se combina con
+  `?categoria=`; otro valor → `422`). CSV: columna **«Modalidad de asistencia»** (también sin
+  `pagos.ver`); la columna «Modalidad» de siempre es la de **pago** y no se renombra.
+- **Resumen**: `GET /api/v1/events/:id/summary` → `porTipo[].modalidad` y
+  `totales.porModalidad = [{ modalidad, inscripciones, aprobadas, montoAprobado }]` (siempre las dos;
+  `montoAprobado` en `null` sin `pagos.ver`).
+- **Portal y escáner**: `GET /me/inscriptions` y `GET /me/inscriptions/:id/badge` →
+  `tipoInscripcion.modalidad`; `POST /activities/:id/attendances` → `inscripcion.tipoInscripcion.modalidad`.
+  El escáner solo avisa «participante virtual»: la marca se registra igual (sin `403` ni `409` nuevos).
+- **Credencial y correo**: el PDF lleva «Modalidad: VIRTUAL» solo si el tipo es virtual (entra en la
+  huella; `VERSION_PLANTILLA` 3, así que los PDF guardados se regeneran al pedirlos) y el correo de
+  aprobación agrega un párrafo neutro solo para virtuales.
+- **Orden de despliegue**: respaldo → backend (`migrate deploy`) → crear los tipos virtuales
+  (`prisma/preflight/configurar-virtual.sql` o el panel) → panel y landing → verificar
+  (`verificar-virtual.sql`). Cualquier orden entre backend y frontends es seguro. Detalle y reversión en
+  `docs/operacion.md` (Migración 018).
 
 ---
 

@@ -139,6 +139,76 @@ Pasos:
 Mientras dure la convivencia, `codigo_credencial` admite NULL; `NOT NULL` va en una migración
 posterior al 30-oct-2026.
 
+## Migración 018 (modalidad virtual)
+
+`20261019120000_modalidad_virtual` es aditiva: un solo `ALTER TABLE tipos_inscripcion ADD COLUMN
+modalidad ENUM('PRESENCIAL','VIRTUAL') NOT NULL DEFAULT 'PRESENCIAL'`. No borra ni modifica datos:
+todos los tipos existentes quedan `PRESENCIAL`. La imagen anterior sigue funcionando con la BD
+migrada (no lee la columna y el valor por defecto cubre sus inserciones). Lo contrario no vale: la
+imagen nueva necesita la columna, y por eso el backend se despliega **antes** que los tipos virtuales.
+
+La modalidad es de **asistencia** (presencial o virtual) y no tiene relación con `modalidad_pago`
+(banco, billetera, cortesía). Los tipos virtuales son datos del evento: no los crea el código sino el
+dueño del proyecto (script o panel), siempre con `precio = precio_institucional` (30 y 50) y
+`disponible_para = TODOS`.
+
+Orden:
+
+1. **Respaldo** (arriba): `mysqldump` de la base de producción. Este paso no se omite.
+2. **Desplegar el backend** (push a `main` del backend; `migrate deploy` aplica la migración al
+   arrancar). Verificar con `mysql … ciisic_vii < prisma/preflight/verificar-virtual.sql` (solo
+   lectura): la columna existe y todos los tipos siguen `PRESENCIAL`.
+3. **Crear los dos tipos virtuales** en el evento `ciisic-viii-2026`, de **una** de estas formas:
+   - Script: `mysql --default-character-set=utf8mb4 … ciisic_vii < prisma/preflight/configurar-virtual.sql`.
+     Es idempotente y no destructivo (solo `INSERT … SELECT … WHERE NOT EXISTS`, en una transacción),
+     y se detiene sin escribir nada si falta la columna, el evento o una de las categorías
+     (`ESTUDIANTES`, `PUBLICO_GENERAL`). Revisa al inicio `@codigo_evento` y `@activo` (con `0` los
+     tipos nacen ocultos y se activan desde el panel cuando la organización lo decida).
+   - Panel (categorías y tipos de inscripción del evento), con los mismos datos:
+
+     | Categoría | Código | Nombre | Etiqueta | Precio | Precio inst. | Disponible para | Modalidad |
+     |---|---|---|---|---|---|---|---|
+     | `ESTUDIANTES` | `estudiantes_virtual` | ESTUDIANTES | VIRTUAL | 30.00 | 30.00 | Todos | Virtual |
+     | `PUBLICO_GENERAL` | `general_virtual` | PROFESIONALES Y PUBLICO EN GENERAL | VIRTUAL | 50.00 | 50.00 | Todos | Virtual |
+
+     Características: «Participación virtual en las ponencias transmitidas» y «No incluye kit ni
+     ingreso presencial». La descripción no promete certificado ni horas.
+4. **Desplegar el panel y la landing** (cada repositorio se despliega con su push a `main`; el campo
+   es aditivo y el orden entre ellos no importa). Con el backend sin desplegar, un cliente nuevo ve
+   todo `PRESENCIAL`.
+5. **Verificar** (solo lectura): `verificar-virtual.sql` otra vez. Esperado: dos tipos virtuales con
+   `precio = precio_institucional`, `disponible_para = TODOS`, las anomalías en 0 y los conteos de
+   inscripciones, participantes y tipos anteriores sin cambios. Desde un contenedor puntual de la
+   imagen, `./node_modules/.bin/prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code`
+   debe salir 0. En la landing, `/estudiantes` y `/general` muestran el plan virtual; una inscripción
+   de prueba paga 30 o 50 con cualquier correo y, aprobada, su credencial dice «Modalidad: VIRTUAL».
+
+Efectos al desplegar:
+
+- `VERSION_PLANTILLA` de la credencial sube a 3 y la modalidad entra en la huella: los PDF guardados
+  (`<id>-<huella>.pdf`) dejan de reutilizarse y se regeneran al pedirlos (como mucho 2 a la vez; con
+  la cola llena, `503 PDF_BUSY` con `Retry-After`). Para que el día del evento no se regeneren todos a
+  la vez, pregenerarlos tras desplegar, fuera de horario: `node dist/src/database/pregenerarCredenciales.js --evento ciisic-viii-2026`.
+- Mientras la landing anterior siga encendida (Sistema → Landing anterior), sus rutas legacy
+  (`GET /v1/registration-types`) listan **todos** los tipos del evento principal, también los
+  virtuales, como planes normales (la forma congelada no lleva `modalidad`). Apagarla o aceptarlo.
+- Preguntas de negocio abiertas (entrega del acceso a la transmisión, certificado y asistencia de los
+  virtuales, constancia de estudiante): hasta que se respondan, los textos son neutros y nada se
+  bloquea; el escáner de asistencia solo muestra un aviso. Cambiar a alguien de presencial a virtual
+  exige rechazar o cancelar y reinscribir (spec 017): no hay endpoint para mover una inscripción.
+
+Reversión (el esquema es aditivo; **volver a la imagen anterior no exige revertir**):
+
+- Desactivar los tipos virtuales sin tocar el esquema: en el panel, **Activo** apagado en cada uno
+  (dejan de ofrecerse y las inscripciones ya hechas se conservan), o
+  `UPDATE tipos_inscripcion SET activo = 0 WHERE codigo IN ('estudiantes_virtual', 'general_virtual');`
+  (un tipo con inscripciones no se puede eliminar, solo desactivar).
+- Revertir el esquema: **primero** desactivar o eliminar los tipos virtuales (la imagen anterior los
+  trataría como presenciales), luego `ALTER TABLE tipos_inscripcion DROP COLUMN modalidad;` y
+  `./node_modules/.bin/prisma migrate resolve --rolled-back 20261019120000_modalidad_virtual`. Se pierde
+  la distinción virtual/presencial de los tipos; las inscripciones y los pagos no cambian. Después
+  volver a la imagen anterior. Respaldo previo siempre.
+
 ## Primer Owner
 
 ```bash

@@ -63,7 +63,9 @@ forma congelada **no** llevan `modalidad`.
 - Filtro nuevo `?modalidad=PRESENCIAL|VIRTUAL` en la lista y en
   `GET /api/v1/events/:eventId/inscriptions/export`; se combina con `?categoria=` (se cumplen las dos
   condiciones) y con los demás filtros. Un valor desconocido responde `422 VALIDATION_ERROR` con
-  `fields.modalidad`. Sin el parámetro, el comportamiento es el anterior.
+  `fields.modalidad` (vacío = sin filtro). Sin el parámetro, el comportamiento es el anterior.
+  `?modalidad=PRESENCIAL` incluye también las inscripciones sin tipo (cortesías), igual que el resumen;
+  combinado con `?categoria=` o `?tipoInscripcionId=` solo trae las de esos tipos.
 - CSV: columna nueva **«Modalidad de asistencia»** (`PRESENCIAL` | `VIRTUAL`), tras «Etiqueta». Sale
   también sin `pagos.ver`. La columna «Modalidad» existente es la de **pago** y no se renombra.
 

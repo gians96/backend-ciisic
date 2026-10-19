@@ -24,14 +24,16 @@ El JWT dura 1 h y lleva `user.rolCodigo`.
 | DELETE | `/events/:id` | Solo sin inscripciones; si tiene → 409 `EVENT_HAS_INSCRIPTIONS` (usar estado `ARCHIVADO`). |
 | GET | `/events/:id/summary` | KPIs (ver abajo). |
 
-`summary`:
+`summary` (`totales.porModalidad` y `porTipo[].modalidad`, spec 018: cómo se asiste; los montos van en `null` sin `pagos.ver`, como los demás):
 
 ```json
 {
   "totales": { "inscripciones": 28, "pendientes": 4, "enRevision": 3, "aprobadas": 12, "rechazadas": 2, "canceladas": 2,
-               "montoAprobado": 1460, "montoPendiente": 420, "estudiantesUndc": 9 },
+               "montoAprobado": 1460, "montoPendiente": 420, "estudiantesUndc": 9,
+               "porModalidad": [{ "modalidad": "PRESENCIAL", "inscripciones": 24, "aprobadas": 10, "montoAprobado": 1400 },
+                                { "modalidad": "VIRTUAL", "inscripciones": 4, "aprobadas": 2, "montoAprobado": 60 }] },
   "porEstado": [{ "codigo": "APROBADO", "nombre": "Aprobado", "total": 12, "monto": 1460 }],
-  "porTipo": [{ "tipoInscripcionId": 1, "nombre": "ESTUDIANTES", "etiqueta": "CON KIT", "categoria": "ESTUDIANTES",
+  "porTipo": [{ "tipoInscripcionId": 1, "nombre": "ESTUDIANTES", "etiqueta": "CON KIT", "categoria": "ESTUDIANTES", "modalidad": "PRESENCIAL",
                 "total": 8, "aprobadas": 5, "montoAprobado": 500 }],
   "porDia": [{ "fecha": "2026-09-20", "total": 3 }]
 }
@@ -45,19 +47,24 @@ El JWT dura 1 h y lleva `user.rolCodigo`.
 | POST | `/events/:eventId/registration-categories` | `{ codigo, nombre, descripcion?, caracteristicas?, precioDesde?, esEstudiantil?, orden? }` |
 | PUT | `/registration-categories/:id` | Parcial. |
 | DELETE | `/registration-categories/:id` | 409 `CATEGORY_IN_USE` si tiene tipos. |
-| POST | `/registration-categories/:id/types` | `{ codigo, nombre, etiqueta?, descripcion?, caracteristicas?: [{icon,text}], precio, precioInstitucional, disponiblePara?, activo?, orden? }` |
+| POST | `/registration-categories/:id/types` | `{ codigo, nombre, etiqueta?, descripcion?, caracteristicas?: [{icon,text}], precio, precioInstitucional, disponiblePara?, modalidad?, activo?, orden? }` |
 | PUT | `/registration-types/:id` | Parcial (no borra `caracteristicas` si no se envían). |
 | DELETE | `/registration-types/:id` | 409 `REGISTRATION_TYPE_IN_USE` si tiene inscripciones (desactivar en su lugar). |
 
 `disponiblePara` (spec 016): `TODOS` (por defecto) | `INSTITUCIONAL` | `EXTERNOS`; otro valor → 422
 `VALIDATION_ERROR`. Sale en el listado aunque la cuenta no tenga `pagos.ver` (no es un precio).
 
+`modalidad` (spec 018): `PRESENCIAL` (por defecto al crear; se conserva al actualizar) | `VIRTUAL`; otro valor
+o `null` → 422 `VALIDATION_ERROR` con `fields.modalidad`. Sale en el listado y en las respuestas de crear y
+actualizar, también sin `pagos.ver`. Es la modalidad de **asistencia**, no la de pago (`modalidadPago`).
+Contrato completo: `specs/018-modalidad-virtual/contracts/api-modalidad.md`.
+
 ## Inscripciones
 
 | Método | Ruta | Notas |
 |---|---|---|
-| GET | `/events/:eventId/inscriptions` | Filtros: `estado` (código), `tipoInscripcionId`, `categoria` (código), `esEstudianteUndc` (`true`/`false`), `q` (documento, nombres, apellidos, correo, nº operación), `page`, `pageSize`. Orden: más recientes primero. |
-| GET | `/events/:eventId/inscriptions/export` | CSV (`text/csv; charset=utf-8`, separador `;`, con BOM). |
+| GET | `/events/:eventId/inscriptions` | Filtros: `estado` (código), `tipoInscripcionId`, `categoria` (código), `modalidad` (`PRESENCIAL`\|`VIRTUAL`, spec 018; se combina con `categoria`; otro valor → 422 `VALIDATION_ERROR`), `esEstudianteUndc` (`true`/`false`), `q` (documento, nombres, apellidos, correo, nº operación), `page`, `pageSize`. Orden: más recientes primero. |
+| GET | `/events/:eventId/inscriptions/export` | CSV (`text/csv; charset=utf-8`, separador `;`, con BOM) con los mismos filtros. Columna «Modalidad de asistencia» (spec 018, también sin `pagos.ver`); la columna «Modalidad» es la de pago. |
 | GET | `/inscriptions/:id` | Detalle con participante, tipo, categoría, clasificación, estado, pago, verificación y revisión. |
 | PATCH | `/inscriptions/:id/status` | `{ "estado": "APROBADO"\|"RECHAZADO"\|"EN_REVISION"\|"PENDIENTE"\|"CANCELADO", "motivo"? }`; `RECHAZADO` exige `motivo`. Respuesta: detalle + `credencialEnviada` (boolean\|null). |
 | POST | `/inscriptions/:id/resend-credential` | Solo `APROBADO`. 409 `NOT_APPROVED`. |
@@ -71,7 +78,7 @@ Detalle de inscripción:
 {
   "id": 1, "eventoId": 1, "creadoEn": "…", "actualizadoEn": "…",
   "participante": { "id": 1, "tipoDocumento": "dni", "numeroDocumento": "…", "nombres": "…", "apellidos": "…", "correo": "…", "celular": "…" },
-  "tipoInscripcion": { "id": 1, "codigo": "…", "nombre": "…", "etiqueta": "…", "precio": 120, "precioInstitucional": 100,
+  "tipoInscripcion": { "id": 1, "codigo": "…", "nombre": "…", "etiqueta": "…", "modalidad": "PRESENCIAL", "precio": 120, "precioInstitucional": 100,
                         "categoria": { "id": 1, "codigo": "ESTUDIANTES", "nombre": "…", "esEstudiantil": true } },
   "clasificacion": { "id": 4, "nombre": "…" },
   "estado": { "id": 1, "codigo": "PENDIENTE", "nombre": "Pendiente" },

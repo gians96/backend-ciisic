@@ -10,7 +10,7 @@
 {
   "id": 29,
   "evento": { "codigo": "ciisic-viii-2026", "nombre": "…", "nombreCorto": "VIII CIISIC 2026", "fechaInicio": "2026-10-26", "fechaFin": "2026-10-30", "sede": "…" },
-  "tipoInscripcion": { "nombre": "ESTUDIANTES", "etiqueta": "CON KIT", "categoria": "ESTUDIANTES" },
+  "tipoInscripcion": { "nombre": "ESTUDIANTES", "etiqueta": "CON KIT", "modalidad": "PRESENCIAL", "categoria": "ESTUDIANTES" },
   "clasificacion": { "nombre": "ESTUDIANTE - VI CICLO" },
   "monto": 100, "precioRegular": 120, "descuento": 20,
   "pago": { "modalidad": "billetera", "banco": null, "tipoOperacion": null, "billeteraDigital": "yape", "numeroOperacion": "…", "fechaPago": "2026-09-29" },
@@ -21,6 +21,9 @@
   "creadoEn": "…"
 }
 ```
+
+`tipoInscripcion.modalidad` (spec 018): `PRESENCIAL` | `VIRTUAL`, cómo se asiste con ese tipo. Va dentro del
+tipo y no se confunde con `pago.modalidad` (banco, billetera). Ausente = `PRESENCIAL`.
 
 Errores: `401 MISSING_TOKEN|INVALID_TOKEN|SESSION_INVALIDATED`, `403 FORBIDDEN` (token de
 administrador), `404 INSCRIPTION_NOT_FOUND` (no es suya), `409 NOT_APPROVED`, `429 RATE_LIMITED`.

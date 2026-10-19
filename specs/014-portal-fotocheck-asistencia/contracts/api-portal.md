@@ -47,7 +47,7 @@ Igual que en la spec 011, con `fotocheck: { disponible }` en cada elemento (`tru
 { "inscripcionId": 500, "codigo": "K7Q2M9X4TB", "qr": "data:image/png;base64,…",
   "evento": { "nombre": "VIII Congreso Internacional …", "nombreCorto": "VIII CIISIC 2026", "fechaInicio": "2026-10-26", "fechaFin": "2026-10-30", "sede": "…" },
   "participante": { "nombres": "ANA", "apellidos": "PÉREZ GARCÍA", "tipoDocumento": "dni", "documentoEnmascarado": "****1234" },
-  "tipoInscripcion": { "nombre": "ESTUDIANTES", "etiqueta": "CON KIT" },
+  "tipoInscripcion": { "nombre": "ESTUDIANTES", "etiqueta": "CON KIT", "modalidad": "PRESENCIAL" },
   "foto": { "tiene": true } }
 ```
 
@@ -55,6 +55,8 @@ Igual que en la spec 011, con `fotocheck: { disponible }` en cada elemento (`tru
   datos personales. Si la inscripción no tenía código (creada por la imagen anterior), se le asigna
   y, si ya estaba aprobada o se le envió la credencial, se marca como QR anterior.
 - `tipoInscripcion` puede ser `null`. La foto se pide con `GET /me/photo`.
+- `tipoInscripcion.modalidad` (spec 018): `PRESENCIAL` | `VIRTUAL`, cómo se asiste con ese tipo (ausente o
+  `tipoInscripcion` `null` = `PRESENCIAL`). Solo informa: el fotocheck y su QR se entregan igual.
 - El panel puede guardar el último fotocheck en el dispositivo para mostrarlo sin conexión (y
   borrarlo al cerrar sesión).
 

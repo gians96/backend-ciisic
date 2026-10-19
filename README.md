@@ -32,6 +32,7 @@ virtual, asistencia y perfil con foto).
 | [014](specs/014-portal-fotocheck-asistencia) | Portal del participante (código por correo, perfil con foto, asistencia), fotocheck virtual con código de credencial y asistencia por QR |
 | [016](specs/016-disponibilidad-tipos) | Disponibilidad de los tipos de inscripción: para todos, solo la comunidad UNDC o solo externos |
 | [017](specs/017-reinscripcion) | Reinscripción tras un rechazo o una cancelación; eliminar inscripciones solo el Owner |
+| [018](specs/018-modalidad-virtual) | Modalidad de asistencia (presencial o virtual) por tipo de inscripción: tarifas virtuales S/ 30 estudiantes y S/ 50 profesionales, filtro, CSV, resumen, credencial y correo |
 
 ## Desarrollo local
 
