@@ -17,6 +17,11 @@
 -- dice qué falta (columna_modalidad_no_existe, evento_no_existe, categoria_estudiantes_no_existe o
 -- categoria_publico_general_no_existe).
 --
+-- Cuándo: es el ÚLTIMO paso del despliegue (respaldo -> backend -> panel y landing -> este script ->
+-- verificar-virtual.sql). Los tipos nacen activos y la landing anterior ignora la modalidad: los mostraría
+-- como planes normales, mezclados con los presenciales. Si hay que correrlo antes de publicar la landing
+-- nueva, pon @activo = 0 y activa los tipos desde el panel cuando ya esté publicada.
+--
 -- Cómo ejecutarlo (siempre después del respaldo con mysqldump; ver docs/operacion.md):
 --   mysql --default-character-set=utf8mb4 -u <usuario> -p <base_de_datos> < prisma/preflight/configurar-virtual.sql
 -- Con el cliente mysql el script se detiene en el primer error (no uses --force). No lleva USE: la base
@@ -29,8 +34,8 @@ SET NAMES utf8mb4;
 
 -- ── Parámetros ──────────────────────────────────────────────────────────────
 SET @codigo_evento = 'ciisic-viii-2026';
--- 1 = los tipos nacen activos (la landing los muestra de inmediato); 0 = nacen ocultos y se activan
--- desde el panel cuando la organización lo decida.
+-- 1 = los tipos nacen activos (la landing los muestra de inmediato: usar solo con la landing nueva ya
+-- publicada); 0 = nacen ocultos y se activan desde el panel cuando la organización lo decida.
 SET @activo = 1;
 
 -- Las comprobaciones abortan con un error de "NULL en columna NOT NULL", que solo es error en modo estricto

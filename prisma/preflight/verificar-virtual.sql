@@ -7,7 +7,10 @@
 --   2) los tipos anteriores siguen PRESENCIAL; los dos nuevos son VIRTUAL;
 --   3) los tipos virtuales cumplen precio = precio_institucional, disponible_para TODOS y no
 --      prometen certificado ni horas: todas las anomalías en 0;
---   4) prisma migrate diff … --exit-code debe salir 0.
+--   4) ningún tipo «VIRTUAL» (por etiqueta o por código) con otra modalidad: la comprobación 5 debe salir
+--      vacía. Si aparece uno, se creó o se editó desde el panel con el backend anterior, que descarta la
+--      modalidad en silencio: corrige su Modalidad desde el panel (con el backend ya desplegado);
+--   5) prisma migrate diff … --exit-code debe salir 0.
 -- ============================================================================
 
 SET NAMES utf8mb4;
@@ -47,7 +50,19 @@ SELECT COUNT(*) AS virtuales,
   JOIN eventos e ON e.id = c.evento_id
  WHERE e.codigo = @codigo_evento COLLATE utf8mb4_unicode_ci AND t.modalidad = 'VIRTUAL';
 
--- 5) Los dos tipos esperados existen exactamente una vez (cada uno debe dar 1)
+-- 5) Tipos «VIRTUAL» que NO son VIRTUAL (debe devolver CERO filas). Son los que se crearon o editaron desde
+--    el panel antes de desplegar el backend: el backend anterior descarta la modalidad y el tipo queda
+--    PRESENCIAL, con su precio de 30 o 50 y la etiqueta «VIRTUAL», sin que nada falle. La comprobación 4
+--    no los ve porque solo mira los tipos que ya son VIRTUAL.
+SELECT e.codigo AS evento, c.codigo AS categoria, t.id, t.codigo, t.nombre, t.etiqueta, t.precio, t.activo, t.modalidad
+  FROM tipos_inscripcion t
+  JOIN categorias_inscripcion c ON c.id = t.categoria_id
+  JOIN eventos e ON e.id = c.evento_id
+ WHERE e.codigo = @codigo_evento COLLATE utf8mb4_unicode_ci AND t.modalidad <> 'VIRTUAL'
+   AND (t.codigo IN ('estudiantes_virtual', 'general_virtual') OR t.etiqueta = 'VIRTUAL')
+ ORDER BY c.orden, t.orden;
+
+-- 6) Los dos tipos esperados existen exactamente una vez (cada uno debe dar 1)
 SELECT t.codigo, COUNT(*) AS veces
   FROM tipos_inscripcion t
   JOIN categorias_inscripcion c ON c.id = t.categoria_id
@@ -55,7 +70,7 @@ SELECT t.codigo, COUNT(*) AS veces
  WHERE e.codigo = @codigo_evento COLLATE utf8mb4_unicode_ci AND t.codigo IN ('estudiantes_virtual', 'general_virtual')
  GROUP BY t.codigo;
 
--- 6) Inscripciones por modalidad del tipo (las que no tienen tipo, cortesías, cuentan como PRESENCIAL)
+-- 7) Inscripciones por modalidad del tipo (las que no tienen tipo, cortesías, cuentan como PRESENCIAL)
 SELECT COALESCE(t.modalidad, 'PRESENCIAL') AS modalidad, e.codigo AS estado, COUNT(*) AS inscripciones, SUM(i.monto) AS monto
   FROM inscripciones i
   JOIN eventos ev ON ev.id = i.evento_id
@@ -65,7 +80,7 @@ SELECT COALESCE(t.modalidad, 'PRESENCIAL') AS modalidad, e.codigo AS estado, COU
  GROUP BY COALESCE(t.modalidad, 'PRESENCIAL'), e.codigo
  ORDER BY modalidad, estado;
 
--- 7) Lo que no se toca debe seguir igual que antes (comparar con el respaldo)
+-- 8) Lo que no se toca debe seguir igual que antes (comparar con el respaldo)
 SELECT 'inscripciones' AS tabla, COUNT(*) AS filas FROM inscripciones
 UNION ALL SELECT 'participantes', COUNT(*) FROM participantes
 UNION ALL SELECT 'tipos_inscripcion', COUNT(*) FROM tipos_inscripcion
