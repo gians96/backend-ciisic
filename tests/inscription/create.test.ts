@@ -372,3 +372,88 @@ describe('tipos virtuales: el mismo precio con cualquier correo (spec 018)', () 
         }
     })
 })
+
+describe('planes virtuales sin estudiantes UNDC (spec 020)', () => {
+    const virtualEstudiante = {
+        id: 21, activo: true, precio: new Prisma.Decimal(30), precioInstitucional: new Prisma.Decimal(30), disponiblePara: 'TODOS', modalidad: 'VIRTUAL',
+        excluyeEstudiantesUndc: true, categoria: { id: 1, eventoId: 1, codigo: 'ESTUDIANTES', esEstudiantil: true },
+    }
+    const virtualGeneral = {
+        id: 22, activo: true, precio: new Prisma.Decimal(50), precioInstitucional: new Prisma.Decimal(50), disponiblePara: 'TODOS', modalidad: 'VIRTUAL',
+        excluyeEstudiantesUndc: true, categoria: { id: 2, eventoId: 1, codigo: 'PUBLICO_GENERAL', esEstudiantil: false },
+    }
+    const conCorreo = (correo: string, extra: Partial<CrearInscripcionInput> = {}) => {
+        const base = input(extra)
+        base.participante.correo = correo
+        return base
+    }
+    const rechazada = (promesa: Promise<unknown>) => expect(promesa).rejects.toMatchObject({
+        status: 422, code: 'REGISTRATION_TYPE_NOT_AVAILABLE', message: expect.stringContaining('no está disponible para estudiantes de la UNDC'),
+    })
+
+    it('rechaza al estudiante verificado con SIVIRENO en el plan virtual de estudiantes y no crea nada', async () => {
+        m.tipoInscripcion.findFirst.mockResolvedValue(virtualEstudiante)
+        await rechazada(crearInscripcion(evento, input({ tipoInscripcionId: 21, verificacionToken: tokenValido() }), 'v.png'))
+        expect(m.inscripcion.create).not.toHaveBeenCalled()
+    })
+
+    it('rechaza al correo con código de estudiante aunque no se haya verificado (estudiantil y general)', async () => {
+        m.tipoInscripcion.findFirst.mockResolvedValue(virtualEstudiante)
+        await rechazada(crearInscripcion(evento, input({ tipoInscripcionId: 21 }), 'v.png'))
+        m.tipoInscripcion.findFirst.mockResolvedValue(virtualGeneral)
+        await rechazada(crearInscripcion(evento, input({ tipoInscripcionId: 22 }), 'v.png'))
+        expect(m.inscripcion.create).not.toHaveBeenCalled()
+    })
+
+    it('un docente o administrativo del dominio sí se inscribe en el plan virtual general', async () => {
+        m.tipoInscripcion.findFirst.mockResolvedValue(virtualGeneral)
+        await crearInscripcion(evento, conCorreo('garias@undc.edu.pe', { tipoInscripcionId: 22 }), 'v.png')
+        expect(datosCreados()).toMatchObject({ monto: 50, esCorreoInstitucional: true })
+    })
+
+    it('un externo se inscribe en ambos planes virtuales', async () => {
+        for (const [tipo, monto] of [[virtualEstudiante, 30], [virtualGeneral, 50]] as const) {
+            m.inscripcion.create.mockClear()
+            m.tipoInscripcion.findFirst.mockResolvedValue(tipo)
+            await crearInscripcion(evento, conCorreo('ana@gmail.com', { tipoInscripcionId: tipo.id }), 'v.png')
+            expect(datosCreados().monto).toBe(monto)
+        }
+    })
+
+    it('usa el correo con que queda la inscripción: el registrado de estudiante no puede tomar el plan escribiendo otro correo', async () => {
+        m.tipoInscripcion.findFirst.mockResolvedValue(virtualGeneral)
+        m.participante.findUnique.mockImplementation(({ where }) => Promise.resolve(where.correo ? null : { id: 10, correo: '2020123456@undc.edu.pe' }))
+        await rechazada(crearInscripcion(evento, conCorreo('ana@gmail.com', { tipoInscripcionId: 22 }), 'v.png'))
+        expect(m.inscripcion.create).not.toHaveBeenCalled()
+    })
+
+    it('un tipo virtual con el interruptor apagado sigue admitiendo estudiantes UNDC', async () => {
+        m.tipoInscripcion.findFirst.mockResolvedValue({ ...virtualEstudiante, excluyeEstudiantesUndc: false })
+        await crearInscripcion(evento, input({ tipoInscripcionId: 21, verificacionToken: tokenValido() }), 'v.png')
+        expect(datosCreados()).toMatchObject({ monto: 30, esEstudianteUndc: true })
+    })
+
+    it('un tipo anterior sin la columna (undefined) se comporta como siempre', async () => {
+        const { excluyeEstudiantesUndc: _omitida, ...sinColumna } = virtualGeneral
+        void _omitida
+        m.tipoInscripcion.findFirst.mockResolvedValue(sinColumna)
+        await crearInscripcion(evento, input({ tipoInscripcionId: 22 }), 'v.png')
+        expect(datosCreados().monto).toBe(50)
+    })
+
+    it('usa el dominio institucional del evento, no uno fijo', async () => {
+        const otroEvento = { ...evento, dominioInstitucional: 'uni.edu.pe' } as unknown as Evento
+        m.tipoInscripcion.findFirst.mockResolvedValue(virtualGeneral)
+        // Un código con el dominio de la UNDC ya no es de la comunidad de este evento
+        await crearInscripcion(otroEvento, conCorreo('2020123456@undc.edu.pe', { tipoInscripcionId: 22 }), 'v.png')
+        expect(datosCreados().esCorreoInstitucional).toBe(false)
+        await rechazada(crearInscripcion(otroEvento, conCorreo('2020123456@uni.edu.pe', { tipoInscripcionId: 22 }), 'v.png'))
+    })
+
+    it('también aplica en la ruta legacy', async () => {
+        m.tipoInscripcion.findFirst.mockResolvedValue(virtualEstudiante)
+        ;(verificarEstudiante as jest.Mock).mockResolvedValue({ esEstudianteUndc: true, codigoEstudiante: '2020123456' })
+        await rechazada(crearInscripcion(evento, input({ tipoInscripcionId: 21 }), null, { legacy: true }))
+        expect(m.inscripcion.create).not.toHaveBeenCalled()
+    })
+})

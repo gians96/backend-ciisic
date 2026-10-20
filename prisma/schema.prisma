@@ -199,21 +199,23 @@ model CategoriaInscripcion {
 }
 
 model TipoInscripcion {
-  id                  Int                  @id @default(autoincrement())
-  categoriaId         Int                  @map("categoria_id")
-  codigo              String               @db.VarChar(80)
-  nombre              String
-  etiqueta            String?
-  descripcion         String?              @db.Text
-  caracteristicas     Json?
-  precio              Decimal              @db.Decimal(10, 2)
-  precioInstitucional Decimal              @map("precio_institucional") @db.Decimal(10, 2)
-  disponiblePara      DisponibilidadTipo   @default(TODOS) @map("disponible_para")
-  modalidad           ModalidadAsistencia  @default(PRESENCIAL) @map("modalidad")
-  activo              Boolean              @default(true)
-  orden               Int                  @default(0)
-  categoria           CategoriaInscripcion @relation(fields: [categoriaId], references: [id], map: "fk_tipos_inscripcion_categoria")
-  inscripciones       Inscripcion[]
+  id                     Int                  @id @default(autoincrement())
+  categoriaId            Int                  @map("categoria_id")
+  codigo                 String               @db.VarChar(80)
+  nombre                 String
+  etiqueta               String?
+  descripcion            String?              @db.Text
+  caracteristicas        Json?
+  precio                 Decimal              @db.Decimal(10, 2)
+  precioInstitucional    Decimal              @map("precio_institucional") @db.Decimal(10, 2)
+  disponiblePara         DisponibilidadTipo   @default(TODOS) @map("disponible_para")
+  modalidad              ModalidadAsistencia  @default(PRESENCIAL) @map("modalidad")
+  /// Spec 020: no se ofrece a estudiantes de la UNDC (verificados o con correo institucional numérico).
+  excluyeEstudiantesUndc Boolean              @default(false) @map("excluye_estudiantes_undc")
+  activo                 Boolean              @default(true)
+  orden                  Int                  @default(0)
+  categoria              CategoriaInscripcion @relation(fields: [categoriaId], references: [id], map: "fk_tipos_inscripcion_categoria")
+  inscripciones          Inscripcion[]
 
   @@unique([categoriaId, codigo], map: "uq_tipos_inscripcion_categoria_codigo")
   @@map("tipos_inscripcion")

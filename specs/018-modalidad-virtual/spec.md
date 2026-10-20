@@ -126,6 +126,15 @@ persona: solo hay texto libre en la etiqueta del tipo.
   se crean al final, con la landing nueva ya publicada. Sin variables de entorno nuevas.
 - **FR-012**: textos neutros: no hay enlaces, ni promesas de horas o certificado.
 
+## Seguimiento: estudiantes UNDC (spec 020)
+
+La organización decidió que los **estudiantes de la UNDC no se inscriban en los planes virtuales** (asisten
+de forma presencial; docentes, administrativos y externos sí). No se resuelve con `disponiblePara` (que
+sigue en `TODOS` aquí) sino con un interruptor por tipo, `excluyeEstudiantesUndc`:
+[`specs/020-virtual-sin-estudiantes-undc`](../020-virtual-sin-estudiantes-undc/spec.md). Esa spec responde la
+pregunta 3 de abajo en sentido contrario al de una constancia: se rechaza al estudiante UNDC, no se le pide
+constancia.
+
 ## Preguntas de negocio abiertas
 
 La organización aún no las responde; por eso los textos son neutros y nada se bloquea.

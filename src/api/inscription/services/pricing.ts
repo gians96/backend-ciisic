@@ -9,6 +9,7 @@
  * o solo a quien no lo recibe; se decide con el mismo `aplicaInstitucional` (`tipoDisponible`).
  */
 import type { DisponibilidadTipo } from '../../../core/catalogos'
+import { esCorreoDeEstudiante } from '../../../core/correo-institucional'
 
 export interface EntradaPrecio {
     precio: number
@@ -51,6 +52,22 @@ export function mensajeTipoNoDisponible(disponiblePara: DisponibilidadTipo, esEs
     return disponiblePara === 'INSTITUCIONAL'
         ? `Este tipo de inscripción es solo para ${institucional}. Elige otro tipo de inscripción.`
         : `Este tipo de inscripción no está disponible para ${institucional}. Si ya te inscribiste antes, se usa el correo con el que estás registrado. Elige otro tipo de inscripción.`
+}
+
+/** Mensaje de `REGISTRATION_TYPE_NOT_AVAILABLE` cuando el tipo excluye a los estudiantes de la UNDC (spec 020). */
+export const MENSAJE_TIPO_SIN_ESTUDIANTES_UNDC = 'Este tipo de inscripción no está disponible para estudiantes de la UNDC. Elige un plan presencial.'
+
+/**
+ * Spec 020: el tipo no admite estudiantes de la UNDC. Es estudiante quien tiene una verificación de
+ * SIVIRENO positiva o quien queda inscrito con un correo `<código>@<dominio del evento>`; docentes,
+ * administrativos y externos no se ven afectados. Se evalúa con el correo final de la inscripción.
+ */
+export function estudianteUndcExcluido(
+    excluyeEstudiantesUndc: boolean | null | undefined,
+    persona: { verificadoComoEstudiante: boolean, correo: string, dominio: string },
+): boolean {
+    if (excluyeEstudiantesUndc !== true) return false
+    return persona.verificadoComoEstudiante || esCorreoDeEstudiante(persona.correo, persona.dominio)
 }
 
 export function esCorreoInstitucional(correo: string, dominio: string): boolean {

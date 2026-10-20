@@ -39,6 +39,8 @@ const camposTipo = {
     disponiblePara: yup.mixed<DisponibilidadTipo>().oneOf([...DISPONIBILIDADES_TIPO], 'Elige a quién se ofrece: TODOS, INSTITUCIONAL o EXTERNOS'),
     // Spec 018: cómo se asiste (sin enviar: PRESENCIAL al crear, se conserva al actualizar). No es la modalidad de pago
     modalidad: yup.mixed<ModalidadAsistencia>().oneOf([...MODALIDADES_ASISTENCIA], 'Elige la modalidad de asistencia: PRESENCIAL o VIRTUAL'),
+    // Spec 020: no admite estudiantes UNDC (sin enviar: false al crear, se conserva al actualizar)
+    excluyeEstudiantesUndc: yup.boolean(),
     activo: yup.boolean(),
     orden: yup.number().integer().min(0).max(1000),
 }

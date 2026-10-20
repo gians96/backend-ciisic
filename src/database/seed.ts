@@ -75,9 +75,10 @@ const CATEGORIAS_DEMO = [
                 descripcion: 'La experiencia completa para estudiantes con kit de merchandising oficial.' },
             { codigo: 'estudiantes_sin_kit', nombre: 'ESTUDIANTES', etiqueta: 'SIN KIT', precio: 60, precioInstitucional: 40, orden: 2, kit: false,
                 descripcion: 'La opción económica para estudiantes, con acceso a todas las ponencias.' },
-            // Spec 018: virtual. precio == precioInstitucional y disponiblePara TODOS: el mismo monto con cualquier correo
+            // Spec 018: virtual. precio == precioInstitucional y disponiblePara TODOS: el mismo monto con cualquier correo.
+            // Spec 020: los estudiantes UNDC asisten de forma presencial (excluyeEstudiantesUndc)
             { codigo: 'estudiantes_virtual', nombre: 'ESTUDIANTES', etiqueta: 'VIRTUAL', precio: 30, precioInstitucional: 30, orden: 3, kit: false,
-                modalidad: 'VIRTUAL' as ModalidadAsistencia, caracteristicas: caracteristicasVirtual,
+                modalidad: 'VIRTUAL' as ModalidadAsistencia, excluyeEstudiantesUndc: true, caracteristicas: caracteristicasVirtual,
                 descripcion: 'Participación a distancia de estudiantes en las ponencias transmitidas del congreso.' },
         ],
     },
@@ -89,7 +90,7 @@ const CATEGORIAS_DEMO = [
             { codigo: 'general_sin_kit', nombre: 'PROFESIONALES Y PUBLICO EN GENERAL SIN KIT', etiqueta: 'SIN KIT', precio: 80, precioInstitucional: 60, orden: 2, kit: false,
                 descripcion: 'La opción económica para profesionales y público en general, con acceso a todas las ponencias.' },
             { codigo: 'general_virtual', nombre: 'PROFESIONALES Y PUBLICO EN GENERAL', etiqueta: 'VIRTUAL', precio: 50, precioInstitucional: 50, orden: 3, kit: false,
-                modalidad: 'VIRTUAL' as ModalidadAsistencia, caracteristicas: caracteristicasVirtual,
+                modalidad: 'VIRTUAL' as ModalidadAsistencia, excluyeEstudiantesUndc: true, caracteristicas: caracteristicasVirtual,
                 descripcion: 'Participación a distancia de profesionales y público en general en las ponencias transmitidas del congreso.' },
         ],
     },
@@ -114,6 +115,7 @@ async function seedDemo() {
                     categoriaId: creada.id, codigo: tipo.codigo, nombre: tipo.nombre, etiqueta: tipo.etiqueta, descripcion: tipo.descripcion,
                     precio: tipo.precio, precioInstitucional: tipo.precioInstitucional, orden: tipo.orden,
                     modalidad: tipo.modalidad ?? 'PRESENCIAL',
+                    excluyeEstudiantesUndc: tipo.excluyeEstudiantesUndc ?? false,
                     caracteristicas: (tipo.caracteristicas ?? caracteristicas(tipo.kit)) as Prisma.InputJsonValue,
                 },
                 update: {},

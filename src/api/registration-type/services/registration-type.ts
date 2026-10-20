@@ -24,6 +24,8 @@ export function aTipo(tipo: TipoInscripcion, totalInscripciones?: number) {
         disponiblePara: tipo.disponiblePara,
         // Spec 018: cómo se asiste. No es un precio: sale también sin «pagos.ver»
         modalidad: modalidadDe(tipo.modalidad),
+        // Spec 020: no es un precio, sale también sin «pagos.ver»
+        excluyeEstudiantesUndc: tipo.excluyeEstudiantesUndc === true,
         activo: tipo.activo,
         orden: tipo.orden,
         ...(totalInscripciones !== undefined ? { totalInscripciones } : {}),
@@ -73,6 +75,8 @@ export async function tiposPublicos(eventoId: number, categoria?: string) {
             disponiblePara: tipo.disponiblePara,
             // Spec 018: la landing separa lo presencial de lo virtual con este campo (ausente = PRESENCIAL)
             modalidad: modalidadDe(tipo.modalidad),
+            // Spec 020: la landing oculta el tipo a los estudiantes UNDC (el backend igual lo rechaza)
+            excluyeEstudiantesUndc: tipo.excluyeEstudiantesUndc === true,
         })),
     }))
 }
@@ -201,6 +205,7 @@ export async function crearTipo(categoriaId: number, input: CrearTipoInput) {
             precioInstitucional: input.precioInstitucional,
             disponiblePara: input.disponiblePara ?? 'TODOS',
             modalidad: input.modalidad ?? 'PRESENCIAL',
+            excluyeEstudiantesUndc: input.excluyeEstudiantesUndc ?? false,
             activo: input.activo ?? true,
             orden: input.orden ?? 0,
         },
@@ -225,6 +230,7 @@ export async function actualizarTipo(id: number, input: ActualizarTipoInput) {
     if (input.precioInstitucional !== undefined) data.precioInstitucional = input.precioInstitucional
     if (input.disponiblePara !== undefined) data.disponiblePara = input.disponiblePara
     if (input.modalidad !== undefined) data.modalidad = input.modalidad
+    if (input.excluyeEstudiantesUndc !== undefined) data.excluyeEstudiantesUndc = input.excluyeEstudiantesUndc
     if (input.activo !== undefined) data.activo = input.activo
     if (input.orden !== undefined) data.orden = input.orden
     const tipo = await prisma.tipoInscripcion.update({ where: { id }, data })

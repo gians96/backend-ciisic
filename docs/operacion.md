@@ -241,6 +241,39 @@ Reversión (el esquema es aditivo; **volver a la imagen anterior no exige revert
   la distinción virtual/presencial de los tipos; las inscripciones y los pagos no cambian. Después
   volver a la imagen anterior. Respaldo previo siempre.
 
+## Migración 020 (virtual sin estudiantes UNDC)
+
+`20261021120000_excluye_estudiantes_undc` es aditiva: un solo `ALTER TABLE tipos_inscripcion ADD COLUMN
+excluye_estudiantes_undc BOOLEAN NOT NULL DEFAULT false`. No borra ni modifica datos: todos los tipos
+quedan como estaban (admiten estudiantes UNDC) hasta que alguien encienda el interruptor. La imagen
+anterior sigue funcionando con la BD migrada (no lee la columna). Es una columna aparte y no un valor
+nuevo de `disponible_para` justamente por eso.
+
+**El backend va primero, también antes que el panel.** El backend anterior descarta en silencio el
+`excluyeEstudiantesUndc` que envía el panel (la validación quita lo que no conoce) y no aplica la regla.
+
+Orden:
+
+1. **Respaldo** (arriba): `mysqldump` de la base de producción.
+2. **Desplegar el backend** (push a `main`; `migrate deploy` aplica la migración al arrancar).
+3. **Encender el interruptor** en `estudiantes_virtual` y `general_virtual`, de **una** de estas formas:
+   - Panel: Eventos → Tipos de inscripción → editar el tipo → casilla «No admitir estudiantes UNDC».
+   - Script: `mysql --default-character-set=utf8mb4 … ciisic_vii < prisma/preflight/excluir-estudiantes-undc-virtual.sql`
+     (idempotente; revisa `@codigo_evento` y `@excluye` al inicio; termina con los SELECT de
+     verificación y un conteo de los estudiantes que ya estaban inscritos en virtual).
+4. **Panel y landing** cuando se publiquen: la landing oculta el plan a los estudiantes UNDC; sin ella el
+   backend igual los rechaza con `422 REGISTRATION_TYPE_NOT_AVAILABLE`.
+
+La regla solo frena inscripciones **nuevas**. Los estudiantes UNDC que ya estaban inscritos en un tipo
+virtual siguen inscritos: si la organización decide moverlos, se rechaza o cancela su inscripción desde el
+panel (filtro `modalidad=VIRTUAL` y categoría `ESTUDIANTES`); con el interruptor encendido no podrán volver
+a inscribirse como virtuales. Un estudiante con correo no institucional no se detecta: el revisor lo ve en
+el panel. Las cortesías del staff no aplican la regla.
+
+Apagarlo: la casilla del panel, o `@excluye = 0` en el script. Revertir el esquema: `ALTER TABLE
+tipos_inscripcion DROP COLUMN excluye_estudiantes_undc;` y `./node_modules/.bin/prisma migrate resolve
+--rolled-back 20261021120000_excluye_estudiantes_undc` (volver a la imagen anterior; respaldo previo).
+
 ## Primer Owner
 
 ```bash

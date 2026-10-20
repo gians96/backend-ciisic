@@ -312,6 +312,17 @@ con kit a su precio institucional.
 - **Cambio compatible**: los tipos existentes quedan en `TODOS`; una landing que ignore el campo sigue
   funcionando (solo vería el error al enviar).
 
+### Tipos que no admiten estudiantes UNDC (spec 020)
+
+Definido en `backend-ciisic/specs/020-virtual-sin-estudiantes-undc/contracts/api-excluye-estudiantes.md`.
+Cada tipo de `GET /api/v1/site/registration-types` trae `excluyeEstudiantesUndc` (booleano; ausente = no
+excluye). «Estudiante UNDC» = verificación de SIVIRENO positiva **o** correo `<8–12 dígitos>@<dominio del
+evento>`; docentes, administrativos y externos no lo son. La landing oculta el tipo a los estudiantes UNDC
+y `POST /api/v1/site/inscriptions` responde `422 REGISTRATION_TYPE_NOT_AVAILABLE` («…no está disponible
+para estudiantes de la UNDC. Elige un plan presencial.») si llegan a enviarlo. No cambia el precio ni
+`disponiblePara`. Cambio compatible: la forma LEGACY no lleva el campo, y un backend anterior descarta el
+que envía el panel (backend primero).
+
 ### Modalidad de asistencia (spec 018)
 
 Definido en `backend-ciisic/specs/018-modalidad-virtual/contracts/api-modalidad.md`. Cada tipo de

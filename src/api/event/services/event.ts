@@ -181,6 +181,8 @@ export async function crearEvento(input: CrearEventoInput) {
                         disponiblePara: tipo.disponiblePara,
                         // Spec 018: sin esto un tipo virtual copiado volvería a PRESENCIAL (valor por defecto)
                         modalidad: tipo.modalidad,
+                        // Spec 020: sin esto un tipo copiado volvería a admitir estudiantes UNDC
+                        excluyeEstudiantesUndc: tipo.excluyeEstudiantesUndc,
                         activo: tipo.activo,
                         orden: tipo.orden,
                     })),

@@ -54,6 +54,7 @@ nuevo venga verificado con Google (`correoConservado: true`); solo el staff lo c
 | Ponencias especializadas: programa, inscripciones, asistencia en puerta y API del sitio | [`specs/019-ponencias-especializadas/contracts/api-ponencias-especializadas.md`](../specs/019-ponencias-especializadas/contracts/api-ponencias-especializadas.md) |
 | Roles, permisos y alcance por evento (permiso de cada ruta, sesión con `acceso`, equipo) | [`specs/013-roles-permisos/contracts/api-roles-permisos.md`](../specs/013-roles-permisos/contracts/api-roles-permisos.md) |
 | Modalidad de asistencia (presencial / virtual): tipos, filtro, CSV, resumen, portal y escáner | [`specs/018-modalidad-virtual/contracts/api-modalidad.md`](../specs/018-modalidad-virtual/contracts/api-modalidad.md) |
+| Tipos que no admiten estudiantes UNDC (`excluyeEstudiantesUndc`): tipos, API del sitio y error | [`specs/020-virtual-sin-estudiantes-undc/contracts/api-excluye-estudiantes.md`](../specs/020-virtual-sin-estudiantes-undc/contracts/api-excluye-estudiantes.md) |
 | Rutas legacy (landing anterior) | [`specs/002-multi-evento/contracts/api-publica.md`](../specs/002-multi-evento/contracts/api-publica.md) |
 
 ## Límites

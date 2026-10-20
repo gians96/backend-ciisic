@@ -85,6 +85,23 @@ describe('crear un evento copiando otro (spec 018)', () => {
         expect(Number(data[1].precioInstitucional)).toBe(50)
     })
 
+    it('cada tipo copia si excluye a los estudiantes UNDC (spec 020)', async () => {
+        const conExclusion = evento(1, {
+            categorias: [{
+                id: 1, eventoId: 1, codigo: 'PUBLICO_GENERAL', nombre: 'Público general', descripcion: null, caracteristicas: null, precioDesde: null, esEstudiantil: false, orden: 1,
+                tipos: [tipo(10, 'general_sin_kit', { excluyeEstudiantesUndc: false }), tipo(11, 'general_virtual', { modalidad: 'VIRTUAL', excluyeEstudiantesUndc: true })],
+            }],
+        })
+        m.evento.findUnique.mockImplementation(({ where }: { where: { id?: number, codigo?: string } }) =>
+            Promise.resolve(where.id === 1 ? conExclusion : where.id === 5 ? evento(5, { _count: {} }) : null))
+        const r = await request(app).post('/api/v1/events').set(admin())
+            .send({ codigo: 'ciisic-ix-2027', nombre: 'IX Congreso', nombreCorto: 'IX CIISIC', fechaInicio: '2027-10-26', fechaFin: '2027-10-30', copiarDeEventoId: 1 })
+        expect(r.status).toBe(201)
+        const { data } = m.tx.tipoInscripcion.createMany.mock.calls[0][0]
+        expect(data[0]).toMatchObject({ codigo: 'general_sin_kit', excluyeEstudiantesUndc: false })
+        expect(data[1]).toMatchObject({ codigo: 'general_virtual', excluyeEstudiantesUndc: true })
+    })
+
     it('sin copiar no se crean categorías ni tipos', async () => {
         const r = await request(app).post('/api/v1/events').set(admin())
             .send({ codigo: 'ciisic-x-2028', nombre: 'X Congreso', nombreCorto: 'X CIISIC', fechaInicio: '2028-10-26', fechaFin: '2028-10-30' })

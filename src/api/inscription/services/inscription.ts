@@ -19,7 +19,9 @@ import { aSnapshot, verificarEstudiante } from '../../student-verification/servi
 import { leerVerificacionCorreo } from '../../google-auth/services/verificacion-correo'
 import { borrarCredenciales, generarCredencialPdf, rutaCredencial } from '../utils/generatePdf'
 import { enDiferido, enviarAvisoCorreoConservado, enviarCorreoAprobacion } from '../utils/sendEmail'
-import { calcularPrecio, esCorreoInstitucional, mensajeTipoNoDisponible, tipoDisponible } from './pricing'
+import {
+    calcularPrecio, esCorreoInstitucional, estudianteUndcExcluido, MENSAJE_TIPO_SIN_ESTUDIANTES_UNDC, mensajeTipoNoDisponible, tipoDisponible,
+} from './pricing'
 import { aDetalle, aFilaLista, detalleInclude, type InscripcionDetalle } from './mappers'
 import type { CortesiaInput, CrearInscripcionInput } from '../validation'
 
@@ -203,6 +205,12 @@ export async function crearInscripcion(evento: Evento, input: CrearInscripcionIn
             // Spec 016: tipos solo para la comunidad institucional o solo para externos (con el correo final)
             if (!tipoDisponible(tipo.disponiblePara, precio.aplicaInstitucional)) {
                 throw unprocessable('REGISTRATION_TYPE_NOT_AVAILABLE', mensajeTipoNoDisponible(tipo.disponiblePara, tipo.categoria.esEstudiantil, evento.dominioInstitucional))
+            }
+            // Spec 020: tipos (p. ej. los virtuales) que no admiten estudiantes de la UNDC, con el correo final
+            if (estudianteUndcExcluido(tipo.excluyeEstudiantesUndc, {
+                verificadoComoEstudiante: verificacion?.esEstudianteUndc === true, correo: correoFinal, dominio: evento.dominioInstitucional,
+            })) {
+                throw unprocessable('REGISTRATION_TYPE_NOT_AVAILABLE', MENSAJE_TIPO_SIN_ESTUDIANTES_UNDC)
             }
             // La verificación con Google es del correo ingresado: si se conservó el registrado, no aplica
             const correoVerificado = conservado ? null : verificacionCorreo

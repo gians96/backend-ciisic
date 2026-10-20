@@ -84,6 +84,14 @@ y Google. Documentación: [`docs/`](docs/README.md).
   avisa. No se agrega a la forma LEGACY congelada. Se lee del tipo en tiempo real: cambiarla en un tipo con
   inscripciones es válido pero retroactivo (CSV, resumen, escáner, PDF y correo). Despliegue: backend
   primero (el anterior descarta la `modalidad` del panel en silencio) y los tipos virtuales al final.
+- Tipos que no admiten estudiantes UNDC (spec 020): `tipo.excluyeEstudiantesUndc` (columna aparte, no un valor
+  de `disponiblePara`; `false` por defecto) se enciende en los planes virtuales. Es estudiante UNDC quien tiene
+  una verificación de SIVIRENO positiva **o** queda inscrito con `<8–12 dígitos>@<dominio del evento>`
+  (`esCorreoDeEstudiante`, con el correo final como la spec 016); docentes, administrativos y externos no.
+  `crearInscripcion` responde `422 REGISTRATION_TYPE_NOT_AVAILABLE` (`estudianteUndcExcluido`, dentro de la
+  transacción; sitio y legacy, no cortesías) y solo frena inscripciones nuevas. Un estudiante con correo no
+  institucional no se detecta. No cambia el precio. Despliegue: backend primero y el interruptor al final
+  (panel o `prisma/preflight/excluir-estudiantes-undc-virtual.sql`).
 - Aprobar genera la credencial y envía el correo; si el correo falla, la aprobación se mantiene.
 - Google en la landing es **opcional** y no cambia precios; en el panel entra una cuenta de staff
   activa (cualquier dominio) o un participante inscrito (portal), este con Google **o con un código
@@ -197,7 +205,7 @@ con ambos sistemas levantados.
 
 Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Cada cambio
 empieza en `specs/NNN-nombre/` (spec → plan → tasks → contracts) y se marcan las tasks al
-implementar. Specs actuales: 001–014 y 016–019 (ver [README](README.md)); la 015 (certificados) tiene
+implementar. Specs actuales: 001–014 y 016–020 (ver [README](README.md)); la 015 (certificados) tiene
 solo su diseño (`research.md`).
 
 ## Antes de dar por terminado

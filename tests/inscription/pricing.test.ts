@@ -1,4 +1,7 @@
-import { calcularPrecio, esCorreoInstitucional, mensajeTipoNoDisponible, tipoDisponible } from '../../src/api/inscription/services/pricing'
+import {
+    calcularPrecio, esCorreoInstitucional, estudianteUndcExcluido, MENSAJE_TIPO_SIN_ESTUDIANTES_UNDC, mensajeTipoNoDisponible, tipoDisponible,
+} from '../../src/api/inscription/services/pricing'
+import { esCorreoDeEstudiante } from '../../src/core/correo-institucional'
 
 const base = { precio: 120, precioInstitucional: 100 }
 
@@ -62,5 +65,48 @@ describe('disponibilidad del tipo (spec 016)', () => {
         expect(mensajeTipoNoDisponible('EXTERNOS', false, 'undc.edu.pe')).toContain('no está disponible para correos @undc.edu.pe')
         expect(mensajeTipoNoDisponible('INSTITUCIONAL', false, 'undc.edu.pe')).toContain('es solo para correos @undc.edu.pe')
         expect(mensajeTipoNoDisponible('INSTITUCIONAL', true, 'undc.edu.pe')).toContain('es solo para estudiantes verificados con su correo @undc.edu.pe')
+    })
+})
+
+describe('correo de estudiante UNDC (spec 020)', () => {
+    it.each([
+        ['2020123456@undc.edu.pe', 'undc.edu.pe', true],
+        ['20201234@UNDC.edu.pe', 'undc.edu.pe', true],
+        ['  2020123456@undc.edu.pe  ', 'undc.edu.pe', true],
+        ['garias@undc.edu.pe', 'undc.edu.pe', false],
+        ['2020123456@gmail.com', 'undc.edu.pe', false],
+        ['2020123456@undc.edu.pe.evil.com', 'undc.edu.pe', false],
+        ['1234567@undc.edu.pe', 'undc.edu.pe', false],
+        ['2020123456@uni.edu.pe', 'uni.edu.pe', true],
+        ['2020123456@undc.edu.pe', 'uni.edu.pe', false],
+        ['sin-arroba', 'undc.edu.pe', false],
+    ])('%s con dominio %s → %s', (correo, dominio, esperado) => {
+        expect(esCorreoDeEstudiante(correo, dominio)).toBe(esperado)
+    })
+})
+
+describe('tipos que no admiten estudiantes UNDC (spec 020)', () => {
+    const persona = (extra: Partial<{ verificadoComoEstudiante: boolean, correo: string, dominio: string }> = {}) =>
+        ({ verificadoComoEstudiante: false, correo: 'ana@gmail.com', dominio: 'undc.edu.pe', ...extra })
+
+    it('con el interruptor apagado (o sin valor) nadie queda excluido', () => {
+        for (const excluye of [false, null, undefined]) {
+            expect(estudianteUndcExcluido(excluye, persona({ verificadoComoEstudiante: true, correo: '2020123456@undc.edu.pe' }))).toBe(false)
+        }
+    })
+
+    it('excluye al estudiante verificado y al correo con código de estudiante', () => {
+        expect(estudianteUndcExcluido(true, persona({ verificadoComoEstudiante: true }))).toBe(true)
+        expect(estudianteUndcExcluido(true, persona({ correo: '2020123456@undc.edu.pe' }))).toBe(true)
+    })
+
+    it('no afecta a docentes, administrativos ni externos', () => {
+        expect(estudianteUndcExcluido(true, persona({ correo: 'garias@undc.edu.pe' }))).toBe(false)
+        expect(estudianteUndcExcluido(true, persona({ correo: 'ana@gmail.com' }))).toBe(false)
+    })
+
+    it('el mensaje dice que es para estudiantes de la UNDC y manda a un plan presencial', () => {
+        expect(MENSAJE_TIPO_SIN_ESTUDIANTES_UNDC).toContain('no está disponible para estudiantes de la UNDC')
+        expect(MENSAJE_TIPO_SIN_ESTUDIANTES_UNDC).toContain('plan presencial')
     })
 })

@@ -34,6 +34,7 @@ virtual, asistencia y perfil con foto).
 | [017](specs/017-reinscripcion) | Reinscripción tras un rechazo o una cancelación; eliminar inscripciones solo el Owner |
 | [018](specs/018-modalidad-virtual) | Modalidad de asistencia (presencial o virtual) por tipo de inscripción: tarifas virtuales S/ 30 estudiantes y S/ 50 profesionales, filtro, CSV, resumen, credencial y correo |
 | [019](specs/019-ponencias-especializadas) | Ponencias especializadas: programa, cupos, inscripción (landing y panel) y asistencia en puerta con el DNI; plan futuro de cobro |
+| [020](specs/020-virtual-sin-estudiantes-undc) | Tipos de inscripción que no admiten estudiantes UNDC (interruptor por tipo, usado en los planes virtuales): docentes y externos sí pueden ser virtuales |
 
 ## Desarrollo local
 
