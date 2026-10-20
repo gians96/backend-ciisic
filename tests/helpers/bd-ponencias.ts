@@ -1,5 +1,5 @@
 /**
- * BD en memoria de las ponencias especializadas (spec 018): implementa justo las consultas de Prisma
+ * BD en memoria de las ponencias especializadas (spec 019): implementa justo las consultas de Prisma
  * que usa el módulo (igualdad, `in`, `not`, `lt`, `gt`, `contains`, `AND`, `OR` y filtros por
  * relación) para probar cupos, cruces y liberaciones con el comportamiento real y no con respuestas
  * fijas. `$transaction` restaura el estado si la función lanza, como un rollback.

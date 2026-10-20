@@ -110,7 +110,7 @@ y Google. Documentación: [`docs/`](docs/README.md).
   `RECHAZADO` o `CANCELADO` y vuelve a inscribirse, se **reutiliza la fila** (spec 017): vuelve a
   `PENDIENTE` con los datos nuevos, fecha de hoy y código de credencial nuevo, y se borran su voucher
   y su credencial anteriores; la actualización solo cambia la fila si sigue en uno de esos estados.
-- Ponencias especializadas (spec 018; **no** son los papers `Ponencia`): `PonenciaEspecializada`,
+- Ponencias especializadas (spec 019; **no** son los papers `Ponencia`): `PonenciaEspecializada`,
   `AsistentePonencia` (persona por documento, correo y celular opcionales, independiente de
   `Participante`) e `InscripcionPonencia` (la asistencia vive en su fila). El cupo cuenta los `INSCRITO` y
   se valida en una transacción con `SELECT … FOR UPDATE` de la ponencia (`bloquearPonencias` +
@@ -118,7 +118,7 @@ y Google. Documentación: [`docs/`](docs/README.md).
   idempotente y **nunca modifica** a una persona existente; el staff y la puerta sí pueden inscribir en
   ponencias que se cruzan (respetan el cupo). La asistencia en puerta inscribe en el acto (origen
   `PUERTA`), no bloquea fuera de horario (solo lo marca) y cancela por `CAMBIO_EN_PUERTA` las inscripciones
-  cruzadas a las que la persona no asistió. Gratuitas por ahora: cobro en `specs/018-…/plan-futuro-cobro.md`.
+  cruzadas a las que la persona no asistió. Gratuitas por ahora: cobro en `specs/019-…/plan-futuro-cobro.md`.
 - Reglas del dominio institucional fijas en `src/core/correo-institucional.ts` (`undc.edu.pe`,
   parte local numérica = estudiante).
 - Las rutas legacy existen para la landing anterior y se apagan desde el panel (Sistema).
@@ -197,7 +197,7 @@ con ambos sistemas levantados.
 
 Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Cada cambio
 empieza en `specs/NNN-nombre/` (spec → plan → tasks → contracts) y se marcan las tasks al
-implementar. Specs actuales: 001–014 y 016–018 (ver [README](README.md)); la 015 (certificados) tiene
+implementar. Specs actuales: 001–014 y 016–019 (ver [README](README.md)); la 015 (certificados) tiene
 solo su diseño (`research.md`).
 
 ## Antes de dar por terminado

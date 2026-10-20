@@ -126,7 +126,7 @@ describe('permisos elegibles de la Comisión', () => {
     })
 })
 
-describe('permisos de las ponencias especializadas (spec 018)', () => {
+describe('permisos de las ponencias especializadas (spec 019)', () => {
     it('solo gestionar es global; ver, inscribir y asistencia son por evento', () => {
         expect(ALCANCE['especializadas.gestionar']).toBe('G')
         for (const p of ['especializadas.ver', 'especializadas.inscribir', 'especializadas.asistencia'] as const) expect(ALCANCE[p]).toBe('E')

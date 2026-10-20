@@ -42,7 +42,7 @@ Las inscripciones existentes quedan en `NO_APLICA` con `monto = 0`.
 - El servidor ignora `monto` y `estadoPago` enviados por el cliente (como en `Inscripcion`).
 - Asistencia en puerta: una ponencia de pago solo marca asistencia con `PAGADO` o `EXONERADO`; si no, responde
   `402/409 PAYMENT_PENDING` con el estado y el operador puede cobrar en el acto (marcando `PAGADO` con permiso).
-- El «cambio en puerta» (spec 018) **no transfiere** pagos: al cambiar de ponencia con precio distinto, se pide al
+- El «cambio en puerta» (spec 019) **no transfiere** pagos: al cambiar de ponencia con precio distinto, se pide al
   operador resolverlo (cobro de la diferencia o conservar la otra inscripción).
 
 ### API

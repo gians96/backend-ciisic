@@ -256,11 +256,11 @@ CORS está abierto a cualquier origen; la landing lo usa desde su servidor Nitro
 `GET /document-lookup/dni/:numero`, `GET /payment-qr/:archivo` (imagen del QR de una billetera,
 spec 012; la landing la sirve desde su BFF), `POST /inscriptions`, `/student-verification`,
 `/google-verification`, `/papers`, `/contact`, `GET /specialized-talks` y
-`POST /specialized-talk-registrations` (spec 018).
+`POST /specialized-talk-registrations` (spec 019).
 
-### Ponencias especializadas (spec 018)
+### Ponencias especializadas (spec 019)
 
-- Contrato: `backend-ciisic/specs/018-ponencias-especializadas/contracts/api-ponencias-especializadas.md`.
+- Contrato: `backend-ciisic/specs/019-ponencias-especializadas/contracts/api-ponencias-especializadas.md`.
 - `GET /api/v1/site/specialized-talks`: ponencias `publicada` del evento del token, con `cuposDisponibles`
   y `llena`, sin datos personales.
 - `POST /api/v1/site/specialized-talk-registrations` (`{ asistente, ponenciaIds[1..4] }`): todo o nada;
@@ -385,10 +385,10 @@ El panel la consume solo a través de su BFF (`/api/backend/**`), que agrega el
   vista reducida. El panel debe tolerar ambos.
 - Compatibilidad: para Owner y Administrador el panel anterior recibe los mismos campos (lo nuevo son
   claves agregadas) y `PUT /api/v1/admin/:id` sigue aceptando `rolCodigo`.
-- Ponencias especializadas (spec 018): cuatro permisos nuevos — `especializadas.gestionar` (global:
+- Ponencias especializadas (spec 019): cuatro permisos nuevos — `especializadas.gestionar` (global:
   Owner y Administrador), `especializadas.ver`, `.inscribir` y `.asistencia` (por evento; los dos
   últimos implican `.ver`). Los tres por evento son elegibles para la Comisión. Rutas y errores en
-  `specs/018-ponencias-especializadas/contracts/api-ponencias-especializadas.md`. Un panel anterior
+  `specs/019-ponencias-especializadas/contracts/api-ponencias-especializadas.md`. Un panel anterior
   simplemente no muestra esas pantallas.
 
 ### Escáner, credencial y operación (spec 014)

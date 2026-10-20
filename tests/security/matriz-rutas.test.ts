@@ -94,7 +94,7 @@ const SITIO: readonly Clave[] = [
     'GET /v1/site/registration-types',
     'POST /v1/site/student-verification',
     'GET /v1/site/config',
-    // Ponencias especializadas (spec 018)
+    // Ponencias especializadas (spec 019)
     'GET /v1/site/specialized-talks',
     'POST /v1/site/specialized-talk-registrations',
 ]
@@ -236,7 +236,7 @@ const MATRIZ: Record<Clave, Esperada> = {
     'PUT /v1/registration-types/:id': g('eventos.configurar'),
     'DELETE /v1/registration-types/:id': g('eventos.configurar'),
 
-    // specialized-talk (spec 018)
+    // specialized-talk (spec 019)
     'GET /v1/events/:eventId/specialized-talks': g(['especializadas.ver', 'especializadas.gestionar'], P()),
     'POST /v1/events/:eventId/specialized-talks': g('especializadas.gestionar'),
     'PUT /v1/specialized-talks/:id': g('especializadas.gestionar'),

@@ -1,7 +1,7 @@
 import { fechaLima, fechaSoloDia } from './fechas'
 
 /**
- * Reglas puras de las ponencias especializadas (spec 018): cruces de horario, duración y la
+ * Reglas puras de las ponencias especializadas (spec 019): cruces de horario, duración y la
  * ventana de asistencia. Sin acceso a la BD para poder probarlas solas.
  */
 

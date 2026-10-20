@@ -366,7 +366,7 @@ model Ponencia {
   @@map("ponencias")
 }
 
-// ─── Ponencias especializadas (spec 018) ─────────────────────────────────────
+// ─── Ponencias especializadas (spec 019) ─────────────────────────────────────
 
 enum ModalidadPonencia {
   PRESENCIAL
