@@ -104,6 +104,11 @@ model Evento {
   logoArchivo           String?                @map("logo_archivo") @db.VarChar(255)
   datosPago             Json?                  @map("datos_pago")
   credencialCorreoId    Int?                   @map("credencial_correo_id")
+  /// Tarifa por defecto de las delegaciones del evento (spec 018). Cada delegación la copia al
+  /// crearse, así un cambio de precio no altera lo ya cobrado.
+  delegacionesMinIntegrantes    Int     @default(10) @map("delegaciones_min_integrantes")
+  delegacionesPrecioEstandar    Decimal @default(60.00) @map("delegaciones_precio_estandar") @db.Decimal(10, 2)
+  delegacionesPrecioPromocional Decimal @default(50.00) @map("delegaciones_precio_promocional") @db.Decimal(10, 2)
   creadoEn              DateTime               @default(now()) @map("creado_en")
   actualizadoEn         DateTime               @updatedAt @map("actualizado_en")
   credencialCorreo      CredencialCorreo?      @relation(fields: [credencialCorreoId], references: [id], onDelete: SetNull, map: "fk_eventos_credencial_correo")
@@ -115,6 +120,7 @@ model Evento {
   integraciones         IntegracionEvento[]
   tokensAcceso          TokenAcceso[]
   asignaciones          AsignacionEvento[]
+  delegaciones          Delegacion[]
 
   @@index([credencialCorreoId], map: "idx_eventos_credencial_correo")
   @@map("eventos")
@@ -243,6 +249,7 @@ model Inscripcion {
   id                     Int               @id @default(autoincrement())
   eventoId               Int               @map("evento_id")
   participanteId         Int               @map("participante_id")
+  delegacionId           Int?              @map("delegacion_id")
   tipoInscripcionId      Int?              @map("tipo_inscripcion_id")
   clasificacionId        Int?              @map("clasificacion_id")
   estadoId               Int               @map("estado_id")
@@ -275,6 +282,7 @@ model Inscripcion {
   esQrLegado             Boolean           @default(false) @map("es_qr_legado")
   evento                 Evento            @relation(fields: [eventoId], references: [id], map: "fk_inscripciones_evento")
   participante           Participante      @relation(fields: [participanteId], references: [id], map: "fk_inscripciones_participante")
+  delegacion             Delegacion?        @relation(fields: [delegacionId], references: [id], onDelete: SetNull, map: "fk_inscripciones_delegacion")
   tipoInscripcion        TipoInscripcion?  @relation(fields: [tipoInscripcionId], references: [id], onDelete: SetNull, map: "fk_inscripciones_tipo_inscripcion")
   clasificacion          Clasificacion?    @relation(fields: [clasificacionId], references: [id], onDelete: SetNull, map: "fk_inscripciones_clasificacion")
   estado                 EstadoInscripcion @relation(fields: [estadoId], references: [id], map: "fk_inscripciones_estado")
@@ -282,11 +290,49 @@ model Inscripcion {
 
   @@unique([eventoId, participanteId], map: "uq_inscripciones_evento_participante")
   @@index([participanteId], map: "idx_inscripciones_participante")
+  @@index([delegacionId], map: "idx_inscripciones_delegacion")
   @@index([tipoInscripcionId], map: "idx_inscripciones_tipo_inscripcion")
   @@index([clasificacionId], map: "idx_inscripciones_clasificacion")
   @@index([estadoId], map: "idx_inscripciones_estado")
   @@index([revisadoPorId], map: "idx_inscripciones_revisado_por")
   @@map("inscripciones")
+}
+
+/// Delegación o institución que inscribe a su grupo con una tarifa por persona según su tamaño.
+model Delegacion {
+  id                    Int           @id @default(autoincrement())
+  eventoId              Int           @map("evento_id")
+  nombre                String
+  codigoLink            String        @unique(map: "uq_delegaciones_codigo_link") @map("codigo_link") @db.VarChar(100)
+  institucion           String?
+  representanteNombre   String?       @map("representante_nombre")
+  representanteEmail    String?       @map("representante_email")
+  representanteTelefono String?       @map("representante_telefono")
+  minIntegrantes        Int           @default(10) @map("min_integrantes")
+  precioEstandar        Decimal       @default(60.00) @map("precio_estandar") @db.Decimal(10, 2)
+  precioPromocional     Decimal       @default(50.00) @map("precio_promocional") @db.Decimal(10, 2)
+  /// Pago conjunto del grupo: un solo voucher y un solo número de operación para todas sus
+  /// inscripciones (no caben en `inscripciones`, donde el número de operación es único).
+  modalidadPago          String?       @map("modalidad_pago") @db.VarChar(40)
+  banco                  String?       @db.VarChar(40)
+  billeteraDigital       String?       @map("billetera_digital") @db.VarChar(40)
+  tipoOperacion          String?       @map("tipo_operacion") @db.VarChar(40)
+  numeroOperacion        String?       @map("numero_operacion") @db.VarChar(100)
+  fechaPago              DateTime?     @map("fecha_pago")
+  voucherArchivo         String?       @map("voucher_archivo")
+  /// Lo que se pagó por el grupo (el backend lo calcula; nunca lo envía el cliente).
+  montoTotalPagado       Decimal       @default(0) @map("monto_total_pagado") @db.Decimal(10, 2)
+  activo                Boolean       @default(true)
+  creadoEn              DateTime      @default(now()) @map("creado_en")
+  actualizadoEn         DateTime      @updatedAt @map("actualizado_en")
+  evento                Evento        @relation(fields: [eventoId], references: [id], onDelete: Cascade, map: "fk_delegaciones_evento")
+  inscripciones         Inscripcion[]
+
+  @@index([eventoId], map: "idx_delegaciones_evento")
+  /// El número de operación del voucher es único por evento: dos delegaciones del mismo evento
+  /// no pueden compartir el código de un mismo pago (MySQL admite varios NULL).
+  @@unique([eventoId, numeroOperacion], map: "uq_delegaciones_evento_numero_operacion")
+  @@map("delegaciones")
 }
 
 // ─── Actividades y asistencia ────────────────────────────────────────────────

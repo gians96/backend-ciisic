@@ -33,6 +33,11 @@ export const eventoDeInscripcion = resolutor('inscripcion', async (req) => {
     return fila?.eventoId ?? null
 })
 
+export const eventoDeDelegacion = resolutor('delegacion', async (req) => {
+    const fila = await prisma.delegacion.findUnique({ where: { id: idParam(req.params.id) }, select: { eventoId: true } })
+    return fila?.eventoId ?? null
+})
+
 export const eventoDeActividad = resolutor('actividad', async (req) => {
     const fila = await prisma.actividad.findUnique({ where: { id: idParam(req.params.id) }, select: { eventoId: true } })
     return fila?.eventoId ?? null

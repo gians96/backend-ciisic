@@ -1,0 +1,17 @@
+# Taste — Command Code
+- Escribe las peticiones en español y espera respuestas en español. Confidence: 0.75
+- Entrega especificaciones de tarea largas y estructuradas: título, secciones con encabezados markdown y emojis, reglas de negocio explícitas (fórmulas, valores por defecto), y listas de tareas por repositorio/área. Confidence: 0.6
+- Plantea los problemas pegando el log literal del error y pregunta por la causa ("¿por qué aparece eso?"); espera un diagnóstico con la atribución exacta de archivo:línea que emite el error y la causa raíz real, no una lista genérica de pasos. Confidence: 0.65
+- Pide implementar por fases y en orden declarado: primero backend (esquema/migración y endpoints), luego el frontend. En el ecosistema CIISIC confirma el orden proveedor → consumidor → panel (backend-ciisic → ciisic-undc-web → administrator-ciisic-frontend), con la spec y el contrato API escritos antes de tocar los consumidores. Confidence: 0.65
+- Prefiere el arreglo de alcance mínimo cuando el problema es de configuración: no modificar código en ningún repo y reutilizar los servicios ya existentes de la aplicación (p. ej. invocar el mismo servicio que usa el panel) en vez de añadir scripts CLI o herramientas nuevas. Confidence: 0.6
+- Acepta que se le pregunte el entorno y el alcance antes de ejecutar cambios, y decide con opciones concretas (local vs. desplegado; solo configurar vs. además tocar código; decisiones de diseño de un flujo nuevo, con la alternativa recomendada y un preview en ASCII de cada opción que responde sin contexto adicional). Confidence: 0.6
+- Comparte capturas de pantalla de la UI actual como referencia al pedir una funcionalidad nueva y espera que el flujo nuevo siga la misma estructura y el mismo lenguaje visual (p. ej. "te presento cómo es la ventana de Registro para público general, quiero lo mismo en delegaciones"). Confidence: 0.6
+- Describe el comportamiento en términos de actores y de lo que ve cada quien (el representante, el link de la delegación, un solo pago para el grupo), no de endpoints ni de modelo de datos: espera que el asistente lo traduzca a un diseño técnico antes de codificar. Confidence: 0.6
+
+## Flujo de trabajo
+- Cuando pide "provocar que funcione" o que se compruebe un flujo, espera una prueba end-to-end real (peticiones HTTP contra los servicios levantados + lectura del estado final en la BD), no un reporte de suite en verde. Confidence: 0.65
+- Quiere poder probarlo él mismo al final: deja los servidores corriendo y entrégale la URL exacta (con los parámetros que el caso necesita, p. ej. el link de la delegación) para abrirla. Confidence: 0.6
+- Antes de implementar un cambio que toca varios repos, redacta el plan en un documento bajo `~/.commandcode/plans/<slug>.md` (contexto, cambios por repo, comandos de verificación y prueba manual) y luego lo implementa. Confidence: 0.55
+- Prefiere una sola implementación de la regla de negocio: cuando el camino público y el del panel comparten lógica, reutiliza el mismo helper del dominio (p. ej. `prepararFilas`) en vez de mantener dos versiones que divergen. Confidence: 0.6
+- Al cerrar, declara de forma explícita lo que quedó sin hacer y los efectos colaterales (commits no hechos, procesos reiniciados o todavía corriendo, datos de prueba creados en la BD). Confidence: 0.6
+- Cuando el usuario dice "yo inscriba X y que se registre Y", la meta es que una persona real lo consiga en la UI: verifica también el HTML renderizado (SSR) y la coherencia de lo que ve, no solo la respuesta de la API. Confidence: 0.6
