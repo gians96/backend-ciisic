@@ -3,6 +3,11 @@
 API del sitio (contrato 3) que consume la landing. El evento sale **siempre** del token de acceso
 (`X-Api-Key`); el cliente nunca envía precios ni montos.
 
+> **Spec 019** ([`api-tipos-delegacion.md`](../../019-tipos-delegacion/contracts/api-tipos-delegacion.md)):
+> la tarifa se resuelve desde los tipos `delegacion_general` / `delegacion_grupal`;
+> `POST /api/v1/site/delegations` acepta `tipoInscripcionId` y las respuestas traen
+> `tipoInscripcion`; `GET /api/v1/delegations/:id/voucher` también acepta `pagos.ver`.
+
 ## `GET /api/v1/site/delegations/tarifa`
 
 Tarifa por defecto de las delegaciones del evento (la landing la muestra antes de registrar).
@@ -19,6 +24,9 @@ Tarifa por defecto de las delegaciones del evento (la landing la muestra antes d
   }
 }
 ```
+
+Desde la spec 019 esos dos precios salen de los tipos de la categoría `DELEGACIONES` (con
+fallback a `eventos.delegacionesPrecioEstandar/Promocional`).
 
 ## `GET /api/v1/site/delegations/link/:codigoLink`
 
@@ -143,7 +151,7 @@ Registra una delegación completa y su pago conjunto.
 | `GET /api/v1/events/:eventId/delegations` | `eventos.configurar` | Listar las delegaciones del evento |
 | `POST /api/v1/events/:eventId/delegations` | `eventos.configurar` | Crear una delegación a mano (con sus precios) |
 | `GET /api/v1/delegations/:id` | `eventos.configurar` | Detalle: integrantes y pago conjunto |
-| `GET /api/v1/delegations/:id/voucher` | `eventos.configurar` | Voucher del grupo |
+| `GET /api/v1/delegations/:id/voucher` | `eventos.configurar` **o** `pagos.ver` (spec 019) | Voucher del grupo |
 | `POST /api/v1/delegations/:id/inscriptions` | `eventos.configurar` | Alta manual o masiva (1–200, sin voucher) |
 
 `eventos.configurar` es de alcance global: solo lo tienen el Owner y el Administrador del sistema.

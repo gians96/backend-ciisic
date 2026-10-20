@@ -14,6 +14,8 @@ jest.mock('../../src/database/prisma', () => ({
         inscripcion: { findMany: jest.fn(), count: jest.fn(), create: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
         participante: { findMany: jest.fn(), create: jest.fn(), update: jest.fn() },
         estadoInscripcion: { findUnique: jest.fn() },
+        categoriaInscripcion: { findUnique: jest.fn() },
+        tipoInscripcion: { findFirst: jest.fn() },
         $queryRaw: jest.fn(),
         $transaction: jest.fn(),
     },
@@ -27,6 +29,8 @@ const m = prisma as unknown as {
     inscripcion: { findMany: Mock, count: Mock, create: Mock, update: Mock, updateMany: Mock }
     participante: { findMany: Mock, create: Mock, update: Mock }
     estadoInscripcion: { findUnique: Mock }
+    categoriaInscripcion: { findUnique: Mock }
+    tipoInscripcion: { findFirst: Mock }
     $queryRaw: Mock
     $transaction: Mock
 }
@@ -63,6 +67,17 @@ const inscripcionDe = (id: number, participanteId: number) => ({
     estado: { id: 1, codigo: 'PENDIENTE', nombre: 'Pendiente' }, monto: new Prisma.Decimal(50), creadoEn: FECHA,
 })
 
+/** Los dos tipos de la categoría `DELEGACIONES` (spec 019). */
+const tipoGeneral = {
+    id: 31, codigo: 'delegacion_general', nombre: 'Delegación General', etiqueta: 'Delegación General',
+    activo: true, orden: 1, precio: new Prisma.Decimal(60),
+}
+const tipoPromocional = {
+    id: 32, codigo: 'delegacion_grupal', nombre: 'Delegación Promocional', etiqueta: 'Delegación Promocional',
+    activo: true, orden: 2, precio: new Prisma.Decimal(50),
+}
+const categoriaDelegaciones = { id: 9, eventoId: 2, codigo: 'DELEGACIONES', nombre: 'Delegaciones', tipos: [tipoGeneral, tipoPromocional] }
+
 beforeEach(() => {
     jest.clearAllMocks()
     m.evento.findUnique.mockResolvedValue(evento)
@@ -73,6 +88,9 @@ beforeEach(() => {
     m.inscripcion.create.mockImplementation(async ({ data }: { data: { participanteId: number } }) => ({ id: 100 + data.participanteId }))
     m.tokenAcceso.findUnique.mockResolvedValue({ id: 7, eventoId: 2, revocadoEn: null, expiraEn: null, evento })
     m.tokenAcceso.update.mockResolvedValue({})
+    // La tarifa sale de los tipos de `DELEGACIONES` (spec 019); sin tipo elegido no consulta
+    m.categoriaInscripcion.findUnique.mockResolvedValue(categoriaDelegaciones)
+    m.tipoInscripcion.findFirst.mockResolvedValue(null)
 })
 
 describe('tarifa por persona', () => {
@@ -103,9 +121,21 @@ describe('link de la delegación (API del sitio)', () => {
         expect(r.body.data).toMatchObject({
             id: 5, nombre: 'Delegación Ingeniería', institucion: 'UNDC', representanteNombre: 'Rosa Quispe',
             totalIntegrantes: 4, precioUnitario: 60, precioEstandar: 60, precioPromocional: 50,
+            tipoInscripcion: null,
             evento: { id: 2, codigo: 'ciisic-2026' },
         })
         expect(JSON.stringify(r.body.data)).not.toContain('rosa@undc.edu.pe')
+    })
+
+    it('el link devuelve el tipo que esa delegación eligió (spec 019)', async () => {
+        m.delegacion.findUnique.mockResolvedValue({
+            ...delegacion,
+            tipoInscripcion: { id: 31, codigo: 'delegacion_general', nombre: 'Delegación General', etiqueta: 'Delegación General' },
+            evento, _count: { inscripciones: 4 },
+        })
+        const r = await request(app).get('/api/v1/site/delegations/link/abc123def456').set('X-Api-Key', TOKEN_SITIO)
+        expect(r.status).toBe(200)
+        expect(r.body.data.tipoInscripcion).toMatchObject({ id: 31, codigo: 'delegacion_general' })
     })
 
     it('exige el token de acceso del evento', async () => {
@@ -147,6 +177,25 @@ describe('administración de delegaciones', () => {
         const r = await request(app).post('/api/v1/events/2/delegations').set('Authorization', `Bearer ${token}`).send({ nombre: 'Delegación' })
         expect(r.status).toBe(403)
         expect(m.delegacion.create).not.toHaveBeenCalled()
+    })
+
+    it('el voucher de la delegación también lo ve quien solo tiene «pagos.ver» (spec 019)', async () => {
+        m.delegacion.findUnique.mockImplementation(async ({ select }: { select?: Record<string, boolean> }) => {
+            if (select?.eventoId) return { eventoId: 2 }
+            if (select?.voucherArchivo) return { voucherArchivo: 'voucher-5.png' }
+            return null
+        })
+        // El Tesorero tiene «pagos.ver» pero no «eventos.configurar»: antes recibía 403
+        const tesorero = tokenDeRol('TESORERO', 30, { eventoIds: [2] })
+        const r = await request(app).get('/api/v1/delegations/5/voucher').set('Authorization', `Bearer ${tesorero}`)
+        // La guarda pasó: el 404 es porque el archivo no está en el servidor
+        expect(r.status).toBe(404)
+        expect(r.body.code).toBe('VOUCHER_NOT_FOUND')
+
+        const sinPagos = tokenDeRol('COMISION', 40, { eventoIds: [2], permisos: ['inscripciones.ver'] })
+        const prohibido = await request(app).get('/api/v1/delegations/5/voucher').set('Authorization', `Bearer ${sinPagos}`)
+        expect(prohibido.status).toBe(403)
+        expect(prohibido.body.code).toBe('FORBIDDEN')
     })
 
     it('la carga de integrantes aplica la tarifa promocional al cruzar el mínimo', async () => {
@@ -200,6 +249,28 @@ describe('administración de delegaciones', () => {
         expect(m.inscripcion.updateMany).toHaveBeenCalledWith({
             where: { delegacionId: 5, eventoId: 2 },
             data: { monto: 60, descuento: 0, tieneDescuento: false },
+        })
+    })
+
+    it('la carga desde el panel hereda el tipo de la delegación (spec 019)', async () => {
+        const conTipo = { ...delegacion, tipoInscripcionId: 31 }
+        m.delegacion.findUnique.mockImplementation(async ({ select, include }: { select?: { precioEstandar?: boolean }, include?: { evento?: boolean, inscripciones?: boolean } }) => {
+            if (select?.precioEstandar) return { precioEstandar: delegacion.precioEstandar, precioPromocional: delegacion.precioPromocional, minIntegrantes: 10 }
+            if (include?.evento) return { ...conTipo, evento }
+            if (include?.inscripciones) return { ...conTipo, inscripciones: [] }
+            return null
+        })
+        m.participante.findMany.mockResolvedValue([])
+        m.participante.create.mockResolvedValue(participante(1, '70000001'))
+        m.inscripcion.count.mockResolvedValue(0)
+
+        const r = await request(app).post('/api/v1/delegations/5/inscriptions').set('Authorization', administrador())
+            .send({ participantes: [{ tipoDocumento: 'dni', numeroDocumento: '70000001', nombres: 'Ana', apellidos: 'Pérez', correo: 'ana@example.com', celular: '999888777' }] })
+        expect(r.status).toBe(201)
+        expect(m.inscripcion.create.mock.calls[0][0].data).toMatchObject({ tipoInscripcionId: 31 })
+        expect(m.inscripcion.updateMany).toHaveBeenCalledWith({
+            where: { delegacionId: 5, eventoId: 2 },
+            data: { monto: 60, descuento: 0, tieneDescuento: false, tipoInscripcionId: 31 },
         })
     })
 
@@ -328,6 +399,27 @@ describe('registro público de una delegación (spec 018)', () => {
         }
     })
 
+    it('el tipo elegido en la tarjeta queda en la delegación y en sus inscripciones (spec 019)', async () => {
+        m.tipoInscripcion.findFirst.mockResolvedValueOnce({ id: 31, codigo: 'delegacion_general', nombre: 'Delegación General', etiqueta: 'Delegación General' })
+        const r = await registrar({ tipoInscripcionId: '31' })
+        expect(r.status).toBe(201)
+        expect(m.delegacion.create.mock.calls[0][0].data).toMatchObject({ tipoInscripcionId: 31 })
+        for (const llamada of m.inscripcion.create.mock.calls) {
+            expect(llamada[0].data).toMatchObject({ tipoInscripcionId: 31 })
+        }
+        expect(m.inscripcion.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+            data: expect.objectContaining({ tipoInscripcionId: 31 }),
+        }))
+    })
+
+    it('rechaza un tipo que no pertenezca a la categoría DELEGACIONES del evento', async () => {
+        m.tipoInscripcion.findFirst.mockResolvedValueOnce(null)
+        const r = await registrar({ tipoInscripcionId: '999' })
+        expect(r.status).toBe(422)
+        expect(r.body.code).toBe('REGISTRATION_TYPE_NOT_AVAILABLE')
+        expect(m.delegacion.create).not.toHaveBeenCalled()
+    })
+
     it('exige el token de acceso del evento', async () => {
         const r = await request(app).post('/api/v1/site/delegations')
         expect(r.status).toBe(401)
@@ -435,6 +527,36 @@ describe('registro por el link de una delegación (spec 018)', () => {
         expect(r.body.data).toMatchObject({ id: 5, nombre: 'Ing. de Sistemas UNDC' })
     })
 
+    it('conserva el tipo que ya tenía esa delegación si no se elige de nuevo (spec 019)', async () => {
+        const conTipo = { ...delStaff, tipoInscripcionId: 32 }
+        m.delegacion.findUnique.mockImplementation(async () => ({ ...conTipo, evento, _count: { inscripciones: 0 }, inscripciones: [] }))
+        const r = await registrar()
+        expect(r.status).toBe(201)
+        // Sin tarjeta elegida no se consulta el catálogo ni se cambia el tipo de la delegación
+        expect(m.tipoInscripcion.findFirst).not.toHaveBeenCalled()
+        for (const llamada of m.delegacion.update.mock.calls) expect(llamada[0].data).not.toHaveProperty('tipoInscripcionId')
+        // ...y el grupo entero queda con ese tipo
+        for (const llamada of m.inscripcion.create.mock.calls) expect(llamada[0].data).toMatchObject({ tipoInscripcionId: 32 })
+        expect(m.inscripcion.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+            data: expect.objectContaining({ tipoInscripcionId: 32 }),
+        }))
+    })
+
+    it('con el link, la tarjeta elegida actualiza el tipo de esa delegación (spec 019)', async () => {
+        m.tipoInscripcion.findFirst.mockResolvedValueOnce({ id: 31, codigo: 'delegacion_general', nombre: 'Delegación General', etiqueta: 'Delegación General' })
+        const r = await registrar({ tipoInscripcionId: '31' })
+        expect(r.status).toBe(201)
+        expect(m.delegacion.create).not.toHaveBeenCalled()
+        expect(m.delegacion.update).toHaveBeenCalledWith(expect.objectContaining({
+            where: { id: 5 },
+            data: expect.objectContaining({ tipoInscripcionId: 31 }),
+        }))
+        for (const llamada of m.inscripcion.create.mock.calls) expect(llamada[0].data).toMatchObject({ tipoInscripcionId: 31 })
+        expect(m.inscripcion.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+            data: expect.objectContaining({ tipoInscripcionId: 31 }),
+        }))
+    })
+
     it('aplica la tarifa de esa delegación, no la del evento', async () => {
         await registrar()
         // 2 integrantes, mínimo 5: tarifa estándar de la delegación (80), no la del evento (60)
@@ -540,5 +662,56 @@ describe('registro por el link de una delegación (spec 018)', () => {
         expect(r.status).toBe(201)
         expect(m.delegacion.create).toHaveBeenCalled()
         expect(m.delegacion.create.mock.calls[0][0].data).toMatchObject({ precioEstandar: 60, precioPromocional: 50, minIntegrantes: 10 })
+    })
+})
+
+describe('tarifa de delegaciones desde los tipos (spec 019)', () => {
+    it('aDelegacion expone el tipo elegido por la delegación', () => {
+        const conTipo = {
+            ...delegacion,
+            tipoInscripcion: { id: 31, codigo: 'delegacion_general', nombre: 'Delegación General', etiqueta: 'Delegación General' },
+        }
+        const datos = aDelegacion(conTipo as never, 4)
+        expect(datos.tipoInscripcion).toEqual({
+            id: 31, codigo: 'delegacion_general', nombre: 'Delegación General', etiqueta: 'Delegación General',
+        })
+        expect(aDelegacion(delegacion as never, 4).tipoInscripcion).toBeNull()
+    })
+
+    it('GET /v1/site/delegations/tarifa usa los precios de delegacion_general y delegacion_grupal', async () => {
+        const r = await request(app).get('/api/v1/site/delegations/tarifa').set('X-Api-Key', TOKEN_SITIO)
+        expect(r.status).toBe(200)
+        expect(r.body.data).toMatchObject({ minIntegrantes: 10, precioEstandar: 60, precioPromocional: 50 })
+        expect(m.categoriaInscripcion.findUnique).toHaveBeenCalledWith(expect.objectContaining({
+            where: { eventoId_codigo: { eventoId: 2, codigo: 'DELEGACIONES' } },
+        }))
+    })
+
+    it('los precios salen de los tipos, no de los campos del evento', async () => {
+        m.categoriaInscripcion.findUnique.mockResolvedValue({
+            ...categoriaDelegaciones,
+            tipos: [
+                { ...tipoGeneral, precio: new Prisma.Decimal(75) },
+                { ...tipoPromocional, precio: new Prisma.Decimal(60) },
+            ],
+        })
+        const r = await request(app).get('/api/v1/site/delegations/tarifa').set('X-Api-Key', TOKEN_SITIO)
+        expect(r.status).toBe(200)
+        expect(r.body.data).toMatchObject({ precioEstandar: 75, precioPromocional: 60 })
+    })
+
+    it('si faltan los tipos, cae en la tarifa por defecto del evento', async () => {
+        m.categoriaInscripcion.findUnique.mockResolvedValue(null)
+        const r = await request(app).get('/api/v1/site/delegations/tarifa').set('X-Api-Key', TOKEN_SITIO)
+        expect(r.status).toBe(200)
+        expect(r.body.data).toMatchObject({ precioEstandar: 60, precioPromocional: 50 })
+    })
+
+    it('la consulta solo pide tipos activos de la categoría DELEGACIONES', async () => {
+        const r = await request(app).get('/api/v1/site/delegations/tarifa').set('X-Api-Key', TOKEN_SITIO)
+        expect(r.status).toBe(200)
+        expect(m.categoriaInscripcion.findUnique).toHaveBeenCalledWith(expect.objectContaining({
+            include: expect.objectContaining({ tipos: expect.objectContaining({ where: { activo: true } }) }),
+        }))
     })
 })

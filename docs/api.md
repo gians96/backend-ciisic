@@ -53,6 +53,7 @@ nuevo venga verificado con Google (`correoConservado: true`); solo el staff lo c
 | Asistencia por QR, código y PDF de la credencial, alta de participantes, cortesías y correo conservado | [`specs/014-portal-fotocheck-asistencia/contracts/api-asistencia.md`](../specs/014-portal-fotocheck-asistencia/contracts/api-asistencia.md) |
 | Roles, permisos y alcance por evento (permiso de cada ruta, sesión con `acceso`, equipo) | [`specs/013-roles-permisos/contracts/api-roles-permisos.md`](../specs/013-roles-permisos/contracts/api-roles-permisos.md) |
 | Delegaciones: registro de un grupo con representante y pago conjunto | [`specs/018-delegaciones/contracts/api-delegaciones.md`](../specs/018-delegaciones/contracts/api-delegaciones.md) |
+| Tipos de delegación (General y Promocional) y delegación en inscripciones | [`specs/019-tipos-delegacion/contracts/api-tipos-delegacion.md`](../specs/019-tipos-delegacion/contracts/api-tipos-delegacion.md) |
 | Rutas legacy (landing anterior) | [`specs/002-multi-evento/contracts/api-publica.md`](../specs/002-multi-evento/contracts/api-publica.md) |
 
 ## Límites

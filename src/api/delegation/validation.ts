@@ -58,6 +58,8 @@ export type InscribirEnDelegacionInput = yup.InferType<typeof inscribirEnDelegac
 export const registroDelegacionSchema = yup.object({
     /** Link de una delegación ya creada por el staff: el registro se pega a esa delegación. */
     codigoLink: yup.string().trim().max(100).nullable(),
+    /** Tipo de delegación elegido en la tarjeta (spec 019): Delegación General / Promocional. */
+    tipoInscripcionId: yup.number().integer().positive().nullable().default(null),
     delegacion: yup.object({
         nombre: yup.string().trim().min(2).max(150).required(),
         institucion: yup.string().trim().max(191).nullable(),

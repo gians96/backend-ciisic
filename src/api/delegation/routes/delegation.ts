@@ -24,7 +24,8 @@ const routes: AppRoute[] = [
     { method: 'get', path: '/v1/events/:eventId/delegations', handler: controller.list, middlewares: [requirePermiso('eventos.configurar', { evento: eventoDelParametro('eventId') })] },
     { method: 'post', path: '/v1/events/:eventId/delegations', handler: controller.create, middlewares: [requirePermiso('eventos.configurar', { evento: eventoDelParametro('eventId') }), validateBody(crearDelegacionSchema)] },
     { method: 'get', path: '/v1/delegations/:id', handler: controller.find, middlewares: [requirePermiso('eventos.configurar', { evento: eventoDeDelegacion })] },
-    { method: 'get', path: '/v1/delegations/:id/voucher', handler: controller.voucher, middlewares: [requirePermiso('eventos.configurar', { evento: eventoDeDelegacion })] },
+    // El voucher del grupo también lo ve quien revisa pagos (spec 019: desde el detalle de una inscripción)
+    { method: 'get', path: '/v1/delegations/:id/voucher', handler: controller.voucher, middlewares: [requirePermiso(['eventos.configurar', 'pagos.ver'], { evento: eventoDeDelegacion })] },
     {
         method: 'post',
         path: '/v1/delegations/:id/inscriptions',

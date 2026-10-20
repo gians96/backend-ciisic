@@ -17,9 +17,9 @@ export async function find(req: Request, res: Response) {
     res.json({ success: true, data: await service.obtenerDelegacion(idParam(req.params.id)) })
 }
 
-/** Tarifa por defecto de las delegaciones del evento: la landing la muestra antes de registrar. */
+/** Tarifa de las delegaciones del evento: los precios salen de los tipos (spec 019). */
 export async function publicTarifa(req: SitioRequest, res: Response) {
-    res.json({ success: true, data: service.tarifaDelegaciones(eventoDelSitio(req)) })
+    res.json({ success: true, data: await service.tarifaDelegaciones(eventoDelSitio(req)) })
 }
 
 /** Datos de una delegación por su link (el evento sale del token de acceso). */

@@ -276,6 +276,29 @@ evento), `GET /api/v1/site/delegations/link/:codigoLink` (una delegación por su
 - El staff ve el pago conjunto y el voucher del grupo en el panel
   (`GET /api/v1/delegations/:id/voucher`, `eventos.configurar`).
 
+### Tipos de delegación: General y Promocional (spec 019)
+
+Definido en `backend-ciisic/specs/019-tipos-delegacion/contracts/api-tipos-delegacion.md`. La
+landing pide al representante que elija una de dos tarjetas de tipo de inscripción —«Delegación
+General» (`delegacion_general`) y «Delegación Promocional» (`delegacion_grupal`)— de la categoría
+`DELEGACIONES` del evento; el tipo elegido queda visible en el panel y **no cambia la regla de
+precios** (la promocional aplica desde `minIntegrantes`, como siempre).
+
+- **La tarifa sale de los tipos**: `GET /api/v1/site/delegations/tarifa` resuelve
+  `precioEstandar`/`precioPromocional` desde los precios de `delegacion_general` y
+  `delegacion_grupal`; si faltan, usa `eventos.delegaciones_*`. Cada delegación copia esos
+  precios al crearse (editar los tipos no repricesa grupos existentes).
+- `POST /api/v1/site/delegations` acepta `tipoInscripcionId` (opcional en el contrato; la landing
+  siempre lo envía) y lo guarda en la delegación y en **cada inscripción del grupo**. Inválido →
+  `422 REGISTRATION_TYPE_NOT_AVAILABLE`. Con `codigoLink` la elección **actualiza** el tipo de la
+  delegación existente.
+- El link de la delegación (`GET /api/v1/site/delegations/link/:codigoLink`) expone
+  `tipoInscripcion` (o `null`), para que la landing precargue la tarjeta; el registro responde lo
+  mismo en su `data`.
+- El panel ve el tipo en el listado y el detalle de las delegaciones (`tipoInscripcion`), y el
+  detalle de inscripciones incluye su `delegacion` (grupo e integrantes; el pago conjunto solo
+  con `pagos.ver`). El voucher del grupo también lo puede ver quien solo tiene `pagos.ver`.
+
 ### Correo conservado al reinscribirse (spec 014)
 
 Definido en `backend-ciisic/specs/014-portal-fotocheck-asistencia/contracts/api-asistencia.md`. Si
@@ -378,18 +401,26 @@ mínimo se actualiza el `monto` de **todas** las inscripciones de la delegación
   `codigoLink` (16 hexadecimales, único). Cuerpo: `nombre` (obligatorio), `institucion`,
   `representanteNombre`, `representanteEmail`, `representanteTelefono`, `minIntegrantes`,
   `precioEstandar`, `precioPromocional`.
-- `GET /api/v1/events/:eventId/delegations`: lista con `totalIntegrantes`, `precioUnitario` y
-  `montoTotal`.
-- `GET /api/v1/delegations/:id`: detalle con `inscripciones` (participante, estado y monto).
+- `GET /api/v1/events/:eventId/delegations`: lista con `totalIntegrantes`, `precioUnitario`,
+  `montoTotal` y `tipoInscripcion` (el que eligió esa delegación: `delegacion_general` /
+  `delegacion_grupal`, o `null`; spec 019).
+- `GET /api/v1/delegations/:id`: detalle con `tipoInscripcion` y `inscripciones` (participante,
+  estado y monto).
 - `POST /api/v1/delegations/:id/inscriptions`: alta manual o masiva
   (`{ participantes: [{ tipoDocumento, numeroDocumento, nombres, apellidos, correo, celular? }] }`,
   máximo 200). Rechaza `409 DUPLICATE_PARTICIPANT`, `409 EMAIL_IN_USE` y
   `409 PARTICIPANT_ALREADY_REGISTERED`; omite a quien ya está en esta delegación y reutiliza la
   inscripción rechazada o cancelada (spec 017). Responde el detalle con `registrados` y `omitidos`.
+  Las inscripciones que crea o actualiza **heredan el tipo de la delegación** (spec 019).
+- `GET /api/v1/delegations/:id/voucher`: el voucher del grupo; `eventos.configurar` **o**
+  `pagos.ver` (spec 019, para verlo desde el detalle de una inscripción).
 - `GET /api/v1/delegations/link/:codigoLink` (**pública**): datos para el formulario al que lleva el
-  link compartido (delegación, evento, integrantes y tarifa), sin correo ni teléfono del
-  representante. El formulario de la landing debe enviar los integrantes a la ruta administrativa o
-  a la que defina su propio contrato.
+  link compartido (delegación, evento, integrantes, tarifa y `tipoInscripcion`), sin correo ni
+  teléfono del representante. El formulario de la landing debe enviar los integrantes a la ruta
+  administrativa o a la que defina su propio contrato.
+- En `GET /api/v1/events/:eventId/inscriptions` y `GET /api/v1/inscriptions/:id` cada fila/detalle
+  incluye `delegacion` (`null` si es inscripción individual): `id`, `nombre`, `codigoLink` y
+  `totalIntegrantes`; en el detalle también `pago` (el conjunto del grupo, solo con `pagos.ver`).
 
 ### Escáner, credencial y operación (spec 014)
 

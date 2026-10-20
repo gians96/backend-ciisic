@@ -165,7 +165,8 @@ const MATRIZ: Record<Clave, Esperada> = {
     'GET /v1/events/:eventId/delegations': g('eventos.configurar', P()),
     'POST /v1/events/:eventId/delegations': g('eventos.configurar', P()),
     'GET /v1/delegations/:id': g('eventos.configurar', eventoDeDelegacion),
-    'GET /v1/delegations/:id/voucher': g('eventos.configurar', eventoDeDelegacion),
+    // El voucher del grupo también lo ve quien revisa pagos (spec 019)
+    'GET /v1/delegations/:id/voucher': g(['eventos.configurar', 'pagos.ver'], eventoDeDelegacion),
     'POST /v1/delegations/:id/inscriptions': g('eventos.configurar', eventoDeDelegacion),
 
     // document-lookup

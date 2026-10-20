@@ -12,6 +12,23 @@ export const detalleInclude = {
     estado: true,
     evento: true,
     revisadoPor: { select: { id: true, nombres: true, apellidos: true } },
+    /** Delegación del grupo (spec 019): su pago es conjunto y vive en `delegaciones`. */
+    delegacion: {
+        select: {
+            id: true,
+            nombre: true,
+            codigoLink: true,
+            modalidadPago: true,
+            banco: true,
+            billeteraDigital: true,
+            tipoOperacion: true,
+            numeroOperacion: true,
+            fechaPago: true,
+            montoTotalPagado: true,
+            voucherArchivo: true,
+            _count: { select: { inscripciones: true } },
+        },
+    },
 } satisfies Prisma.InscripcionInclude
 
 export type InscripcionDetalle = Prisma.InscripcionGetPayload<{ include: typeof detalleInclude }>
@@ -50,6 +67,33 @@ function pagoOculto() {
         fechaPago: null,
         tieneVoucher: false,
         voucherMime: null,
+    }
+}
+
+/**
+ * La delegación a la que pertenece la inscripción (spec 019): nombre, link e integrantes del
+ * grupo. El pago conjunto solo se expone con `conPago` (spec 013).
+ */
+function delegacionDe(i: InscripcionDetalle, conPago: boolean) {
+    if (!i.delegacion) return null
+    const d = i.delegacion
+    return {
+        id: d.id,
+        nombre: d.nombre,
+        codigoLink: d.codigoLink,
+        totalIntegrantes: d._count.inscripciones,
+        pago: conPago
+            ? {
+                modalidad: d.modalidadPago,
+                banco: d.banco,
+                billeteraDigital: d.billeteraDigital,
+                tipoOperacion: d.tipoOperacion,
+                numeroOperacion: d.numeroOperacion,
+                fechaPago: d.fechaPago ? fechaSoloDia(d.fechaPago) : null,
+                montoTotalPagado: monto(d.montoTotalPagado),
+                tieneVoucher: Boolean(d.voucherArchivo),
+            }
+            : null,
     }
 }
 
@@ -95,6 +139,8 @@ export function aDetalle(i: InscripcionDetalle, conPago = true) {
         clasificacion: i.clasificacion ? { id: i.clasificacion.id, nombre: i.clasificacion.nombre } : null,
         estado: { id: i.estado.id, codigo: i.estado.codigo, nombre: i.estado.nombre },
         pago: conPago ? pagoDe(i) : pagoOculto(),
+        /** Grupo de la delegación (spec 019); `null` en las inscripciones individuales. */
+        delegacion: delegacionDe(i, conPago),
         verificacion: {
             esEstudianteUndc: i.esEstudianteUndc,
             esCorreoInstitucional: i.esCorreoInstitucional,
@@ -121,6 +167,8 @@ export function aFilaLista(i: InscripcionDetalle, conPago = true) {
         tipoInscripcion: d.tipoInscripcion ? { id: d.tipoInscripcion.id, nombre: d.tipoInscripcion.nombre, etiqueta: d.tipoInscripcion.etiqueta, categoria: d.tipoInscripcion.categoria.codigo } : null,
         clasificacion: d.clasificacion,
         estado: d.estado,
+        /** La delegación sin su pago: el grupo completo se ve en el detalle (spec 019). */
+        delegacion: d.delegacion ? { id: d.delegacion.id, nombre: d.delegacion.nombre, codigoLink: d.delegacion.codigoLink, totalIntegrantes: d.delegacion.totalIntegrantes } : null,
         monto: d.pago.monto,
         modalidadPago: d.pago.modalidad ?? null,
         numeroOperacion: d.pago.numeroOperacion ?? null,

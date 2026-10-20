@@ -215,6 +215,7 @@ model TipoInscripcion {
   orden               Int                  @default(0)
   categoria           CategoriaInscripcion @relation(fields: [categoriaId], references: [id], map: "fk_tipos_inscripcion_categoria")
   inscripciones       Inscripcion[]
+  delegaciones        Delegacion[]
 
   @@unique([categoriaId, codigo], map: "uq_tipos_inscripcion_categoria_codigo")
   @@map("tipos_inscripcion")
@@ -322,13 +323,17 @@ model Delegacion {
   voucherArchivo         String?       @map("voucher_archivo")
   /// Lo que se pagó por el grupo (el backend lo calcula; nunca lo envía el cliente).
   montoTotalPagado       Decimal       @default(0) @map("monto_total_pagado") @db.Decimal(10, 2)
+  /// Tipo de delegación elegido en la landing (spec 019): Delegación General / Promocional.
+  tipoInscripcionId      Int?          @map("tipo_inscripcion_id")
   activo                Boolean       @default(true)
   creadoEn              DateTime      @default(now()) @map("creado_en")
   actualizadoEn         DateTime      @updatedAt @map("actualizado_en")
   evento                Evento        @relation(fields: [eventoId], references: [id], onDelete: Cascade, map: "fk_delegaciones_evento")
+  tipoInscripcion       TipoInscripcion? @relation(fields: [tipoInscripcionId], references: [id], onDelete: SetNull, map: "fk_delegaciones_tipo_inscripcion")
   inscripciones         Inscripcion[]
 
   @@index([eventoId], map: "idx_delegaciones_evento")
+  @@index([tipoInscripcionId], map: "idx_delegaciones_tipo_inscripcion")
   /// El número de operación del voucher es único por evento: dos delegaciones del mismo evento
   /// no pueden compartir el código de un mismo pago (MySQL admite varios NULL).
   @@unique([eventoId, numeroOperacion], map: "uq_delegaciones_evento_numero_operacion")
