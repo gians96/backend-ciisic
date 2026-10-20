@@ -110,6 +110,15 @@ y Google. Documentación: [`docs/`](docs/README.md).
   `RECHAZADO` o `CANCELADO` y vuelve a inscribirse, se **reutiliza la fila** (spec 017): vuelve a
   `PENDIENTE` con los datos nuevos, fecha de hoy y código de credencial nuevo, y se borran su voucher
   y su credencial anteriores; la actualización solo cambia la fila si sigue en uno de esos estados.
+- Ponencias especializadas (spec 018; **no** son los papers `Ponencia`): `PonenciaEspecializada`,
+  `AsistentePonencia` (persona por documento, correo y celular opcionales, independiente de
+  `Participante`) e `InscripcionPonencia` (la asistencia vive en su fila). El cupo cuenta los `INSCRITO` y
+  se valida en una transacción con `SELECT … FOR UPDATE` de la ponencia (`bloquearPonencias` +
+  `exigirCupo`). La landing rechaza cruces de horario (`SCHEDULE_CONFLICT`), ponencias de pago y llenas, es
+  idempotente y **nunca modifica** a una persona existente; el staff y la puerta sí pueden inscribir en
+  ponencias que se cruzan (respetan el cupo). La asistencia en puerta inscribe en el acto (origen
+  `PUERTA`), no bloquea fuera de horario (solo lo marca) y cancela por `CAMBIO_EN_PUERTA` las inscripciones
+  cruzadas a las que la persona no asistió. Gratuitas por ahora: cobro en `specs/018-…/plan-futuro-cobro.md`.
 - Reglas del dominio institucional fijas en `src/core/correo-institucional.ts` (`undc.edu.pe`,
   parte local numérica = estudiante).
 - Las rutas legacy existen para la landing anterior y se apagan desde el panel (Sistema).

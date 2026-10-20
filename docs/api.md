@@ -51,6 +51,7 @@ nuevo venga verificado con Google (`correoConservado: true`); solo el staff lo c
 | Portal v2: perfil, foto, fotocheck y asistencia | [`specs/014-portal-fotocheck-asistencia/contracts/api-portal.md`](../specs/014-portal-fotocheck-asistencia/contracts/api-portal.md) |
 | Acceso al portal con código por correo y cambio del staff al portal | [`specs/014-portal-fotocheck-asistencia/contracts/api-acceso-codigo.md`](../specs/014-portal-fotocheck-asistencia/contracts/api-acceso-codigo.md) |
 | Asistencia por QR, código y PDF de la credencial, alta de participantes, cortesías y correo conservado | [`specs/014-portal-fotocheck-asistencia/contracts/api-asistencia.md`](../specs/014-portal-fotocheck-asistencia/contracts/api-asistencia.md) |
+| Ponencias especializadas: programa, inscripciones, asistencia en puerta y API del sitio | [`specs/018-ponencias-especializadas/contracts/api-ponencias-especializadas.md`](../specs/018-ponencias-especializadas/contracts/api-ponencias-especializadas.md) |
 | Roles, permisos y alcance por evento (permiso de cada ruta, sesión con `acceso`, equipo) | [`specs/013-roles-permisos/contracts/api-roles-permisos.md`](../specs/013-roles-permisos/contracts/api-roles-permisos.md) |
 | Modalidad de asistencia (presencial / virtual): tipos, filtro, CSV, resumen, portal y escáner | [`specs/018-modalidad-virtual/contracts/api-modalidad.md`](../specs/018-modalidad-virtual/contracts/api-modalidad.md) |
 | Rutas legacy (landing anterior) | [`specs/002-multi-evento/contracts/api-publica.md`](../specs/002-multi-evento/contracts/api-publica.md) |
@@ -72,7 +73,8 @@ nuevo venga verificado con Google (`correoConservado: true`); solo el staff lo c
 - Por token del sitio: lecturas 3000/min, DNI 60/min y 1500/día, verificación 50/min, Google
   300/min, inscripciones 150/15 min, ponencias y contacto 60/15 min.
 - Por participante (portal): 60/min; descarga de credencial 10/min; cambio de foto 10/h.
-- Por cuenta de staff: marcar asistencia 120/min (solo Tesorero y Comisión), reenvío de
+- Por cuenta de staff: marcar asistencia 120/min (solo Tesorero y Comisión; lo mismo para la asistencia
+  en puerta a ponencias especializadas), reenvío de
   credencial 20/15 min, renovación de sesión 30/15 min, cambio al portal 20/15 min.
 - Generación de PDF de credenciales (global, en memoria): 2 a la vez y 30 en cola, cada paso de
   puppeteer con un tope de 30 s; con la cola llena, `503 PDF_BUSY` (`Retry-After: 10`) en las

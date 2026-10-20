@@ -24,6 +24,7 @@ export const ALCANCE = {
     'inscripciones.cortesia': 'G',
     'legacy.usar': 'G',
     'certificados.gestionar': 'G',
+    'especializadas.gestionar': 'G',
 
     'resumen.ver': 'E',
     'inscripciones.ver': 'E',
@@ -41,6 +42,9 @@ export const ALCANCE = {
     'mensajes.eliminar': 'E',
     'certificados.ver': 'E',
     'certificados.operar': 'E',
+    'especializadas.ver': 'E',
+    'especializadas.inscribir': 'E',
+    'especializadas.asistencia': 'E',
 } as const
 
 export type Permiso = keyof typeof ALCANCE
@@ -65,6 +69,7 @@ export const ETIQUETAS_PERMISO: Record<Permiso, string> = {
     'inscripciones.cortesia': 'Registrar inscripciones de cortesía',
     'legacy.usar': 'Usar las rutas de la versión anterior',
     'certificados.gestionar': 'Gestionar plantillas y emitir certificados',
+    'especializadas.gestionar': 'Crear, editar y eliminar ponencias especializadas',
 
     'resumen.ver': 'Ver el resumen del evento',
     'inscripciones.ver': 'Ver inscritos (nombre, documento, correo y celular)',
@@ -82,6 +87,9 @@ export const ETIQUETAS_PERMISO: Record<Permiso, string> = {
     'mensajes.eliminar': 'Eliminar mensajes de contacto',
     'certificados.ver': 'Ver certificados',
     'certificados.operar': 'Generar, descargar para firmar y subir certificados firmados',
+    'especializadas.ver': 'Ver las ponencias especializadas y sus inscritos',
+    'especializadas.inscribir': 'Inscribir manualmente a ponencias especializadas y corregir inscripciones',
+    'especializadas.asistencia': 'Tomar asistencia en ponencias especializadas (inscribe al instante con el DNI)',
 }
 
 /** Un permiso implica otros: se aplican al guardar y al cargar al actor. */
@@ -96,6 +104,8 @@ export const DEPENDENCIAS: Partial<Record<Permiso, readonly Permiso[]>> = {
     'asistencia.fuera_horario': ['asistencia.marcar'],
     'mensajes.eliminar': ['mensajes.ver'],
     'certificados.operar': ['certificados.ver'],
+    'especializadas.inscribir': ['especializadas.ver'],
+    'especializadas.asistencia': ['especializadas.ver'],
 }
 
 const TODOS = PERMISOS
@@ -131,6 +141,9 @@ export const PERMISOS_ELEGIBLES_COMISION: readonly Permiso[] = [
     'credenciales.reenviar',
     'ponencias.ver',
     'mensajes.ver',
+    'especializadas.ver',
+    'especializadas.inscribir',
+    'especializadas.asistencia',
 ]
 
 /** Permiso con el que se crea por defecto una cuenta de la Comisión. */

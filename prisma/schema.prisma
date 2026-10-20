@@ -24,26 +24,28 @@ model Rol {
 }
 
 model Administrador {
-  id                      Int                    @id @default(autoincrement())
-  nombres                 String
-  apellidos               String
-  correo                  String                 @unique(map: "uq_administradores_correo")
+  id                               Int                    @id @default(autoincrement())
+  nombres                          String
+  apellidos                        String
+  correo                           String                 @unique(map: "uq_administradores_correo")
   // Sin contraseña (NULL) el administrador entra solo con Google
-  contrasenaHash          String?                @map("contrasena_hash")
-  creadoEn                DateTime               @default(now()) @map("creado_en")
-  actualizadoEn           DateTime               @updatedAt @map("actualizado_en")
-  rolId                   Int                    @map("rol_id")
-  activo                  Boolean                @default(true)
-  googleSub               String?                @unique(map: "uq_administradores_google_sub") @map("google_sub") @db.VarChar(255)
-  googleVinculadoEn       DateTime?              @map("google_vinculado_en")
-  rol                     Rol                    @relation(fields: [rolId], references: [id], map: "fk_administradores_rol")
-  inscripcionesRevisadas  Inscripcion[]          @relation("InscripcionRevisor")
-  tokensAccesoCreados     TokenAcceso[]
-  configuracionesEditadas ConfiguracionSistema[]
-  asignacionesEvento      AsignacionEvento[]
-  permisos                PermisoAdministrador[]
-  asistenciasRegistradas  Asistencia[]           @relation("AsistenciaRegistradaPor")
-  asistenciasAnuladas     Asistencia[]           @relation("AsistenciaAnuladaPor")
+  contrasenaHash                   String?                @map("contrasena_hash")
+  creadoEn                         DateTime               @default(now()) @map("creado_en")
+  actualizadoEn                    DateTime               @updatedAt @map("actualizado_en")
+  rolId                            Int                    @map("rol_id")
+  activo                           Boolean                @default(true)
+  googleSub                        String?                @unique(map: "uq_administradores_google_sub") @map("google_sub") @db.VarChar(255)
+  googleVinculadoEn                DateTime?              @map("google_vinculado_en")
+  rol                              Rol                    @relation(fields: [rolId], references: [id], map: "fk_administradores_rol")
+  inscripcionesRevisadas           Inscripcion[]          @relation("InscripcionRevisor")
+  tokensAccesoCreados              TokenAcceso[]
+  configuracionesEditadas          ConfiguracionSistema[]
+  asignacionesEvento               AsignacionEvento[]
+  permisos                         PermisoAdministrador[]
+  asistenciasRegistradas           Asistencia[]           @relation("AsistenciaRegistradaPor")
+  asistenciasAnuladas              Asistencia[]           @relation("AsistenciaAnuladaPor")
+  inscripcionesPonenciaRegistradas InscripcionPonencia[]  @relation("InscripcionPonenciaRegistradaPor")
+  asistenciasPonenciaRegistradas   InscripcionPonencia[]  @relation("InscripcionPonenciaAsistenciaPor")
 
   @@index([rolId], map: "idx_administradores_rol")
   @@map("administradores")
@@ -83,38 +85,39 @@ enum EstadoEvento {
 }
 
 model Evento {
-  id                    Int                    @id @default(autoincrement())
-  codigo                String                 @unique(map: "uq_eventos_codigo") @db.VarChar(60)
-  nombre                String                 @db.VarChar(200)
-  nombreCorto           String                 @map("nombre_corto") @db.VarChar(80)
-  descripcion           String?                @db.Text
-  sede                  String?                @db.VarChar(200)
-  fechaInicio           DateTime               @map("fecha_inicio") @db.Date
-  fechaFin              DateTime               @map("fecha_fin") @db.Date
-  inscripcionesInicio   DateTime?              @map("inscripciones_inicio")
-  inscripcionesFin      DateTime?              @map("inscripciones_fin")
-  inscripcionesAbiertas Boolean                @default(true) @map("inscripciones_abiertas")
-  estado                EstadoEvento           @default(BORRADOR)
-  esPrincipal           Boolean                @default(false) @map("es_principal")
-  dominioInstitucional  String                 @default("undc.edu.pe") @map("dominio_institucional") @db.VarChar(100)
-  correoContacto        String?                @map("correo_contacto")
-  telefonoContacto      String?                @map("telefono_contacto") @db.VarChar(30)
-  remitenteNombre       String?                @map("remitente_nombre") @db.VarChar(120)
-  asuntoAprobacion      String?                @map("asunto_aprobacion") @db.VarChar(200)
-  logoArchivo           String?                @map("logo_archivo") @db.VarChar(255)
-  datosPago             Json?                  @map("datos_pago")
-  credencialCorreoId    Int?                   @map("credencial_correo_id")
-  creadoEn              DateTime               @default(now()) @map("creado_en")
-  actualizadoEn         DateTime               @updatedAt @map("actualizado_en")
-  credencialCorreo      CredencialCorreo?      @relation(fields: [credencialCorreoId], references: [id], onDelete: SetNull, map: "fk_eventos_credencial_correo")
-  categorias            CategoriaInscripcion[]
-  inscripciones         Inscripcion[]
-  actividades           Actividad[]
-  ponencias             Ponencia[]
-  mensajesContacto      MensajeContacto[]
-  integraciones         IntegracionEvento[]
-  tokensAcceso          TokenAcceso[]
-  asignaciones          AsignacionEvento[]
+  id                      Int                     @id @default(autoincrement())
+  codigo                  String                  @unique(map: "uq_eventos_codigo") @db.VarChar(60)
+  nombre                  String                  @db.VarChar(200)
+  nombreCorto             String                  @map("nombre_corto") @db.VarChar(80)
+  descripcion             String?                 @db.Text
+  sede                    String?                 @db.VarChar(200)
+  fechaInicio             DateTime                @map("fecha_inicio") @db.Date
+  fechaFin                DateTime                @map("fecha_fin") @db.Date
+  inscripcionesInicio     DateTime?               @map("inscripciones_inicio")
+  inscripcionesFin        DateTime?               @map("inscripciones_fin")
+  inscripcionesAbiertas   Boolean                 @default(true) @map("inscripciones_abiertas")
+  estado                  EstadoEvento            @default(BORRADOR)
+  esPrincipal             Boolean                 @default(false) @map("es_principal")
+  dominioInstitucional    String                  @default("undc.edu.pe") @map("dominio_institucional") @db.VarChar(100)
+  correoContacto          String?                 @map("correo_contacto")
+  telefonoContacto        String?                 @map("telefono_contacto") @db.VarChar(30)
+  remitenteNombre         String?                 @map("remitente_nombre") @db.VarChar(120)
+  asuntoAprobacion        String?                 @map("asunto_aprobacion") @db.VarChar(200)
+  logoArchivo             String?                 @map("logo_archivo") @db.VarChar(255)
+  datosPago               Json?                   @map("datos_pago")
+  credencialCorreoId      Int?                    @map("credencial_correo_id")
+  creadoEn                DateTime                @default(now()) @map("creado_en")
+  actualizadoEn           DateTime                @updatedAt @map("actualizado_en")
+  credencialCorreo        CredencialCorreo?       @relation(fields: [credencialCorreoId], references: [id], onDelete: SetNull, map: "fk_eventos_credencial_correo")
+  categorias              CategoriaInscripcion[]
+  inscripciones           Inscripcion[]
+  actividades             Actividad[]
+  ponencias               Ponencia[]
+  ponenciasEspecializadas PonenciaEspecializada[]
+  mensajesContacto        MensajeContacto[]
+  integraciones           IntegracionEvento[]
+  tokensAcceso            TokenAcceso[]
+  asignaciones            AsignacionEvento[]
 
   @@index([credencialCorreoId], map: "idx_eventos_credencial_correo")
   @@map("eventos")
@@ -123,10 +126,11 @@ model Evento {
 // ─── Participantes e inscripciones ───────────────────────────────────────────
 
 model TipoDocumento {
-  id            String         @id
-  nombre        String
-  abreviatura   String         @unique(map: "uq_tipos_documento_abreviatura")
-  participantes Participante[]
+  id                 String              @id
+  nombre             String
+  abreviatura        String              @unique(map: "uq_tipos_documento_abreviatura")
+  participantes      Participante[]
+  asistentesPonencia AsistentePonencia[]
 
   @@map("tipos_documento")
 }
@@ -360,6 +364,112 @@ model Ponencia {
 
   @@index([eventoId, creadoEn], map: "idx_ponencias_evento_creado")
   @@map("ponencias")
+}
+
+// ─── Ponencias especializadas (spec 018) ─────────────────────────────────────
+
+enum ModalidadPonencia {
+  PRESENCIAL
+  VIRTUAL
+}
+
+enum ProcedenciaAsistente {
+  INTERNO
+  EXTERNO
+}
+
+enum EstadoInscripcionPonencia {
+  INSCRITO
+  CANCELADO
+}
+
+enum OrigenInscripcionPonencia {
+  LANDING
+  STAFF
+  PUERTA
+}
+
+enum MotivoCancelacionPonencia {
+  STAFF
+  CAMBIO_EN_PUERTA
+}
+
+/// Ponencia especializada del evento (no es la `Ponencia` del Call for Papers). La duración se deriva de
+/// `horaInicio`/`horaFin`; `precio` 0 = gratuita; `cupo` NULL = sin límite. El ponente va embebido.
+model PonenciaEspecializada {
+  id             Int                   @id @default(autoincrement())
+  eventoId       Int                   @map("evento_id")
+  tema           String                @db.VarChar(300)
+  fecha          DateTime              @db.Date
+  horaInicio     DateTime              @map("hora_inicio")
+  horaFin        DateTime              @map("hora_fin")
+  ambiente       String                @db.VarChar(120)
+  modalidad      ModalidadPonencia     @default(PRESENCIAL)
+  precio         Decimal               @default(0) @db.Decimal(10, 2)
+  cupo           Int?
+  ponenteNombre  String                @map("ponente_nombre") @db.VarChar(200)
+  ponenteBio     String?               @map("ponente_bio") @db.Text
+  /// Ruta relativa de la landing (`/images/...`) o URL https
+  ponenteFoto    String?               @map("ponente_foto") @db.VarChar(255)
+  ponenteExterno Boolean               @default(false) @map("ponente_externo")
+  /// Visible e inscribible desde la landing; el staff puede inscribir igual
+  publicada      Boolean               @default(true)
+  orden          Int                   @default(0)
+  creadoEn       DateTime              @default(now()) @map("creado_en")
+  actualizadoEn  DateTime              @updatedAt @map("actualizado_en")
+  evento         Evento                @relation(fields: [eventoId], references: [id], map: "fk_ponencias_especializadas_evento")
+  inscripciones  InscripcionPonencia[]
+
+  @@index([eventoId, fecha, horaInicio], map: "idx_ponencias_especializadas_evento_fecha")
+  @@map("ponencias_especializadas")
+}
+
+/// Persona que asiste a ponencias especializadas, identificada por su documento. Correo y celular son
+/// opcionales (a diferencia de `Participante`).
+model AsistentePonencia {
+  id              Int                   @id @default(autoincrement())
+  tipoDocumentoId String                @map("tipo_documento_id")
+  numeroDocumento String                @map("numero_documento") @db.VarChar(20)
+  nombres         String                @db.VarChar(120)
+  apellidos       String                @db.VarChar(120)
+  correo          String?               @db.VarChar(191)
+  celular         String?               @db.VarChar(20)
+  procedencia     ProcedenciaAsistente?
+  creadoEn        DateTime              @default(now()) @map("creado_en")
+  actualizadoEn   DateTime              @updatedAt @map("actualizado_en")
+  tipoDocumento   TipoDocumento         @relation(fields: [tipoDocumentoId], references: [id], map: "fk_asistentes_ponencia_tipo_documento")
+  inscripciones   InscripcionPonencia[]
+
+  @@unique([tipoDocumentoId, numeroDocumento], map: "uq_asistentes_ponencia_documento")
+  @@map("asistentes_ponencia")
+}
+
+/// Inscripción de un asistente a una ponencia. La asistencia vive en la misma fila (una ponencia es una sola
+/// sesión): `asistioEn` NULL = aún no asistió.
+model InscripcionPonencia {
+  id                Int                        @id @default(autoincrement())
+  ponenciaId        Int                        @map("ponencia_id")
+  asistenteId       Int                        @map("asistente_id")
+  estado            EstadoInscripcionPonencia  @default(INSCRITO)
+  origen            OrigenInscripcionPonencia
+  registradoPorId   Int?                       @map("registrado_por_id")
+  asistioEn         DateTime?                  @map("asistio_en")
+  asistenciaPorId   Int?                       @map("asistencia_por_id")
+  esFueraDeHorario  Boolean                    @default(false) @map("es_fuera_de_horario")
+  canceladoEn       DateTime?                  @map("cancelado_en")
+  motivoCancelacion MotivoCancelacionPonencia? @map("motivo_cancelacion")
+  creadoEn          DateTime                   @default(now()) @map("creado_en")
+  actualizadoEn     DateTime                   @updatedAt @map("actualizado_en")
+  ponencia          PonenciaEspecializada      @relation(fields: [ponenciaId], references: [id], map: "fk_inscripciones_ponencia_ponencia")
+  asistente         AsistentePonencia          @relation(fields: [asistenteId], references: [id], map: "fk_inscripciones_ponencia_asistente")
+  registradoPor     Administrador?             @relation("InscripcionPonenciaRegistradaPor", fields: [registradoPorId], references: [id], onDelete: SetNull, map: "fk_inscripciones_ponencia_registrado_por")
+  asistenciaPor     Administrador?             @relation("InscripcionPonenciaAsistenciaPor", fields: [asistenciaPorId], references: [id], onDelete: SetNull, map: "fk_inscripciones_ponencia_asistencia_por")
+
+  @@unique([ponenciaId, asistenteId], map: "uq_inscripciones_ponencia_asistente")
+  @@index([asistenteId], map: "idx_inscripciones_ponencia_asistente")
+  @@index([registradoPorId], map: "idx_inscripciones_ponencia_registrado_por")
+  @@index([asistenciaPorId], map: "idx_inscripciones_ponencia_asistencia_por")
+  @@map("inscripciones_ponencia")
 }
 
 model MensajeContacto {

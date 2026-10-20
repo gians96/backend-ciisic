@@ -94,6 +94,8 @@ export const limiteFotoPortal = limitador(60 * MINUTO, 10, 'Demasiados cambios d
  */
 export const esCuentaGlobal = (req: Request) => (req as AuthenticatedRequest).actor?.alcance === 'GLOBAL'
 export const limiteMarcarAsistencia = limitador(MINUTO, 120, 'Demasiados registros de asistencia seguidos. Espera un momento.', { clave: 'actor', exenta: esCuentaGlobal })
+/** Asistencia en puerta a ponencias especializadas (inscribe a quien no está): mismo tope que el marcado general. */
+export const limiteCheckInPonencia = limitador(MINUTO, 120, 'Demasiados registros de asistencia seguidos. Espera un momento.', { clave: 'actor', exenta: esCuentaGlobal })
 export const limiteReenvioCredencial = limitador(15 * MINUTO, 20, 'Demasiados reenvíos de credencial. Intenta nuevamente en 15 minutos.', { clave: 'actor' })
 export const limiteRenovacionSesion = limitador(15 * MINUTO, 30, undefined, { clave: 'actor' })
 /** Paso del staff a su portal de participante (`POST /v1/auth/participant/switch`, spec 014). */

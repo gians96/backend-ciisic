@@ -1,0 +1,215 @@
+import { Prisma } from '@prisma/client'
+import type { ModalidadPonencia, PonenciaEspecializada } from '@prisma/client'
+import { prisma } from '../../../database/prisma'
+import { conflict, notFound } from '../../../core/http-error'
+import { aColumnaFecha, fechaSoloDia, horaLima, instanteLima } from '../../../core/fechas'
+import { aNumero } from '../../../core/catalogos'
+import { duracionMinutos } from '../../../core/ponencias-especializadas'
+import { obtenerEventoPorId } from '../../event/services/public-event'
+import type { ActualizarPonenciaInput, CrearPonenciaInput } from '../validation'
+
+export interface Conteo {
+    inscritos: number
+    asistentes: number
+}
+
+const SIN_INSCRITOS: Conteo = { inscritos: 0, asistentes: 0 }
+
+function cuposDisponibles(ponencia: Pick<PonenciaEspecializada, 'cupo'>, inscritos: number): number | null {
+    return ponencia.cupo === null ? null : Math.max(0, ponencia.cupo - inscritos)
+}
+
+function datosBase(ponencia: PonenciaEspecializada) {
+    const precio = aNumero(ponencia.precio) ?? 0
+    return {
+        id: ponencia.id,
+        eventoId: ponencia.eventoId,
+        tema: ponencia.tema,
+        fecha: fechaSoloDia(ponencia.fecha),
+        horaInicio: horaLima(ponencia.horaInicio),
+        horaFin: horaLima(ponencia.horaFin),
+        duracionMin: duracionMinutos(ponencia),
+        ambiente: ponencia.ambiente,
+        modalidad: ponencia.modalidad,
+        precio,
+        esGratuita: precio === 0,
+        cupo: ponencia.cupo,
+        ponente: {
+            nombre: ponencia.ponenteNombre,
+            bio: ponencia.ponenteBio,
+            foto: ponencia.ponenteFoto,
+            externo: ponencia.ponenteExterno,
+        },
+        orden: ponencia.orden,
+    }
+}
+
+/** Respuesta del panel: con inscritos, asistentes y si está publicada. */
+export function aPonencia(ponencia: PonenciaEspecializada, conteo: Conteo = SIN_INSCRITOS) {
+    return {
+        ...datosBase(ponencia),
+        publicada: ponencia.publicada,
+        inscritos: conteo.inscritos,
+        asistentes: conteo.asistentes,
+        cuposDisponibles: cuposDisponibles(ponencia, conteo.inscritos),
+    }
+}
+
+/** Respuesta del sitio: sin datos de inscritos, solo los cupos que quedan. */
+export function aPonenciaPublica(ponencia: PonenciaEspecializada, inscritos: number) {
+    const disponibles = cuposDisponibles(ponencia, inscritos)
+    return { ...datosBase(ponencia), cuposDisponibles: disponibles, llena: disponibles === 0 }
+}
+
+export async function obtenerPonencia(id: number): Promise<PonenciaEspecializada> {
+    const ponencia = await prisma.ponenciaEspecializada.findUnique({ where: { id } })
+    if (!ponencia) throw notFound('TALK_NOT_FOUND', 'La ponencia no existe.')
+    return ponencia
+}
+
+/** Inscritos vigentes y los que ya asistieron, por ponencia del evento (o de las ids dadas). */
+export async function conteosPorPonencia(filtro: { eventoId: number } | { ids: number[] }): Promise<Map<number, Conteo>> {
+    const ponencia = 'eventoId' in filtro ? { eventoId: filtro.eventoId } : { id: { in: filtro.ids } }
+    const base = { ponencia, estado: 'INSCRITO' as const }
+    const [inscritos, asistentes] = await Promise.all([
+        prisma.inscripcionPonencia.groupBy({ by: ['ponenciaId'], where: base, _count: { _all: true } }),
+        prisma.inscripcionPonencia.groupBy({ by: ['ponenciaId'], where: { ...base, asistioEn: { not: null } }, _count: { _all: true } }),
+    ])
+    const conteos = new Map<number, Conteo>()
+    for (const fila of inscritos) conteos.set(fila.ponenciaId, { inscritos: fila._count._all, asistentes: 0 })
+    for (const fila of asistentes) {
+        const actual = conteos.get(fila.ponenciaId) ?? { inscritos: 0, asistentes: 0 }
+        conteos.set(fila.ponenciaId, { ...actual, asistentes: fila._count._all })
+    }
+    return conteos
+}
+
+const ORDEN: Prisma.PonenciaEspecializadaOrderByWithRelationInput[] = [{ fecha: 'asc' }, { horaInicio: 'asc' }, { orden: 'asc' }, { id: 'asc' }]
+
+export async function listarPonencias(eventoId: number, filtros: { fecha?: string, modalidad?: ModalidadPonencia } = {}) {
+    await obtenerEventoPorId(eventoId)
+    const [ponencias, conteos] = await Promise.all([
+        prisma.ponenciaEspecializada.findMany({
+            where: {
+                eventoId,
+                ...(filtros.fecha ? { fecha: aColumnaFecha(filtros.fecha) } : {}),
+                ...(filtros.modalidad ? { modalidad: filtros.modalidad } : {}),
+            },
+            orderBy: ORDEN,
+        }),
+        conteosPorPonencia({ eventoId }),
+    ])
+    return ponencias.map((ponencia) => aPonencia(ponencia, conteos.get(ponencia.id)))
+}
+
+/** Ponencias publicadas del evento del token, con los cupos que quedan. */
+export async function listarPublicas(eventoId: number) {
+    const [ponencias, conteos] = await Promise.all([
+        prisma.ponenciaEspecializada.findMany({ where: { eventoId, publicada: true }, orderBy: ORDEN }),
+        conteosPorPonencia({ eventoId }),
+    ])
+    return ponencias.map((ponencia) => aPonenciaPublica(ponencia, conteos.get(ponencia.id)?.inscritos ?? 0))
+}
+
+/** Dos ponencias presenciales no pueden usar el mismo ambiente a la vez (el nombre se compara sin distinguir mayúsculas). */
+async function exigirAmbienteLibre(eventoId: number, ambiente: string, inicio: Date, fin: Date, excluirId?: number) {
+    const ocupada = await prisma.ponenciaEspecializada.findFirst({
+        where: {
+            eventoId,
+            modalidad: 'PRESENCIAL',
+            ambiente,
+            horaInicio: { lt: fin },
+            horaFin: { gt: inicio },
+            ...(excluirId ? { id: { not: excluirId } } : {}),
+        },
+        select: { tema: true },
+    })
+    if (ocupada) throw conflict('ROOM_CONFLICT', `El ambiente «${ambiente}» ya está ocupado a esa hora por «${ocupada.tema}».`)
+}
+
+export async function crearPonencia(eventoId: number, input: CrearPonenciaInput) {
+    await obtenerEventoPorId(eventoId)
+    const inicio = instanteLima(input.fecha, input.horaInicio)
+    const fin = instanteLima(input.fecha, input.horaFin)
+    if (input.modalidad === 'PRESENCIAL') await exigirAmbienteLibre(eventoId, input.ambiente, inicio, fin)
+    const creada = await prisma.ponenciaEspecializada.create({
+        data: {
+            eventoId,
+            tema: input.tema,
+            fecha: aColumnaFecha(input.fecha),
+            horaInicio: inicio,
+            horaFin: fin,
+            ambiente: input.ambiente,
+            modalidad: input.modalidad as ModalidadPonencia,
+            precio: input.precio,
+            cupo: input.cupo ?? null,
+            ponenteNombre: input.ponente.nombre,
+            ponenteBio: input.ponente.bio ?? null,
+            ponenteFoto: input.ponente.foto ?? null,
+            ponenteExterno: input.ponente.externo ?? false,
+            publicada: input.publicada,
+            orden: input.orden,
+        },
+    })
+    return aPonencia(creada)
+}
+
+export async function actualizarPonencia(id: number, input: ActualizarPonenciaInput) {
+    const actual = await obtenerPonencia(id)
+    const fecha = input.fecha ?? fechaSoloDia(actual.fecha) ?? ''
+    const horaInicio = input.horaInicio ?? horaLima(actual.horaInicio)
+    const horaFin = input.horaFin ?? horaLima(actual.horaFin)
+    if (horaFin <= horaInicio) throw conflict('INVALID_HOURS', 'La hora de fin debe ser posterior a la de inicio.')
+    const inicio = instanteLima(fecha, horaInicio)
+    const fin = instanteLima(fecha, horaFin)
+    const modalidad = (input.modalidad ?? actual.modalidad) as ModalidadPonencia
+    const ambiente = input.ambiente ?? actual.ambiente
+    if (modalidad === 'PRESENCIAL') await exigirAmbienteLibre(actual.eventoId, ambiente, inicio, fin, id)
+
+    if (input.cupo !== undefined && input.cupo !== null) {
+        const inscritos = await prisma.inscripcionPonencia.count({ where: { ponenciaId: id, estado: 'INSCRITO' } })
+        if (input.cupo < inscritos) throw conflict('CAPACITY_BELOW_REGISTERED', `Ya hay ${inscritos} inscritos: el cupo no puede ser menor.`)
+    }
+
+    const { ponente } = input
+    const actualizada = await prisma.ponenciaEspecializada.update({
+        where: { id },
+        data: {
+            ...(input.tema !== undefined ? { tema: input.tema } : {}),
+            fecha: aColumnaFecha(fecha),
+            horaInicio: inicio,
+            horaFin: fin,
+            ...(input.ambiente !== undefined ? { ambiente: input.ambiente } : {}),
+            ...(input.modalidad !== undefined ? { modalidad } : {}),
+            ...(input.precio !== undefined ? { precio: input.precio } : {}),
+            ...(input.cupo !== undefined ? { cupo: input.cupo } : {}),
+            ...(ponente?.nombre !== undefined ? { ponenteNombre: ponente.nombre } : {}),
+            ...(ponente?.bio !== undefined ? { ponenteBio: ponente.bio } : {}),
+            ...(ponente?.foto !== undefined ? { ponenteFoto: ponente.foto } : {}),
+            ...(ponente?.externo !== undefined ? { ponenteExterno: ponente.externo } : {}),
+            ...(input.publicada !== undefined ? { publicada: input.publicada } : {}),
+            ...(input.orden !== undefined ? { orden: input.orden } : {}),
+        },
+    })
+    const conteo = (await conteosPorPonencia({ ids: [id] })).get(id)
+    return aPonencia(actualizada, conteo)
+}
+
+const conInscritos = () => conflict('TALK_HAS_REGISTRATIONS', 'La ponencia tiene inscritos vigentes. Despublícala o cancela sus inscripciones primero.')
+
+/** Solo se borra una ponencia sin inscritos vigentes; las inscripciones canceladas se borran con ella. */
+export async function eliminarPonencia(id: number) {
+    await obtenerPonencia(id)
+    const vigentes = await prisma.inscripcionPonencia.count({ where: { ponenciaId: id, estado: 'INSCRITO' } })
+    if (vigentes) throw conInscritos()
+    try {
+        await prisma.$transaction([
+            prisma.inscripcionPonencia.deleteMany({ where: { ponenciaId: id, estado: 'CANCELADO' } }),
+            prisma.ponenciaEspecializada.delete({ where: { id } }),
+        ])
+    } catch (error) {
+        // Alguien se inscribió entre la comprobación y el borrado: la FK lo impide
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') throw conInscritos()
+        throw error
+    }
+}

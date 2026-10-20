@@ -19,7 +19,8 @@ eventos de la Facultad) con sus inscripciones, credenciales, asistencia, ponenci
 | `inscription` | Inscripciones: creación (sitio y legacy), revisión, credencial PDF, correo, CSV | 002 |
 | `activity` | Actividades y asistencia (hora de Lima) | 002 |
 | `participant` | Participantes (identidad por tipo y número de documento) | 002 |
-| `papers`, `contact` | Ponencias y mensajes de contacto por evento | 002 |
+| `papers`, `contact` | Ponencias (Call for Papers) y mensajes de contacto por evento | 002 |
+| `specialized-talk` | Ponencias especializadas: programa, cupos, inscripción (landing y panel) y asistencia en puerta con el DNI | 018 |
 | `document-lookup` | Consulta DNI con pool de tokens rotativo, caché y bitácora | 003 |
 | `student-verification` | Verificación de estudiantes UNDC contra API_UNDC; token firmado | 004 |
 | `integration` | Integraciones por evento (deportes-fi) y resumen Semana Sistémica | 005 |
@@ -52,6 +53,12 @@ eventos de la Facultad) con sus inscripciones, credenciales, asistencia, ponenci
    inscrito); la landing lo usa opcionalmente para verificar el correo.
 6. **Portal del inscrito**: con sesión de participante ve sus inscripciones y descarga su
    credencial aprobada.
+7. **Ponencias especializadas** (spec 018): el Owner o el Administrador cargan las ponencias (ambiente,
+   horario, cupo, ponente). La landing inscribe a 1–4 ponencias sin cruces de horario
+   (`POST /api/v1/site/specialized-talk-registrations`); el staff con `especializadas.inscribir` inscribe a mano.
+   En puerta, con `especializadas.asistencia`, basta el DNI: si la persona no está inscrita se busca el
+   DNI, se inscribe en el acto (si hay aforo) y se marca su asistencia, liberando el cupo de la ponencia
+   cruzada a la que no fue. Gratuitas por ahora; el cobro está en `specs/018-…/plan-futuro-cobro.md`.
 
 ## Datos históricos
 

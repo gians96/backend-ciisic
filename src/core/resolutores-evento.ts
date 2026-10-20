@@ -49,6 +49,16 @@ export const eventoDeMensaje = resolutor('mensaje', async (req) => {
     return fila?.eventoId ?? null
 })
 
+export const eventoDePonenciaEspecializada = resolutor('ponencia_especializada', async (req) => {
+    const fila = await prisma.ponenciaEspecializada.findUnique({ where: { id: idParam(req.params.id) }, select: { eventoId: true } })
+    return fila?.eventoId ?? null
+})
+
+export const eventoDeInscripcionPonencia = resolutor('inscripcion_ponencia', async (req) => {
+    const fila = await prisma.inscripcionPonencia.findUnique({ where: { id: idParam(req.params.id) }, select: { ponencia: { select: { eventoId: true } } } })
+    return fila?.ponencia.eventoId ?? null
+})
+
 export const eventoDePonencia = resolutor('ponencia', async (req) => {
     const fila = await prisma.ponencia.findUnique({ where: { id: uuidRecepcion(req.params.id) }, select: { eventoId: true } })
     return fila?.eventoId ?? null

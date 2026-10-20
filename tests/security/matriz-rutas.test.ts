@@ -5,10 +5,10 @@ import * as auth from '../../src/middlewares/auth'
 import { requireParticipante, requirePermiso, requireSesion, type GuardaPermiso } from '../../src/middlewares/auth'
 import { requireTokenEvento } from '../../src/middlewares/sitio'
 import { rutaLegacy } from '../../src/middlewares/legacy'
-import { limiteMarcarAsistencia, limiteReenvioCredencial, limiteRenovacionSesion, limiteSwitch } from '../../src/middlewares/rate-limit'
+import { limiteCheckInPonencia, limiteMarcarAsistencia, limiteReenvioCredencial, limiteRenovacionSesion, limiteSwitch } from '../../src/middlewares/rate-limit'
 import { ALCANCE, type Permiso } from '../../src/core/permisos'
 import {
-    eventoDeActividad, eventoDeAsistencia, eventoDeInscripcion, eventoDelParametro, eventoDeMensaje, eventoDePonencia,
+    eventoDeActividad, eventoDeAsistencia, eventoDeInscripcion, eventoDeInscripcionPonencia, eventoDelParametro, eventoDeMensaje, eventoDePonencia, eventoDePonenciaEspecializada,
 } from '../../src/core/resolutores-evento'
 
 /**
@@ -94,6 +94,9 @@ const SITIO: readonly Clave[] = [
     'GET /v1/site/registration-types',
     'POST /v1/site/student-verification',
     'GET /v1/site/config',
+    // Ponencias especializadas (spec 018)
+    'GET /v1/site/specialized-talks',
+    'POST /v1/site/specialized-talk-registrations',
 ]
 
 const PARTICIPANTE: readonly Clave[] = [
@@ -233,6 +236,17 @@ const MATRIZ: Record<Clave, Esperada> = {
     'PUT /v1/registration-types/:id': g('eventos.configurar'),
     'DELETE /v1/registration-types/:id': g('eventos.configurar'),
 
+    // specialized-talk (spec 018)
+    'GET /v1/events/:eventId/specialized-talks': g(['especializadas.ver', 'especializadas.gestionar'], P()),
+    'POST /v1/events/:eventId/specialized-talks': g('especializadas.gestionar'),
+    'PUT /v1/specialized-talks/:id': g('especializadas.gestionar'),
+    'DELETE /v1/specialized-talks/:id': g('especializadas.gestionar'),
+    'GET /v1/events/:eventId/specialized-talk-registrations': g('especializadas.ver', P()),
+    'POST /v1/specialized-talks/:id/registrations': g('especializadas.inscribir', eventoDePonenciaEspecializada),
+    'PATCH /v1/specialized-talk-registrations/:id': g('especializadas.inscribir', eventoDeInscripcionPonencia),
+    'POST /v1/specialized-talks/:id/check-in': g('especializadas.asistencia', eventoDePonenciaEspecializada),
+    'DELETE /v1/specialized-talk-registrations/:id/attendance': g('especializadas.asistencia', eventoDeInscripcionPonencia),
+
     // system-settings
     'GET /v1/settings': g('sistema.configurar'),
     'PUT /v1/settings': g('sistema.configurar'),
@@ -253,9 +267,9 @@ const esGuarda = (h: Handle) => Object.prototype.hasOwnProperty.call(h, 'guarda'
 const esMulter = (h: Handle) => h.name === 'multerMiddleware'
 const esValidacion = (h: Handle) => h.validaCuerpo === true
 /** Limitadores con clave por cuenta: necesitan `req.actor`, que deja la guarda. */
-const LIMITES_POR_ACTOR: readonly RequestHandler[] = [limiteMarcarAsistencia, limiteReenvioCredencial, limiteRenovacionSesion, limiteSwitch]
+const LIMITES_POR_ACTOR: readonly RequestHandler[] = [limiteMarcarAsistencia, limiteCheckInPonencia, limiteReenvioCredencial, limiteRenovacionSesion, limiteSwitch]
 /** Total de rutas de /api: una ruta nueva obliga a clasificarla aquí. */
-const TOTAL_RUTAS = 129
+const TOTAL_RUTAS = 140
 
 function clasesDe(ruta: Ruta): Clase[] {
     const clases: Clase[] = []
@@ -341,6 +355,7 @@ describe('matriz de rutas (spec 013)', () => {
         // Y se usan donde la tabla lo pide
         const con = (h: RequestHandler) => rutas.filter((r) => r.handles.includes(h)).map((r) => r.clave)
         expect(con(limiteMarcarAsistencia)).toEqual(['POST /v1/activities/:id/attendances'])
+        expect(con(limiteCheckInPonencia)).toEqual(['POST /v1/specialized-talks/:id/check-in'])
         expect(con(limiteReenvioCredencial)).toEqual(['POST /v1/inscriptions/:id/resend-credential'])
         expect(con(limiteRenovacionSesion)).toEqual(['POST /v1/auth/refresh'])
         expect(con(limiteSwitch)).toEqual(['POST /v1/auth/participant/switch'])

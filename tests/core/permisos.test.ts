@@ -126,6 +126,33 @@ describe('permisos elegibles de la Comisión', () => {
     })
 })
 
+describe('permisos de las ponencias especializadas (spec 018)', () => {
+    it('solo gestionar es global; ver, inscribir y asistencia son por evento', () => {
+        expect(ALCANCE['especializadas.gestionar']).toBe('G')
+        for (const p of ['especializadas.ver', 'especializadas.inscribir', 'especializadas.asistencia'] as const) expect(ALCANCE[p]).toBe('E')
+    })
+
+    it('inscribir y asistencia implican ver', () => {
+        expect(ordenados(cierre(['especializadas.inscribir']))).toEqual(['especializadas.inscribir', 'especializadas.ver'])
+        expect(ordenados(cierre(['especializadas.asistencia']))).toEqual(['especializadas.asistencia', 'especializadas.ver'])
+    })
+
+    it('el Owner y el Administrador los tienen todos; el Tesorero, ninguno', () => {
+        const todos: Permiso[] = ['especializadas.gestionar', 'especializadas.ver', 'especializadas.inscribir', 'especializadas.asistencia']
+        for (const rol of [ROL.OWNER, ROL.ADMINISTRADOR]) {
+            const efectivos = permisosEfectivos(rol)
+            for (const p of todos) expect({ rol, p, tiene: efectivos.has(p) }).toEqual({ rol, p, tiene: true })
+        }
+        expect(todos.filter((p) => permisosEfectivos(ROL.TESORERO).has(p))).toEqual([])
+    })
+
+    it('la Comisión puede recibir ver, inscribir y asistencia, pero nunca gestionar', () => {
+        for (const p of ['especializadas.ver', 'especializadas.inscribir', 'especializadas.asistencia'] as const) expect(PERMISOS_ELEGIBLES_COMISION).toContain(p)
+        expect(PERMISOS_ELEGIBLES_COMISION).not.toContain('especializadas.gestionar')
+        expect(ordenados(permisosEfectivos(ROL.COMISION, ['especializadas.asistencia', 'especializadas.gestionar']))).toEqual(['especializadas.asistencia', 'especializadas.ver'])
+    })
+})
+
 describe('roles: alcance y delegación', () => {
     it('Owner y Administrador son globales; Tesorero y Comisión, por evento', () => {
         expect(ROLES.map((rol) => [rol, alcanceDeRol(rol)])).toEqual([

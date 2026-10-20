@@ -15,7 +15,9 @@
     "bootstrap:admin": "node ./dist/src/database/bootstrapAdmin.js",
     "bootstrap:admin:dev": "ts-node ./src/database/bootstrapAdmin.ts",
     "credenciales:pregenerar": "node ./dist/src/database/pregenerarCredenciales.js",
-    "credenciales:pregenerar:dev": "ts-node ./src/database/pregenerarCredenciales.ts"
+    "credenciales:pregenerar:dev": "ts-node ./src/database/pregenerarCredenciales.ts",
+    "seed:ponencias-especializadas": "node ./dist/src/database/seedPonenciasEspecializadas.js",
+    "seed:ponencias-especializadas:dev": "ts-node ./src/database/seedPonenciasEspecializadas.ts"
   },
   "keywords": [],
   "author": "",
