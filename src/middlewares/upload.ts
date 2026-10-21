@@ -24,17 +24,29 @@ const storage = multer.diskStorage({
 const allowedMimeTypes = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp'])
 const allowedExtensions = new Set(['.pdf', '.jpg', '.jpeg', '.png', '.webp'])
 
+const fileFilter: multer.Options['fileFilter'] = (_req, file, cb) => {
+    const extension = path.extname(file.originalname).toLowerCase()
+    if (!allowedMimeTypes.has(file.mimetype) || !allowedExtensions.has(extension)) {
+        cb(new HttpError(422, 'INVALID_FILE_TYPE', 'Archivo no permitido. Use PDF, JPEG, PNG o WebP.'))
+        return
+    }
+    cb(null, true)
+}
+
 export const upload = multer({
     storage,
     limits: { fileSize: MAX_BYTES_VOUCHER, files: 1 },
-    fileFilter: (_req, file, cb) => {
-        const extension = path.extname(file.originalname).toLowerCase()
-        if (!allowedMimeTypes.has(file.mimetype) || !allowedExtensions.has(extension)) {
-            cb(new HttpError(422, 'INVALID_FILE_TYPE', 'Archivo no permitido. Use PDF, JPEG, PNG o WebP.'))
-            return
-        }
-        cb(null, true)
-    },
+    fileFilter,
+})
+
+/** Máximo de vouchers en una sola petición de una delegación (spec 023). */
+export const MAX_VOUCHERS_POR_ENVIO = 6
+
+/** Varios vouchers (campo `vouchers`): una delegación puede pagar en varias partes (spec 023). */
+export const uploadVarios = multer({
+    storage,
+    limits: { fileSize: MAX_BYTES_VOUCHER, files: MAX_VOUCHERS_POR_ENVIO },
+    fileFilter,
 })
 
 export function removeUploadedFile(file?: { path?: string }): void {
@@ -54,10 +66,10 @@ export function mimeDeArchivo(filename: string): string {
     return MIME_POR_EXTENSION[path.extname(filename).toLowerCase()] || 'application/octet-stream'
 }
 
-export function validateUploadedFileContent(req: Request, res: Response, next: NextFunction): void {
-    if (!req.file) return next()
+/** Si los primeros bytes del archivo guardado corresponden a su tipo declarado. */
+function firmaValida(file: { path: string, mimetype: string }): boolean {
     const bytes = Buffer.alloc(12)
-    const descriptor = fs.openSync(req.file.path, 'r')
+    const descriptor = fs.openSync(file.path, 'r')
     const length = fs.readSync(descriptor, bytes, 0, bytes.length, 0)
     fs.closeSync(descriptor)
     const header = bytes.subarray(0, length)
@@ -67,10 +79,33 @@ export function validateUploadedFileContent(req: Request, res: Response, next: N
         'image/png': header.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
         'image/webp': header.subarray(0, 4).toString() === 'RIFF' && header.subarray(8, 12).toString() === 'WEBP',
     }
-    if (!signatures[req.file.mimetype]) {
+    return Boolean(signatures[file.mimetype])
+}
+
+export function validateUploadedFileContent(req: Request, res: Response, next: NextFunction): void {
+    if (!req.file) return next()
+    if (!firmaValida(req.file)) {
         removeUploadedFile(req.file)
         res.status(422).json({ success: false, code: 'INVALID_FILE_CONTENT', message: 'El contenido del archivo no coincide con su formato' })
         return
     }
     next()
+}
+
+/** Archivos que dejó `uploadVarios` en `req.files` (vacío si no hubo). */
+export function archivosSubidos(req: Request): Express.Multer.File[] {
+    return Array.isArray(req.files) ? req.files : []
+}
+
+/** Borra del disco todos los archivos de `req.files` (cuando la petición falla). */
+export function removeUploadedFiles(req: Request): void {
+    for (const file of archivosSubidos(req)) removeUploadedFile(file)
+}
+
+/** Igual que `validateUploadedFileContent` para varios archivos: si uno no coincide, se borran todos. */
+export function validateUploadedFilesContent(req: Request, res: Response, next: NextFunction): void {
+    const archivos = archivosSubidos(req)
+    if (archivos.every(firmaValida)) return next()
+    removeUploadedFiles(req)
+    res.status(422).json({ success: false, code: 'INVALID_FILE_CONTENT', message: 'El contenido del archivo no coincide con su formato' })
 }

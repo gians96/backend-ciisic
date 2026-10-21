@@ -1,7 +1,8 @@
 -- ============================================================================
 -- Delegaciones · inscripción por grupos o instituciones
 -- 1) `delegaciones`: grupo de un evento con su link público (`codigo_link`) y su tarifa por persona
---    (estándar y promocional a partir de `min_integrantes`).
+--    (estándar y promocional a partir de `min_integrantes`), su modalidad (presencial o virtual) y los
+--    datos del delegado (spec 023).
 -- 2) `inscripciones.delegacion_id`: la inscripción puede pertenecer a una delegación. Es NULL en las
 --    inscripciones individuales y al borrar la delegación (SET NULL): la inscripción se conserva.
 -- Todo es aditivo: la imagen anterior sigue funcionando con este esquema (no lee las columnas y sus
@@ -20,6 +21,9 @@ CREATE TABLE `delegaciones` (
     `representante_nombre` VARCHAR(191) NULL,
     `representante_email` VARCHAR(191) NULL,
     `representante_telefono` VARCHAR(191) NULL,
+    `representante_tipo_documento` VARCHAR(10) NULL,
+    `representante_documento` VARCHAR(20) NULL,
+    `modalidad` ENUM('PRESENCIAL', 'VIRTUAL') NOT NULL DEFAULT 'PRESENCIAL',
     `min_integrantes` INTEGER NOT NULL DEFAULT 10,
     `precio_estandar` DECIMAL(10, 2) NOT NULL DEFAULT 60.00,
     `precio_promocional` DECIMAL(10, 2) NOT NULL DEFAULT 50.00,

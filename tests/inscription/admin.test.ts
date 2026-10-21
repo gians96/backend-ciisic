@@ -136,13 +136,12 @@ describe('lista, detalle y CSV según «pagos.ver»', () => {
         expect(r.body.code).toBe('FORBIDDEN')
     })
 
-    it('las inscripciones de una delegación traen su grupo y su pago conjunto (spec 022)', async () => {
+    it('las inscripciones de una delegación traen su grupo y el resumen de sus pagos (specs 022 y 023)', async () => {
         const enGrupo = inscripcion({
             delegacion: {
-                id: 8, nombre: 'Ing. de Sistemas UNDC', codigoLink: 'abc123def456',
-                modalidadPago: 'billetera', banco: null, billeteraDigital: 'yape', tipoOperacion: null,
-                numeroOperacion: 'OP-GRUPO', fechaPago: new Date('2026-09-19T00:00:00Z'),
-                montoTotalPagado: new Prisma.Decimal(300), voucherArchivo: 'voucher-8.png',
+                id: 8, nombre: 'Ing. de Sistemas UNDC', codigoLink: 'abc123def456', modalidad: 'PRESENCIAL',
+                minIntegrantes: 10, precioEstandar: new Prisma.Decimal(60), precioPromocional: new Prisma.Decimal(50),
+                pagos: [{ monto: new Prisma.Decimal(100), estado: 'PENDIENTE' }, { monto: new Prisma.Decimal(80), estado: 'RECHAZADO' }],
                 _count: { inscripciones: 5 },
             },
         })
@@ -158,21 +157,18 @@ describe('lista, detalle y CSV según «pagos.ver»', () => {
         const detalle = await request(app).get('/api/v1/inscriptions/5').set(con(tesorero()))
         expect(detalle.status).toBe(200)
         expect(detalle.body.data.delegacion).toMatchObject({
-            id: 8, nombre: 'Ing. de Sistemas UNDC', codigoLink: 'abc123def456', totalIntegrantes: 5,
-            pago: {
-                modalidad: 'billetera', billeteraDigital: 'yape', numeroOperacion: 'OP-GRUPO',
-                fechaPago: '2026-09-19', montoTotalPagado: 300, tieneVoucher: true,
-            },
+            id: 8, nombre: 'Ing. de Sistemas UNDC', codigoLink: 'abc123def456', modalidad: 'PRESENCIAL', totalIntegrantes: 5,
+            // 5 integrantes a S/ 60 = 300; el voucher rechazado no cuenta como declarado
+            pago: { totalAPagar: 300, declarado: 100, verificado: 0, saldo: 200, cantidad: 2 },
         })
     })
 
     it('sin «pagos.ver» el bloque de la delegación lleva el pago en null (spec 022)', async () => {
         m.inscripcion.findUnique.mockResolvedValue(inscripcion({
             delegacion: {
-                id: 8, nombre: 'Ing. de Sistemas UNDC', codigoLink: 'abc123def456',
-                modalidadPago: 'billetera', banco: null, billeteraDigital: 'yape', tipoOperacion: null,
-                numeroOperacion: 'OP-GRUPO', fechaPago: new Date('2026-09-19T00:00:00Z'),
-                montoTotalPagado: new Prisma.Decimal(300), voucherArchivo: 'voucher-8.png',
+                id: 8, nombre: 'Ing. de Sistemas UNDC', codigoLink: 'abc123def456', modalidad: 'PRESENCIAL',
+                minIntegrantes: 10, precioEstandar: new Prisma.Decimal(60), precioPromocional: new Prisma.Decimal(50),
+                pagos: [{ monto: new Prisma.Decimal(100), estado: 'PENDIENTE' }, { monto: new Prisma.Decimal(80), estado: 'RECHAZADO' }],
                 _count: { inscripciones: 5 },
             },
         }))

@@ -1,96 +1,83 @@
 import crypto from 'crypto'
-import fs from 'fs'
 import { Prisma } from '@prisma/client'
 import type { Delegacion, Evento, Participante } from '@prisma/client'
 import { prisma } from '../../../database/prisma'
 import { conflict, HttpError, notFound, unprocessable } from '../../../core/http-error'
 import { monto, type CodigoEstadoInscripcion } from '../../../core/catalogos'
-import { aColumnaFecha, fechaLima, fechaSoloDia } from '../../../core/fechas'
+import { aColumnaFecha, fechaLima } from '../../../core/fechas'
 import { conReintentoDeCodigo, nuevoCodigoCredencial } from '../../../core/codigos'
-import { uploadedFilePath } from '../../../middlewares/upload'
 import { esCorreoInstitucional } from '../../inscription/services/pricing'
+import { aprobarVarias } from '../../inscription/services/inscription'
 import { obtenerEventoPorId, inscripcionesAbiertas } from '../../event/services/public-event'
-import type { CrearDelegacionInput, InscribirEnDelegacionInput, ParticipanteDelegacionInput, RegistroDelegacionInput } from '../validation'
+import type {
+    CrearDelegacionInput, EditarDelegacionInput, InscribirEnDelegacionInput, ParticipanteDelegacionInput, RegistroDelegacionInput,
+} from '../validation'
 import { registroDelegacionSchema } from '../validation'
+import {
+    aPago, aPagoPublico, errorDeOperacionDuplicada, exigirOperacionesLibres, insertarPagos, numeroOperacionInterno, resumenPagos,
+} from './pagos'
+import {
+    faltanParaPromocional, precioUnitario, redondear, tarifaParaModalidad, tipoParaGrupo, tiposDeDelegacion,
+    type TarifaCopiada, type TiposDeDelegacion,
+} from './tarifa'
 
-const redondear = (valor: number) => Math.round(valor * 100) / 100
+export { precioUnitario, tiposDeDelegacion } from './tarifa'
+export { CATEGORIA_DELEGACIONES, CODIGO_TIPO_GENERAL, CODIGO_TIPO_PROMOCIONAL, CODIGO_TIPO_VIRTUAL } from './tarifa'
+
 const ESTADOS_REINSCRIBIBLES: readonly CodigoEstadoInscripcion[] = ['RECHAZADO', 'CANCELADO']
+/** Estados que no cuentan como integrante: el cupo y la tarifa se calculan con el resto. */
+const ESTADOS_SIN_CUPO: CodigoEstadoInscripcion[] = ['RECHAZADO', 'CANCELADO']
+/** Estados de un integrante que el staff puede quitar del grupo (ya aprobado tiene credencial y asistencia). */
+const ESTADOS_QUITABLES: readonly CodigoEstadoInscripcion[] = ['PENDIENTE', 'EN_REVISION', 'RECHAZADO', 'CANCELADO']
+const CUENTAN_COMO_INTEGRANTE = { estado: { codigo: { notIn: ESTADOS_SIN_CUPO } } } as const
 
-/** Tarifa por persona: la promocional en cuanto la delegación alcanza el mínimo de integrantes. */
-export function precioUnitario(precioEstandar: number, precioPromocional: number, minIntegrantes: number, totalIntegrantes: number): number {
-    return totalIntegrantes >= minIntegrantes ? precioPromocional : precioEstandar
-}
-
-/** Códigos de contrato de los tipos de delegación (spec 022) y su categoría. */
-export const CATEGORIA_DELEGACIONES = 'DELEGACIONES'
-export const CODIGO_TIPO_GENERAL = 'delegacion_general'
-export const CODIGO_TIPO_PROMOCIONAL = 'delegacion_grupal'
-
-/** El tipo de delegación que puede traer una delegación (lo selecciona la landing). */
+/** El tipo que lleva una delegación (lo recalcula el servidor con la modalidad y el tamaño del grupo). */
 export interface TipoDelegacionResumido {
     id: number
     codigo: string
     nombre: string
     etiqueta: string | null
+    modalidad?: string
 }
+
+const TIPO_RESUMIDO = { select: { id: true, codigo: true, nombre: true, etiqueta: true, modalidad: true } } as const
 
 /** Delegación con su tipo ya cargado (las consultas lo incluyen con `select`). */
 export type DelegacionConTipo = Delegacion & { tipoInscripcion?: TipoDelegacionResumido | null }
 
-/**
- * Tipos activos de la categoría `DELEGACIONES` de un evento. Los códigos `delegacion_general`
- * (precio estándar) y `delegacion_grupal` (precio promocional) son contrato (spec 022).
- */
-export async function tiposDeDelegacion(eventoId: number) {
-    const categoria = await prisma.categoriaInscripcion.findUnique({
-        where: { eventoId_codigo: { eventoId, codigo: CATEGORIA_DELEGACIONES } },
-        include: { tipos: { where: { activo: true }, orderBy: [{ orden: 'asc' }, { id: 'asc' }] } },
-    })
-    const tipos = categoria?.tipos ?? []
-    return {
-        general: tipos.find((tipo) => tipo.codigo === CODIGO_TIPO_GENERAL) ?? null,
-        promocional: tipos.find((tipo) => tipo.codigo === CODIGO_TIPO_PROMOCIONAL) ?? null,
-    }
-}
+// ─── Forma pública y del panel ──────────────────────────────────────────────
 
-/**
- * Valida el tipo elegido en la tarjeta: debe ser un tipo activo del evento y de la categoría
- * `DELEGACIONES`; si no, `422 REGISTRATION_TYPE_NOT_AVAILABLE` (como en la inscripción individual).
- */
-async function tipoDelegacionValido(eventoId: number, tipoInscripcionId: number | null | undefined): Promise<TipoDelegacionResumido | null> {
-    if (tipoInscripcionId === null || tipoInscripcionId === undefined) return null
-    const tipo = await prisma.tipoInscripcion.findFirst({
-        where: { id: tipoInscripcionId, activo: true, categoria: { eventoId, codigo: CATEGORIA_DELEGACIONES } },
-        select: { id: true, codigo: true, nombre: true, etiqueta: true },
-    })
-    if (!tipo) throw unprocessable('REGISTRATION_TYPE_NOT_AVAILABLE', 'El tipo de delegación no está disponible para este evento.')
-    return tipo
-}
-
-/** Forma pública de una delegación (el detalle agrega su lista de inscripciones). */
-export function aDelegacion(delegacion: DelegacionConTipo, totalIntegrantes: number, montoTotal?: number) {
+/** Forma de una delegación (el detalle agrega integrantes y pagos). `total` cuenta solo integrantes activos. */
+export function aDelegacion(delegacion: DelegacionConTipo, totalIntegrantes: number, pagos: ReadonlyArray<{ monto: Prisma.Decimal | number, estado: string }> = []) {
     const estandar = monto(delegacion.precioEstandar)
     const promocional = monto(delegacion.precioPromocional)
     const unitario = precioUnitario(estandar, promocional, delegacion.minIntegrantes, totalIntegrantes)
+    const montoTotal = redondear(unitario * totalIntegrantes)
     return {
         id: delegacion.id,
         eventoId: delegacion.eventoId,
         nombre: delegacion.nombre,
         codigoLink: delegacion.codigoLink,
         institucion: delegacion.institucion,
+        modalidad: delegacion.modalidad,
         representante: {
             nombre: delegacion.representanteNombre,
             email: delegacion.representanteEmail,
             telefono: delegacion.representanteTelefono,
+            tipoDocumento: delegacion.representanteTipoDocumento,
+            documento: delegacion.representanteDocumento,
         },
         minIntegrantes: delegacion.minIntegrantes,
         precioEstandar: estandar,
         precioPromocional: promocional,
         precioUnitario: unitario,
         totalIntegrantes,
-        montoTotal: montoTotal ?? redondear(unitario * totalIntegrantes),
-        /** Tipo elegido al registrar (spec 022): Delegación General / Promocional. */
+        montoTotal,
+        /** Cuántos faltan para la tarifa promocional (`null` si ya aplica o es virtual, que no tiene escala). */
+        faltanParaPromocional: faltanParaPromocional(estandar, promocional, delegacion.minIntegrantes, totalIntegrantes),
+        /** Tipo vigente del grupo: Delegación General, Promocional o Virtual. */
         tipoInscripcion: delegacion.tipoInscripcion ?? null,
+        pago: resumenPagos(montoTotal, pagos),
         activo: delegacion.activo,
         creadoEn: delegacion.creadoEn,
         actualizadoEn: delegacion.actualizadoEn,
@@ -107,23 +94,79 @@ async function codigoLinkUnico(): Promise<string> {
     throw new Error('No se pudo generar un código único para el link de la delegación')
 }
 
+type RepresentanteInput = CrearDelegacionInput['representante']
+
+/** Datos de contacto del delegado tal como se guardan en la delegación. */
+function datosDelRepresentante(representante: Pick<RepresentanteInput, 'nombres' | 'apellidos' | 'tipoDocumento' | 'numeroDocumento' | 'correo' | 'celular'>) {
+    return {
+        representanteNombre: `${representante.nombres} ${representante.apellidos}`.trim(),
+        representanteEmail: representante.correo,
+        representanteTelefono: representante.celular,
+        representanteTipoDocumento: representante.tipoDocumento,
+        representanteDocumento: representante.numeroDocumento,
+    }
+}
+
+/** El delegado como integrante: mismos datos que la lista de participantes. */
+function representanteComoParticipante(representante: RepresentanteInput): ParticipanteDelegacionInput {
+    return {
+        tipoDocumento: representante.tipoDocumento,
+        numeroDocumento: representante.numeroDocumento,
+        nombres: representante.nombres,
+        apellidos: representante.apellidos,
+        correo: representante.correo,
+        celular: representante.celular,
+    }
+}
+
+/** La tarifa de la modalidad o `422` si el evento no la ofrece (p. ej. virtual sin su tipo). */
+async function tarifaDe(evento: Evento, modalidad: 'PRESENCIAL' | 'VIRTUAL'): Promise<TarifaCopiada> {
+    const tarifa = tarifaParaModalidad(evento, await tiposDeDelegacion(evento.id), modalidad)
+    if (!tarifa) throw unprocessable('DELEGATION_MODALITY_NOT_AVAILABLE', 'La modalidad virtual no está disponible para este evento.')
+    return tarifa
+}
+
+/** Identificador y evento de una delegación (para sumarle vouchers desde el panel). */
+export async function delegacionBasica(id: number) {
+    const delegacion = await prisma.delegacion.findUnique({ where: { id }, select: { id: true, eventoId: true } })
+    if (!delegacion) throw notFound('DELEGATION_NOT_FOUND', `Delegación con id ${id} no encontrada`)
+    return delegacion
+}
+
+// ─── Staff: alta, listado, detalle y edición ────────────────────────────────
+
+/**
+ * Alta de una delegación por el staff (spec 023): el delegado, la modalidad y, si ya los tiene, sus
+ * integrantes. Sin cifras en el cuerpo, la tarifa sale de los tipos del evento.
+ */
 export async function crearDelegacion(eventoId: number, input: CrearDelegacionInput) {
-    await obtenerEventoPorId(eventoId)
-    const delegacion = await prisma.delegacion.create({
+    const evento = await obtenerEventoPorId(eventoId)
+    const tarifa = await tarifaDe(evento, input.modalidad as 'PRESENCIAL' | 'VIRTUAL')
+    const nueva = await prisma.delegacion.create({
         data: {
             eventoId,
             nombre: input.nombre,
             codigoLink: await codigoLinkUnico(),
             institucion: input.institucion ?? null,
-            representanteNombre: input.representanteNombre ?? null,
-            representanteEmail: input.representanteEmail ?? null,
-            representanteTelefono: input.representanteTelefono ?? null,
-            minIntegrantes: input.minIntegrantes ?? 10,
-            precioEstandar: input.precioEstandar ?? 60,
-            precioPromocional: input.precioPromocional ?? 50,
+            modalidad: input.modalidad as 'PRESENCIAL' | 'VIRTUAL',
+            ...datosDelRepresentante(input.representante),
+            minIntegrantes: input.minIntegrantes ?? tarifa.minIntegrantes,
+            precioEstandar: input.precioEstandar ?? tarifa.precioEstandar,
+            precioPromocional: input.precioPromocional ?? tarifa.precioPromocional,
         },
     })
-    return aDelegacion(delegacion, 0, 0)
+    const integrantes = [
+        ...(input.representante.esIntegrante ? [representanteComoParticipante(input.representante)] : []),
+        ...(input.participantes ?? []),
+    ]
+    if (!integrantes.length) return obtenerDelegacion(nueva.id)
+    try {
+        return await inscribirParticipantes(nueva.id, { participantes: integrantes })
+    } catch (error) {
+        // Sin integrantes la delegación quedaría vacía por un dato mal escrito: se borra para repetir el alta
+        await prisma.delegacion.delete({ where: { id: nueva.id } }).catch(() => undefined)
+        throw error
+    }
 }
 
 export async function listarDelegaciones(eventoId: number) {
@@ -131,19 +174,21 @@ export async function listarDelegaciones(eventoId: number) {
     const filas = await prisma.delegacion.findMany({
         where: { eventoId },
         include: {
-            _count: { select: { inscripciones: true } },
-            tipoInscripcion: { select: { id: true, codigo: true, nombre: true, etiqueta: true } },
+            tipoInscripcion: TIPO_RESUMIDO,
+            pagos: { select: { monto: true, estado: true } },
+            _count: { select: { inscripciones: { where: CUENTAN_COMO_INTEGRANTE } } },
         },
         orderBy: { creadoEn: 'desc' },
     })
-    return filas.map((delegacion) => aDelegacion(delegacion, delegacion._count.inscripciones))
+    return filas.map((delegacion) => aDelegacion(delegacion, delegacion._count.inscripciones, delegacion.pagos))
 }
 
 export async function obtenerDelegacion(id: number) {
     const delegacion = await prisma.delegacion.findUnique({
         where: { id },
         include: {
-            tipoInscripcion: { select: { id: true, codigo: true, nombre: true, etiqueta: true } },
+            tipoInscripcion: TIPO_RESUMIDO,
+            pagos: { orderBy: { id: 'asc' } },
             inscripciones: {
                 include: { participante: true, estado: true },
                 orderBy: { creadoEn: 'asc' },
@@ -151,21 +196,10 @@ export async function obtenerDelegacion(id: number) {
         },
     })
     if (!delegacion) throw notFound('DELEGATION_NOT_FOUND', `Delegación con id ${id} no encontrada`)
-    const total = delegacion.inscripciones.length
-    const montoTotal = redondear(delegacion.inscripciones.reduce((suma, inscripcion) => suma + monto(inscripcion.monto), 0))
+    const total = delegacion.inscripciones.filter((inscripcion) => !ESTADOS_SIN_CUPO.includes(inscripcion.estado.codigo as CodigoEstadoInscripcion)).length
     return {
-        ...aDelegacion(delegacion, total, montoTotal),
-        /** Pago conjunto del grupo: un solo voucher y un solo número de operación. */
-        pago: {
-            modalidad: delegacion.modalidadPago,
-            banco: delegacion.banco,
-            billeteraDigital: delegacion.billeteraDigital,
-            tipoOperacion: delegacion.tipoOperacion,
-            numeroOperacion: delegacion.numeroOperacion,
-            fechaPago: delegacion.fechaPago ? fechaSoloDia(delegacion.fechaPago) : null,
-            montoTotalPagado: monto(delegacion.montoTotalPagado),
-            tieneVoucher: Boolean(delegacion.voucherArchivo),
-        },
+        ...aDelegacion(delegacion, total, delegacion.pagos),
+        pagos: delegacion.pagos.map(aPago),
         inscripciones: delegacion.inscripciones.map((inscripcion) => ({
             id: inscripcion.id,
             participante: {
@@ -184,47 +218,40 @@ export async function obtenerDelegacion(id: number) {
     }
 }
 
-/**
- * Datos que ve el formulario público del link. No expone el correo ni el teléfono del representante:
- * el link se comparte y solo hace falta el nombre de la delegación y su institución.
- *
- * `eventoId` acota la búsqueda: el link solo sirve dentro del evento del token de acceso.
- */
-export async function delegacionPorCodigo(codigoLink: string, eventoId: number) {
-    const delegacion = await prisma.delegacion.findUnique({
-        where: { codigoLink },
-        include: {
-            tipoInscripcion: { select: { id: true, codigo: true, nombre: true, etiqueta: true } },
-            evento: {
-                select: {
-                    id: true, codigo: true, nombre: true, nombreCorto: true, fechaInicio: true, fechaFin: true,
-                    inscripcionesAbiertas: true, estado: true,
-                },
-            },
-            _count: { select: { inscripciones: true } },
+/** Edita los datos de la delegación. La modalidad solo cambia mientras el grupo no tenga integrantes. */
+export async function actualizarDelegacion(id: number, input: EditarDelegacionInput) {
+    const actual = await prisma.delegacion.findUnique({ where: { id }, include: { evento: true } })
+    if (!actual) throw notFound('DELEGATION_NOT_FOUND', `Delegación con id ${id} no encontrada`)
+
+    const cambiaModalidad = input.modalidad !== undefined && input.modalidad !== actual.modalidad
+    let tarifa: TarifaCopiada | null = null
+    if (cambiaModalidad) {
+        const integrantes = await prisma.inscripcion.count({ where: { delegacionId: id, ...CUENTAN_COMO_INTEGRANTE } })
+        if (integrantes > 0) throw conflict('DELEGATION_MODALITY_LOCKED', 'La modalidad no se puede cambiar cuando el grupo ya tiene integrantes.')
+        tarifa = await tarifaDe(actual.evento, input.modalidad as 'PRESENCIAL' | 'VIRTUAL')
+    }
+
+    await prisma.delegacion.update({
+        where: { id },
+        data: {
+            ...(input.nombre !== undefined ? { nombre: input.nombre } : {}),
+            ...(input.institucion !== undefined ? { institucion: input.institucion ?? null } : {}),
+            ...(input.activo !== undefined ? { activo: input.activo } : {}),
+            ...(input.representante ? datosDelRepresentante(input.representante) : {}),
+            ...(tarifa ? { modalidad: input.modalidad as 'PRESENCIAL' | 'VIRTUAL', ...tarifa } : {}),
+            ...(input.minIntegrantes !== undefined ? { minIntegrantes: input.minIntegrantes } : {}),
+            ...(input.precioEstandar !== undefined ? { precioEstandar: input.precioEstandar } : {}),
+            ...(input.precioPromocional !== undefined ? { precioPromocional: input.precioPromocional } : {}),
         },
     })
-    if (!delegacion || !delegacion.activo) throw notFound('DELEGATION_NOT_FOUND', 'La delegación no existe o no está activa.')
-    if (delegacion.eventoId !== eventoId) throw notFound('DELEGATION_NOT_FOUND', 'La delegación no existe o no está activa.')
-    const estandar = monto(delegacion.precioEstandar)
-    const promocional = monto(delegacion.precioPromocional)
-    const total = delegacion._count.inscripciones
-    return {
-        id: delegacion.id,
-        nombre: delegacion.nombre,
-        codigoLink: delegacion.codigoLink,
-        institucion: delegacion.institucion,
-        representanteNombre: delegacion.representanteNombre,
-        evento: delegacion.evento,
-        minIntegrantes: delegacion.minIntegrantes,
-        precioEstandar: estandar,
-        precioPromocional: promocional,
-        precioUnitario: precioUnitario(estandar, promocional, delegacion.minIntegrantes, total),
-        totalIntegrantes: total,
-        /** Tipo elegido por esa delegación (spec 022): la landing precarga su tarjeta. */
-        tipoInscripcion: delegacion.tipoInscripcion ?? null,
+    // Un cambio de tarifa o de mínimo reprecia a todo el grupo
+    if (input.minIntegrantes !== undefined || input.precioEstandar !== undefined || input.precioPromocional !== undefined) {
+        await prisma.$transaction((tx) => recalcularGrupo(tx, id))
     }
+    return obtenerDelegacion(id)
 }
+
+// ─── Integrantes ────────────────────────────────────────────────────────────
 
 interface InscripcionExistente {
     id: number
@@ -251,7 +278,7 @@ const documento = (participante: Pick<ParticipanteDelegacionInput, 'tipoDocument
  * El correo de un participante que ya existe no se cambia: se conserva el registrado, igual que en
  * la inscripción pública. El staff lo cambia desde Participantes (`PUT /v1/participants/:id`).
  */
-async function prepararFilas(delegacion: Delegacion, participantes: ParticipanteDelegacionInput[]): Promise<FilaPreparada[]> {
+async function prepararFilas(delegacion: Pick<Delegacion, 'id' | 'eventoId'>, participantes: ParticipanteDelegacionInput[]): Promise<FilaPreparada[]> {
     const vistosDocumento = new Set<string>()
     const vistosCorreo = new Set<string>()
     participantes.forEach((participante, indice) => {
@@ -311,44 +338,60 @@ async function prepararFilas(delegacion: Delegacion, participantes: Participante
 }
 
 /**
- * `POST /v1/delegations/:id/inscriptions`: alta manual o masiva de integrantes. Calcula la tarifa con
- * el total final de la delegación y la aplica a todas sus inscripciones (también a las anteriores:
- * al cruzar el mínimo, todos pagan la promocional). Todo ocurre en una transacción con la delegación
- * bloqueada, para que dos cargas simultáneas no calculen totales distintos.
+ * Recalcula el grupo: con los integrantes activos, la tarifa por persona y el tipo vigente se
+ * aplican a **todos** (al cruzar el mínimo, todos pasan a la promocional). Debe correr dentro de una
+ * transacción con la delegación bloqueada.
  */
-export async function inscribirParticipantes(delegacionId: number, input: InscribirEnDelegacionInput) {
+async function recalcularGrupo(tx: Prisma.TransactionClient, delegacionId: number, tipos?: TiposDeDelegacion) {
+    const delegacion = await tx.delegacion.findUnique({
+        where: { id: delegacionId },
+        select: { id: true, eventoId: true, modalidad: true, minIntegrantes: true, precioEstandar: true, precioPromocional: true },
+    })
+    if (!delegacion) throw notFound('DELEGATION_NOT_FOUND', `Delegación con id ${delegacionId} no encontrada`)
+    const total = await tx.inscripcion.count({ where: { delegacionId, eventoId: delegacion.eventoId, ...CUENTAN_COMO_INTEGRANTE } })
+    const estandar = monto(delegacion.precioEstandar)
+    const unitario = precioUnitario(estandar, monto(delegacion.precioPromocional), delegacion.minIntegrantes, total)
+    const descuento = unitario < estandar ? redondear(estandar - unitario) : 0
+    const tipo = tipoParaGrupo(tipos ?? await tiposDeDelegacion(delegacion.eventoId, tx), delegacion, total)
+    await tx.inscripcion.updateMany({
+        where: { delegacionId, eventoId: delegacion.eventoId, ...CUENTAN_COMO_INTEGRANTE },
+        data: { monto: unitario, descuento, tieneDescuento: descuento > 0, ...(tipo ? { tipoInscripcionId: tipo.id } : {}) },
+    })
+    await tx.delegacion.update({ where: { id: delegacionId }, data: { tipoInscripcionId: tipo?.id ?? null } })
+    return { total, unitario, descuento, tipo }
+}
+
+/**
+ * Suma integrantes a una delegación (staff, link o registro público). Calcula la tarifa y el tipo con
+ * el total final y los aplica a todo el grupo. Todo ocurre en una transacción con la delegación
+ * bloqueada, para que dos cargas simultáneas no calculen totales distintos. `adicional` corre en la
+ * misma transacción (el registro público guarda aquí sus vouchers).
+ */
+async function agregarIntegrantes(
+    delegacionId: number,
+    participantes: ParticipanteDelegacionInput[],
+    adicional?: (tx: Prisma.TransactionClient, delegacion: Delegacion & { evento: Evento }) => Promise<void>,
+) {
     const delegacion = await prisma.delegacion.findUnique({ where: { id: delegacionId }, include: { evento: true } })
     if (!delegacion) throw notFound('DELEGATION_NOT_FOUND', `Delegación con id ${delegacionId} no encontrada`)
     if (!delegacion.activo) throw conflict('DELEGATION_INACTIVE', 'La delegación está inactiva.')
 
-    const filas = await prepararFilas(delegacion, input.participantes)
-    const nuevas = filas.filter((fila) => fila.accion === 'crear').length
-    const recuperadas = filas.filter((fila) => fila.accion === 'reutilizar' && fila.inscripcion?.delegacionId !== delegacionId).length
+    const filas = await prepararFilas(delegacion, participantes)
 
     const resultado = await conReintentoDeCodigo(() => prisma.$transaction(async (tx) => {
         // Serializa las cargas de la misma delegación: el total y la tarifa se calculan dentro
         await tx.$queryRaw`SELECT id FROM delegaciones WHERE id = ${delegacionId} FOR UPDATE`
-        const actual = await tx.delegacion.findUnique({
-            where: { id: delegacionId },
-            select: { precioEstandar: true, precioPromocional: true, minIntegrantes: true },
-        })
-        if (!actual) throw notFound('DELEGATION_NOT_FOUND', `Delegación con id ${delegacionId} no encontrada`)
         const pendiente = await tx.estadoInscripcion.findUnique({ where: { codigo: 'PENDIENTE' }, select: { id: true } })
         if (!pendiente) throw new Error('Falta el estado PENDIENTE en el catálogo de estados de inscripción')
 
-        const existentes = await tx.inscripcion.count({ where: { delegacionId, eventoId: delegacion.eventoId } })
-        const total = existentes + nuevas + recuperadas
-        const estandar = monto(actual.precioEstandar)
-        const unitario = precioUnitario(estandar, monto(actual.precioPromocional), actual.minIntegrantes, total)
-        const descuento = unitario < estandar ? redondear(estandar - unitario) : 0
         const ids: number[] = []
-
+        const hoy = aColumnaFecha(fechaLima())
         for (const fila of filas) {
             if (fila.accion === 'omitir') continue
-            let participante = fila.participante
-            if (participante) {
-                participante = await tx.participante.update({
-                    where: { id: participante.id },
+            let persona = fila.participante
+            if (persona) {
+                persona = await tx.participante.update({
+                    where: { id: persona.id },
                     data: {
                         nombres: fila.input.nombres,
                         apellidos: fila.input.apellidos,
@@ -356,7 +399,7 @@ export async function inscribirParticipantes(delegacionId: number, input: Inscri
                     },
                 })
             } else {
-                participante = await tx.participante.create({
+                persona = await tx.participante.create({
                     data: {
                         tipoDocumentoId: fila.input.tipoDocumento,
                         numeroDocumento: fila.input.numeroDocumento,
@@ -368,17 +411,17 @@ export async function inscribirParticipantes(delegacionId: number, input: Inscri
                 })
             }
 
+            // Monto, descuento y tipo definitivos los fija `recalcularGrupo` con el total final
             const datos = {
                 delegacionId,
-                // Las inscripciones del grupo heredan el tipo de la delegación (spec 022)
-                tipoInscripcionId: delegacion.tipoInscripcionId,
-                monto: unitario,
-                descuento,
-                tieneDescuento: descuento > 0,
-                esCorreoInstitucional: esCorreoInstitucional(participante.correo, delegacion.evento.dominioInstitucional),
+                monto: 0,
+                descuento: 0,
+                tieneDescuento: false,
+                esCorreoInstitucional: esCorreoInstitucional(persona.correo, delegacion.evento.dominioInstitucional),
                 codigoCredencial: nuevoCodigoCredencial(),
-                fechaPago: aColumnaFecha(fechaLima()),
-                numeroOperacion: `DELEGACION-${crypto.randomUUID()}`,
+                fechaPago: hoy,
+                // El pago es de la delegación: aquí va un código interno, no el de un voucher.
+                numeroOperacion: numeroOperacionInterno(),
                 modalidadPago: 'delegacion',
                 banco: null,
                 billeteraDigital: null,
@@ -392,13 +435,13 @@ export async function inscribirParticipantes(delegacionId: number, input: Inscri
             }
 
             if (fila.inscripcion) {
+                // Es una inscripción nueva: sin la revisión, el voucher ni la credencial anteriores
                 const inscripcion = await tx.inscripcion.update({
                     where: { id: fila.inscripcion.id },
                     data: {
                         ...datos,
                         estadoId: pendiente.id,
                         clasificacionId: null,
-                        // Es una inscripción nueva: sin la revisión, el voucher ni la credencial anteriores
                         creadoEn: new Date(),
                         motivoRechazo: null,
                         revisadoPorId: null,
@@ -411,296 +454,225 @@ export async function inscribirParticipantes(delegacionId: number, input: Inscri
                 ids.push(inscripcion.id)
             } else {
                 const inscripcion = await tx.inscripcion.create({
-                    data: {
-                        eventoId: delegacion.eventoId,
-                        participanteId: participante.id,
-                        estadoId: pendiente.id,
-                        ...datos,
-                    },
+                    data: { eventoId: delegacion.eventoId, participanteId: persona.id, estadoId: pendiente.id, ...datos },
                     select: { id: true },
                 })
                 ids.push(inscripcion.id)
             }
         }
 
-        // Toda la delegación comparte la tarifa vigente, incluidas las inscripciones anteriores
-        await tx.inscripcion.updateMany({
-            where: { delegacionId, eventoId: delegacion.eventoId },
-            data: {
-                monto: unitario,
-                descuento,
-                tieneDescuento: descuento > 0,
-                ...(delegacion.tipoInscripcionId ? { tipoInscripcionId: delegacion.tipoInscripcionId } : {}),
-            },
-        })
-        return { ids, total }
+        const grupo = await recalcularGrupo(tx, delegacionId)
+        if (adicional) await adicional(tx, delegacion)
+        return { ids, ...grupo }
     }))
 
-    const detalle = await obtenerDelegacion(delegacionId)
+    return { ...resultado, omitidos: filas.filter((fila) => fila.accion === 'omitir').length }
+}
+
+/** `POST /v1/delegations/:id/inscriptions`: alta manual o masiva de integrantes desde el panel. */
+export async function inscribirParticipantes(delegacionId: number, input: InscribirEnDelegacionInput) {
+    const resultado = await agregarIntegrantes(delegacionId, input.participantes)
     return {
-        ...detalle,
+        ...(await obtenerDelegacion(delegacionId)),
         registrados: resultado.ids.length,
-        omitidos: filas.filter((fila) => fila.accion === 'omitir').length,
+        omitidos: resultado.omitidos,
     }
 }
 
-// ─── Registro público (spec 021) ───────────────────────────────────────────
+/**
+ * Quita un integrante del grupo (staff). Solo si aún no fue aprobado: uno aprobado ya tiene
+ * credencial y asistencia, y se cancela desde Inscripciones. Al quitarlo, el grupo se recalcula.
+ */
+export async function quitarIntegrante(delegacionId: number, inscripcionId: number) {
+    const inscripcion = await prisma.inscripcion.findFirst({
+        where: { id: inscripcionId, delegacionId },
+        select: { id: true, estado: { select: { codigo: true } } },
+    })
+    if (!inscripcion) throw notFound('INSCRIPTION_NOT_FOUND', `La inscripción ${inscripcionId} no pertenece a la delegación ${delegacionId}`)
+    if (!ESTADOS_QUITABLES.includes(inscripcion.estado.codigo as CodigoEstadoInscripcion)) {
+        throw conflict('INSCRIPTION_NOT_REMOVABLE', 'El integrante ya está aprobado: cancélalo desde Inscripciones.')
+    }
+    await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM delegaciones WHERE id = ${delegacionId} FOR UPDATE`
+        await tx.inscripcion.delete({ where: { id: inscripcionId } })
+        await recalcularGrupo(tx, delegacionId)
+    })
+    return obtenerDelegacion(delegacionId)
+}
 
 /**
- * Tarifa de las delegaciones de un evento (la copia cada delegación al crearse). Los precios
- * salen de los tipos de la categoría `DELEGACIONES` (spec 022: `delegacion_general` y
- * `delegacion_grupal`); si faltan, de la tarifa por defecto del evento.
+ * Aprueba a todo el grupo (staff): los integrantes por revisar pasan a APROBADO en el acto y las
+ * credenciales se generan y envían después, una por una (los PDF son pesados). Devuelve cuántos
+ * aprobó y el saldo que aún se debe, para que el panel lo avise.
+ */
+export async function aprobarDelegacion(delegacionId: number, adminId?: number) {
+    const delegacion = await prisma.delegacion.findUnique({
+        where: { id: delegacionId },
+        select: { id: true, inscripciones: { select: { id: true, estado: { select: { codigo: true } } } } },
+    })
+    if (!delegacion) throw notFound('DELEGATION_NOT_FOUND', `Delegación con id ${delegacionId} no encontrada`)
+    const porRevisar = delegacion.inscripciones.filter((inscripcion) => ['PENDIENTE', 'EN_REVISION'].includes(inscripcion.estado.codigo)).map((inscripcion) => inscripcion.id)
+    if (!porRevisar.length) throw conflict('NOTHING_TO_APPROVE', 'No hay integrantes por aprobar.')
+    const aprobadas = await aprobarVarias(porRevisar, adminId)
+    const detalle = await obtenerDelegacion(delegacionId)
+    return { ...detalle, aprobadas: aprobadas.length, credencialesEnSegundoPlano: aprobadas.length }
+}
+
+// ─── API del sitio ──────────────────────────────────────────────────────────
+
+/**
+ * Tarifa de las delegaciones de un evento por modalidad: los precios salen de los tipos
+ * (`delegacion_general`, `delegacion_grupal`, `delegacion_virtual`). La virtual es `null` mientras
+ * el evento no tenga su tipo: la landing no la ofrece.
  */
 export async function tarifaDelegaciones(evento: Evento) {
-    const { general, promocional } = await tiposDeDelegacion(evento.id)
+    const tipos = await tiposDeDelegacion(evento.id)
+    const presencial = tarifaParaModalidad(evento, tipos, 'PRESENCIAL')
+    const virtual = tarifaParaModalidad(evento, tipos, 'VIRTUAL')
     return {
         minIntegrantes: evento.delegacionesMinIntegrantes,
-        precioEstandar: monto(general?.precio ?? evento.delegacionesPrecioEstandar),
-        precioPromocional: monto(promocional?.precio ?? evento.delegacionesPrecioPromocional),
+        precioEstandar: presencial?.precioEstandar ?? 0,
+        precioPromocional: presencial?.precioPromocional ?? 0,
+        virtual: virtual ? { precio: virtual.precioEstandar } : null,
     }
 }
 
-/** El representante como participante, con los mismos datos que la lista de integrantes. */
-function representanteComoParticipante(representante: RegistroDelegacionInput['representante']): ParticipanteDelegacionInput {
-    return {
-        tipoDocumento: representante.tipoDocumento,
-        numeroDocumento: representante.numeroDocumento,
-        nombres: representante.nombres,
-        apellidos: representante.apellidos,
-        correo: representante.correo,
-        celular: representante.celular,
-    }
-}
-
-/** Violación del índice único del número de operación de una delegación del mismo evento. */
-function errorDeOperacionDuplicada(error: unknown): never {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        const target = JSON.stringify(error.meta?.target ?? '')
-        if (target.includes('numero_operacion')) throw conflict('OPERATION_ALREADY_REGISTERED', 'El número de operación ya está registrado.')
-    }
-    throw error
+/** DNI visible solo en sus últimos dígitos: el link se comparte entre los integrantes del grupo. */
+function enmascararDocumento(numero: string): string {
+    return numero.length <= 4 ? '****' : `${'*'.repeat(numero.length - 4)}${numero.slice(-4)}`
 }
 
 /**
- * `POST /v1/site/delegations`: el representante registra a su grupo completo y paga el total con
- * un solo voucher (spec 021). Crea la delegación con la tarifa del evento, agrega a sus
- * integrantes (el representante va primero si se declaró integrante) y guarda el pago conjunto.
- *
- * El monto lo calcula el servidor con el total final de la delegación: por eso la tarifa
- * promocional (al cruzar el mínimo) se aplica a todos. El pago es de la delegación, no de cada
- * inscripción: el número de operación y el voucher quedan en la delegación.
- *
- * El tipo elegido en la tarjeta (spec 022) se guarda en la delegación y en cada inscripción del
- * grupo; los precios de la tarifa salen de los tipos `delegacion_general` / `delegacion_grupal`.
+ * Lo que ve el delegado con el link: el grupo, su tarifa, los integrantes (documento enmascarado) y
+ * sus vouchers (número enmascarado, sin el motivo interno). No expone el correo ni el teléfono del
+ * delegado. `eventoId` acota la búsqueda: el link solo sirve dentro del evento del token de acceso.
  */
-export async function registrarDelegacion(evento: Evento, input: RegistroDelegacionInput, voucherArchivo: string | null) {
-    if (!inscripcionesAbiertas(evento)) throw conflict('REGISTRATION_CLOSED', 'Las inscripciones para este evento están cerradas.')
-    if (!voucherArchivo) throw unprocessable('VOUCHER_REQUIRED', 'Adjunta el voucher de pago.')
-
-    // El tipo de la tarjeta: se valida antes de escribir nada (spec 022)
-    const tipoElegido = await tipoDelegacionValido(evento.id, input.tipoInscripcionId)
-
-    // El representante entra primero en la lista si se declaró integrante: el backend no depende
-    // de que el cliente lo coloque en ese orden.
-    const participantes = input.representante.esIntegrante
-        ? [representanteComoParticipante(input.representante), ...input.participantes]
-        : input.participantes
-
-    // Con link se registra en la delegación que el staff ya creó (su tarifa y su mínimo); sin
-    // link se crea una nueva con la tarifa por defecto del evento.
-    const existente = input.codigoLink ? await prisma.delegacion.findUnique({ where: { codigoLink: input.codigoLink.trim() } }) : null
-    if (input.codigoLink && (!existente || !existente.activo)) throw notFound('DELEGATION_NOT_FOUND', 'La delegación no existe o no está activa.')
-    if (existente && existente.eventoId !== evento.id) throw notFound('DELEGATION_NOT_FOUND', 'La delegación no existe o no está activa.')
-
-    const tarifa = existente
-        ? {
-            minIntegrantes: existente.minIntegrantes,
-            precioEstandar: monto(existente.precioEstandar),
-            precioPromocional: monto(existente.precioPromocional),
-        }
-        : await tarifaDelegaciones(evento)
-
-    let delegacion: Delegacion
-    try {
-        delegacion = existente ?? await prisma.delegacion.create({
-            data: {
-                eventoId: evento.id,
-                nombre: input.delegacion.nombre,
-                codigoLink: await codigoLinkUnico(),
-                institucion: input.delegacion.institucion ?? null,
-                representanteNombre: `${input.representante.nombres} ${input.representante.apellidos}`.trim(),
-                representanteEmail: input.representante.correo,
-                representanteTelefono: input.representante.celular,
-                minIntegrantes: tarifa.minIntegrantes,
-                precioEstandar: tarifa.precioEstandar,
-                precioPromocional: tarifa.precioPromocional,
-                tipoInscripcionId: tipoElegido?.id ?? null,
-            },
-        })
-    } catch (error) {
-        // Dos delegaciones del mismo evento no pueden compartir el código del voucher
-        throw errorDeOperacionDuplicada(error)
-    }
-
-    // El tipo de cada inscripción del grupo: el elegido en esta carga, o el que ya traía la
-    // delegación (registro por link sin elegir de nuevo).
-    const tipoGrupo = tipoElegido?.id ?? delegacion.tipoInscripcionId ?? null
-
-    try {
-        // Mismas reglas que el alta desde el panel: quien ya está en esta delegación se omite
-        // (reenviar la lista no duplica), quien la tiene rechazada o cancelada la reutiliza, y
-        // quien ya está inscrito en el evento por fuera se rechaza.
-        const filas = await prepararFilas(delegacion, participantes)
-        const nuevas = filas.filter((fila) => fila.accion === 'crear').length
-        const recuperadas = filas.filter((fila) => fila.accion === 'reutilizar' && fila.inscripcion?.delegacionId !== delegacion.id).length
-
-        // La tarifa se calcula sobre el total de la delegación: los que ya estaban más los de
-        // este envío. Por eso la promocional (al cruzar el mínimo) se aplica a todos.
-        const yaRegistrados = await prisma.inscripcion.count({ where: { delegacionId: delegacion.id, eventoId: evento.id } })
-        const totalIntegrantes = yaRegistrados + nuevas + recuperadas
-        const unitario = precioUnitario(tarifa.precioEstandar, tarifa.precioPromocional, tarifa.minIntegrantes, totalIntegrantes)
-        const descuento = unitario < tarifa.precioEstandar ? redondear(tarifa.precioEstandar - unitario) : 0
-        const total = redondear(unitario * totalIntegrantes)
-
-        const ids = await conReintentoDeCodigo(() => prisma.$transaction(async (tx) => {
-            const pendiente = await tx.estadoInscripcion.findUnique({ where: { codigo: 'PENDIENTE' }, select: { id: true } })
-            if (!pendiente) throw new Error('Falta el estado PENDIENTE en el catálogo de estados de inscripción')
-
-            const creados: number[] = []
-            for (const fila of filas) {
-                if (fila.accion === 'omitir') continue
-                let persona = fila.participante
-                if (persona) {
-                    persona = await tx.participante.update({
-                        where: { id: persona.id },
-                        data: {
-                            nombres: fila.input.nombres,
-                            apellidos: fila.input.apellidos,
-                            ...(fila.input.celular ? { celular: fila.input.celular } : {}),
-                        },
-                    })
-                } else {
-                    persona = await tx.participante.create({
-                        data: {
-                            tipoDocumentoId: fila.input.tipoDocumento,
-                            numeroDocumento: fila.input.numeroDocumento,
-                            nombres: fila.input.nombres,
-                            apellidos: fila.input.apellidos,
-                            correo: fila.input.correo,
-                            celular: fila.input.celular ?? '',
-                        },
-                    })
-                }
-
-                const datos = {
-                    delegacionId: delegacion.id,
-                    // El tipo elegido en la tarjeta queda en cada inscripción del grupo (spec 022)
-                    tipoInscripcionId: tipoGrupo,
-                    monto: unitario,
-                    descuento,
-                    tieneDescuento: descuento > 0,
-                    esCorreoInstitucional: esCorreoInstitucional(persona.correo, evento.dominioInstitucional),
-                    codigoCredencial: nuevoCodigoCredencial(),
-                    fechaPago: aColumnaFecha(input.fechaPago),
-                    // El pago es de la delegación: aquí va un código interno, no el del voucher.
-                    numeroOperacion: `DELEGACION-${crypto.randomUUID()}`,
-                    modalidadPago: 'delegacion',
-                    banco: null,
-                    billeteraDigital: null,
-                    tipoOperacion: null,
-                    voucherArchivo: null,
-                    esEstudianteUndc: false,
-                    codigoEstudiante: null,
-                    verificacionEstudiante: Prisma.JsonNull,
-                    esCorreoVerificado: false,
-                    verificacionCorreo: Prisma.JsonNull,
-                }
-
-                if (fila.inscripcion) {
-                    // Es una inscripción nueva: sin la revisión, el voucher ni la credencial anteriores
-                    await tx.inscripcion.update({
-                        where: { id: fila.inscripcion.id },
-                        data: {
-                            ...datos,
-                            eventoId: evento.id,
-                            estadoId: pendiente.id,
-                            clasificacionId: null,
-                            creadoEn: new Date(),
-                            motivoRechazo: null,
-                            revisadoPorId: null,
-                            revisadoEn: null,
-                            credencialEnviadaEn: null,
-                            esQrLegado: false,
-                        },
-                        select: { id: true },
-                    })
-                    creados.push(fila.inscripcion.id)
-                } else {
-                    const inscripcion = await tx.inscripcion.create({
-                        data: { eventoId: evento.id, participanteId: persona.id, estadoId: pendiente.id, ...datos },
-                        select: { id: true },
-                    })
-                    creados.push(inscripcion.id)
-                }
-            }
-            // Toda la delegación comparte la tarifa vigente y el tipo elegido, incluidas las
-            // inscripciones anteriores (así el grupo entero queda con el mismo tipo)
-            await tx.inscripcion.updateMany({
-                where: { delegacionId: delegacion.id, eventoId: evento.id },
-                data: {
-                    monto: unitario,
-                    descuento,
-                    tieneDescuento: descuento > 0,
-                    ...(tipoGrupo !== null ? { tipoInscripcionId: tipoGrupo } : {}),
+export async function delegacionPorCodigo(codigoLink: string, eventoId: number) {
+    const delegacion = await prisma.delegacion.findUnique({
+        where: { codigoLink },
+        include: {
+            tipoInscripcion: TIPO_RESUMIDO,
+            evento: {
+                select: {
+                    id: true, codigo: true, nombre: true, nombreCorto: true, fechaInicio: true, fechaFin: true,
+                    inscripcionesAbiertas: true, estado: true,
                 },
-            })
-            await tx.delegacion.update({ where: { id: delegacion.id }, data: { montoTotalPagado: total } })
-            return creados
-        }))
-
-        // El pago conjunto y el contacto quedan en la delegación (la que el staff creó si vino
-        // por su link): un solo número de operación y un solo voucher para todo el grupo.
-        await prisma.delegacion.update({
-            where: { id: delegacion.id },
-            data: {
-                representanteNombre: `${input.representante.nombres} ${input.representante.apellidos}`.trim(),
-                representanteEmail: input.representante.correo,
-                representanteTelefono: input.representante.celular,
-                // La tarjeta elegida también se guarda en la delegación del link (spec 022)
-                ...(tipoElegido ? { tipoInscripcionId: tipoElegido.id } : {}),
-                modalidadPago: input.modalidadPago,
-                banco: input.modalidadPago === 'banco' ? input.banco ?? null : null,
-                tipoOperacion: input.modalidadPago === 'banco' ? input.tipoOperacion ?? null : null,
-                billeteraDigital: input.modalidadPago === 'billetera' ? input.billeteraDigital ?? null : null,
-                numeroOperacion: input.numeroOperacion.trim(),
-                fechaPago: aColumnaFecha(input.fechaPago),
-                voucherArchivo,
             },
-        })
+            pagos: { orderBy: { id: 'asc' } },
+            inscripciones: { include: { participante: true, estado: true }, orderBy: { creadoEn: 'asc' } },
+        },
+    })
+    if (!delegacion || !delegacion.activo || delegacion.eventoId !== eventoId) throw notFound('DELEGATION_NOT_FOUND', 'La delegación no existe o no está activa.')
+    const activos = delegacion.inscripciones.filter((inscripcion) => !ESTADOS_SIN_CUPO.includes(inscripcion.estado.codigo as CodigoEstadoInscripcion))
+    const estandar = monto(delegacion.precioEstandar)
+    const promocional = monto(delegacion.precioPromocional)
+    const unitario = precioUnitario(estandar, promocional, delegacion.minIntegrantes, activos.length)
+    const montoTotal = redondear(unitario * activos.length)
+    return {
+        id: delegacion.id,
+        nombre: delegacion.nombre,
+        codigoLink: delegacion.codigoLink,
+        institucion: delegacion.institucion,
+        modalidad: delegacion.modalidad,
+        representanteNombre: delegacion.representanteNombre,
+        evento: delegacion.evento,
+        minIntegrantes: delegacion.minIntegrantes,
+        precioEstandar: estandar,
+        precioPromocional: promocional,
+        precioUnitario: unitario,
+        totalIntegrantes: activos.length,
+        montoTotal,
+        faltanParaPromocional: faltanParaPromocional(estandar, promocional, delegacion.minIntegrantes, activos.length),
+        tipoInscripcion: delegacion.tipoInscripcion ?? null,
+        pago: resumenPagos(montoTotal, delegacion.pagos),
+        integrantes: activos.map((inscripcion) => ({
+            nombres: inscripcion.participante.nombres,
+            apellidos: inscripcion.participante.apellidos,
+            documento: enmascararDocumento(inscripcion.participante.numeroDocumento),
+            estado: inscripcion.estado.codigo,
+        })),
+        pagos: delegacion.pagos.map(aPagoPublico),
+    }
+}
 
-        const detalle = await obtenerDelegacion(delegacion.id)
+/** La delegación de un link dentro del evento del token, activa; `404` si no. */
+async function delegacionDelLink(evento: Evento, codigoLink: string) {
+    const delegacion = await prisma.delegacion.findUnique({ where: { codigoLink: codigoLink.trim() } })
+    if (!delegacion || !delegacion.activo || delegacion.eventoId !== evento.id) throw notFound('DELEGATION_NOT_FOUND', 'La delegación no existe o no está activa.')
+    return delegacion
+}
+
+/**
+ * `POST /v1/site/delegations`: el delegado registra a su grupo y paga con uno o varios vouchers.
+ * Crea la delegación con la tarifa de su modalidad (o, con `codigoLink`, se suma a la que el staff ya
+ * creó), agrega a los integrantes (el delegado va primero si se declaró integrante) y guarda los
+ * vouchers, **todo en una sola transacción**: si algo falla no queda nada a medias.
+ *
+ * El monto lo calcula el servidor con el total final: por eso la promocional (al cruzar el mínimo) se
+ * aplica a todos. Cada voucher lleva su archivo, su número de operación y el monto que dice.
+ */
+export async function registrarDelegacion(evento: Evento, input: RegistroDelegacionInput, archivos: string[]) {
+    if (!inscripcionesAbiertas(evento)) throw conflict('REGISTRATION_CLOSED', 'Las inscripciones para este evento están cerradas.')
+    if (archivos.length !== input.pagos.length) throw unprocessable('VOUCHER_REQUIRED', 'Adjunta el voucher de cada pago.')
+
+    const existente = input.codigoLink ? await delegacionDelLink(evento, input.codigoLink) : null
+
+    // El delegado va primero si es integrante: el servidor no depende del orden del cliente
+    const integrantes = [...(input.representante.esIntegrante ? [representanteComoParticipante(input.representante)] : []), ...(input.participantes ?? [])]
+    if (!integrantes.length) throw unprocessable('NO_PARTICIPANTS', 'Registra al menos un integrante.')
+
+    const modalidad = existente?.modalidad ?? (input.modalidad as 'PRESENCIAL' | 'VIRTUAL')
+    const tarifa = existente
+        ? { minIntegrantes: existente.minIntegrantes, precioEstandar: monto(existente.precioEstandar), precioPromocional: monto(existente.precioPromocional) }
+        : await tarifaDe(evento, modalidad)
+
+    // Antes de escribir: un número de operación repetido se informa sin dejar rastro
+    await exigirOperacionesLibres(evento.id, input.pagos)
+
+    const delegacion = existente ?? await prisma.delegacion.create({
+        data: {
+            eventoId: evento.id,
+            nombre: input.delegacion.nombre,
+            codigoLink: await codigoLinkUnico(),
+            institucion: input.delegacion.institucion ?? null,
+            modalidad,
+            ...datosDelRepresentante(input.representante),
+            ...tarifa,
+        },
+    })
+
+    try {
+        const resultado = await agregarIntegrantes(delegacion.id, integrantes, async (tx, actual) => {
+            await insertarPagos(tx, actual, input.pagos, archivos)
+        })
         return {
-            ...detalle,
-            registrados: ids.length,
-            omitidos: filas.filter((fila) => fila.accion === 'omitir').length,
-            montoTotal: total,
-            tarifaUnitaria: unitario,
+            ...(await delegacionPorCodigo(delegacion.codigoLink, evento.id)),
+            registrados: resultado.ids.length,
+            omitidos: resultado.omitidos,
         }
     } catch (error) {
-        // La delegación quedó creada sin inscripciones: se borra para no dejar un grupo a medias.
+        // La delegación quedó creada sin integrantes ni pagos (la transacción se revirtió): se borra
         if (!existente) await prisma.delegacion.delete({ where: { id: delegacion.id } }).catch(() => undefined)
         throw errorDeOperacionDuplicada(error)
     }
 }
 
-/** Voucher del pago conjunto de una delegación. */
-export async function archivoVoucherDelegacion(id: number): Promise<string> {
-    const delegacion = await prisma.delegacion.findUnique({ where: { id }, select: { voucherArchivo: true } })
-    if (!delegacion) throw notFound('DELEGATION_NOT_FOUND', `Delegación con id ${id} no encontrada`)
-    if (!delegacion.voucherArchivo) throw notFound('VOUCHER_NOT_FOUND', 'La delegación no tiene voucher.')
-    const ruta = uploadedFilePath(delegacion.voucherArchivo)
-    if (!fs.existsSync(ruta)) throw notFound('VOUCHER_NOT_FOUND', 'El archivo del voucher no existe en el servidor.')
-    return ruta
+/** `POST /v1/site/delegations/link/:codigoLink/participants`: el delegado suma integrantes. */
+export async function inscribirPorLink(evento: Evento, codigoLink: string, input: InscribirEnDelegacionInput) {
+    if (!inscripcionesAbiertas(evento)) throw conflict('REGISTRATION_CLOSED', 'Las inscripciones para este evento están cerradas.')
+    const delegacion = await delegacionDelLink(evento, codigoLink)
+    const resultado = await agregarIntegrantes(delegacion.id, input.participantes)
+    return {
+        ...(await delegacionPorCodigo(delegacion.codigoLink, evento.id)),
+        registrados: resultado.ids.length,
+        omitidos: resultado.omitidos,
+    }
+}
+
+/** La delegación de un link, para que las rutas del sitio le sumen vouchers. */
+export async function delegacionParaPagos(evento: Evento, codigoLink: string) {
+    if (!inscripcionesAbiertas(evento)) throw conflict('REGISTRATION_CLOSED', 'Las inscripciones para este evento están cerradas.')
+    return delegacionDelLink(evento, codigoLink)
 }
 
 /** Valida el cuerpo del registro público (multipart): los campos JSON se parsean en el controlador. */

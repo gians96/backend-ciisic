@@ -407,6 +407,37 @@ export async function cambiarEstado(id: number, codigo: CodigoEstadoInscripcion,
     return { inscripcion: await obtenerInscripcion(id), credencialEnviada }
 }
 
+/**
+ * Aprueba varias inscripciones a la vez (el grupo de una delegación, spec 023). El estado cambia en
+ * el acto y las credenciales se generan y envían después, una por una y en diferido: son PDF con
+ * Puppeteer y varias seguidas no caben en una sola petición. Si un envío falla, la aprobación se
+ * mantiene y la credencial se reenvía desde el detalle. Devuelve los ids que pasaron a APROBADO.
+ */
+export async function aprobarVarias(ids: number[], adminId?: number): Promise<number[]> {
+    const aprobadas: number[] = []
+    for (const id of ids) {
+        const actual = await obtenerInscripcion(id)
+        if (actual.estado.codigo === 'APROBADO') continue
+        if (!actual.codigoCredencial) await asegurarCodigoCredencial(id)
+        await prisma.inscripcion.update({
+            where: { id },
+            data: {
+                estado: { connect: { codigo: 'APROBADO' } },
+                motivoRechazo: null,
+                revisadoEn: new Date(),
+                ...(adminId ? { revisadoPor: { connect: { id: adminId } } } : {}),
+            },
+        })
+        aprobadas.push(id)
+    }
+    if (aprobadas.length) {
+        enDiferido(`las credenciales de ${aprobadas.length} inscripciones aprobadas en lote (${aprobadas.slice(0, 5).join(', ')}…)`, async () => {
+            for (const id of aprobadas) await emitirCredencial(await obtenerInscripcion(id))
+        })
+    }
+    return aprobadas
+}
+
 export async function reenviarCredencial(id: number) {
     const inscripcion = await obtenerInscripcion(id)
     if (inscripcion.estado.codigo !== 'APROBADO') throw conflict('NOT_APPROVED', 'Solo se puede reenviar la credencial de inscripciones aprobadas.')

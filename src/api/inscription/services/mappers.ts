@@ -3,6 +3,8 @@ import { fechaSoloDia } from '../../../core/fechas'
 import { modalidadDe, monto } from '../../../core/catalogos'
 import { enmascararCorreo } from '../../../core/codigos'
 import { mimeDeArchivo } from '../../../middlewares/upload'
+import { resumenPagos } from '../../delegation/services/pagos'
+import { precioUnitario } from '../../delegation/services/tarifa'
 
 /** Relaciones que se cargan para mostrar una inscripción completa. */
 export const detalleInclude = {
@@ -12,21 +14,18 @@ export const detalleInclude = {
     estado: true,
     evento: true,
     revisadoPor: { select: { id: true, nombres: true, apellidos: true } },
-    /** Delegación del grupo (spec 022): su pago es conjunto y vive en `delegaciones`. */
+    /** Delegación del grupo (spec 022 y 023): sus pagos son conjuntos y viven en `delegacion_pagos`. */
     delegacion: {
         select: {
             id: true,
             nombre: true,
             codigoLink: true,
-            modalidadPago: true,
-            banco: true,
-            billeteraDigital: true,
-            tipoOperacion: true,
-            numeroOperacion: true,
-            fechaPago: true,
-            montoTotalPagado: true,
-            voucherArchivo: true,
-            _count: { select: { inscripciones: true } },
+            modalidad: true,
+            minIntegrantes: true,
+            precioEstandar: true,
+            precioPromocional: true,
+            pagos: { select: { monto: true, estado: true } },
+            _count: { select: { inscripciones: { where: { estado: { codigo: { notIn: ['RECHAZADO', 'CANCELADO'] } } } } } },
         },
     },
 } satisfies Prisma.InscripcionInclude
@@ -71,29 +70,22 @@ function pagoOculto() {
 }
 
 /**
- * La delegación a la que pertenece la inscripción (spec 022): nombre, link e integrantes del
- * grupo. El pago conjunto solo se expone con `conPago` (spec 013).
+ * La delegación a la que pertenece la inscripción (spec 022 y 023): nombre, link, modalidad e
+ * integrantes del grupo. El resumen de pagos (lo que debe, lo declarado y el saldo) solo se expone
+ * con `conPago` (spec 013); el detalle de cada voucher se ve en la delegación.
  */
 function delegacionDe(i: InscripcionDetalle, conPago: boolean) {
     if (!i.delegacion) return null
     const d = i.delegacion
+    const total = d._count.inscripciones
+    const unitario = precioUnitario(monto(d.precioEstandar), monto(d.precioPromocional), d.minIntegrantes, total)
     return {
         id: d.id,
         nombre: d.nombre,
         codigoLink: d.codigoLink,
-        totalIntegrantes: d._count.inscripciones,
-        pago: conPago
-            ? {
-                modalidad: d.modalidadPago,
-                banco: d.banco,
-                billeteraDigital: d.billeteraDigital,
-                tipoOperacion: d.tipoOperacion,
-                numeroOperacion: d.numeroOperacion,
-                fechaPago: d.fechaPago ? fechaSoloDia(d.fechaPago) : null,
-                montoTotalPagado: monto(d.montoTotalPagado),
-                tieneVoucher: Boolean(d.voucherArchivo),
-            }
-            : null,
+        modalidad: d.modalidad,
+        totalIntegrantes: total,
+        pago: conPago ? resumenPagos(unitario * total, d.pagos) : null,
     }
 }
 

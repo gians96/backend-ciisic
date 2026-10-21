@@ -38,6 +38,7 @@ model Administrador {
   googleVinculadoEn                DateTime?              @map("google_vinculado_en")
   rol                              Rol                    @relation(fields: [rolId], references: [id], map: "fk_administradores_rol")
   inscripcionesRevisadas           Inscripcion[]          @relation("InscripcionRevisor")
+  pagosDelegacionRevisados         DelegacionPago[]       @relation("DelegacionPagoRevisor")
   tokensAccesoCreados              TokenAcceso[]
   configuracionesEditadas          ConfiguracionSistema[]
   asignacionesEvento               AsignacionEvento[]
@@ -313,45 +314,74 @@ model Inscripcion {
   @@map("inscripciones")
 }
 
-/// Delegación o institución que inscribe a su grupo con una tarifa por persona según su tamaño.
+/// Delegación o institución que inscribe a su grupo con una tarifa por persona según su tamaño
+/// (presencial: estándar y promocional desde `minIntegrantes`; virtual: tarifa única).
 model Delegacion {
-  id                    Int           @id @default(autoincrement())
-  eventoId              Int           @map("evento_id")
-  nombre                String
-  codigoLink            String        @unique(map: "uq_delegaciones_codigo_link") @map("codigo_link") @db.VarChar(100)
-  institucion           String?
-  representanteNombre   String?       @map("representante_nombre")
-  representanteEmail    String?       @map("representante_email")
-  representanteTelefono String?       @map("representante_telefono")
-  minIntegrantes        Int           @default(10) @map("min_integrantes")
-  precioEstandar        Decimal       @default(60.00) @map("precio_estandar") @db.Decimal(10, 2)
-  precioPromocional     Decimal       @default(50.00) @map("precio_promocional") @db.Decimal(10, 2)
-  /// Pago conjunto del grupo: un solo voucher y un solo número de operación para todas sus
-  /// inscripciones (no caben en `inscripciones`, donde el número de operación es único).
-  modalidadPago          String?       @map("modalidad_pago") @db.VarChar(40)
-  banco                  String?       @db.VarChar(40)
-  billeteraDigital       String?       @map("billetera_digital") @db.VarChar(40)
-  tipoOperacion          String?       @map("tipo_operacion") @db.VarChar(40)
-  numeroOperacion        String?       @map("numero_operacion") @db.VarChar(100)
-  fechaPago              DateTime?     @map("fecha_pago")
-  voucherArchivo         String?       @map("voucher_archivo")
-  /// Lo que se pagó por el grupo (el backend lo calcula; nunca lo envía el cliente).
-  montoTotalPagado       Decimal       @default(0) @map("monto_total_pagado") @db.Decimal(10, 2)
-  /// Tipo de delegación elegido en la landing (spec 022): Delegación General / Promocional.
-  tipoInscripcionId      Int?          @map("tipo_inscripcion_id")
-  activo                Boolean       @default(true)
-  creadoEn              DateTime      @default(now()) @map("creado_en")
-  actualizadoEn         DateTime      @updatedAt @map("actualizado_en")
-  evento                Evento        @relation(fields: [eventoId], references: [id], onDelete: Cascade, map: "fk_delegaciones_evento")
-  tipoInscripcion       TipoInscripcion? @relation(fields: [tipoInscripcionId], references: [id], onDelete: SetNull, map: "fk_delegaciones_tipo_inscripcion")
-  inscripciones         Inscripcion[]
+  id                          Int                 @id @default(autoincrement())
+  eventoId                    Int                 @map("evento_id")
+  nombre                      String
+  codigoLink                  String              @unique(map: "uq_delegaciones_codigo_link") @map("codigo_link") @db.VarChar(100)
+  institucion                 String?
+  representanteNombre         String?             @map("representante_nombre")
+  representanteEmail          String?             @map("representante_email")
+  representanteTelefono       String?             @map("representante_telefono")
+  /// Documento del delegado (spec 023): es el contacto del grupo, no necesariamente un integrante.
+  representanteTipoDocumento  String?             @map("representante_tipo_documento") @db.VarChar(10)
+  representanteDocumento      String?             @map("representante_documento") @db.VarChar(20)
+  /// Cómo asiste el grupo (spec 023): decide el tipo de las inscripciones y la tarifa.
+  modalidad                   ModalidadAsistencia @default(PRESENCIAL)
+  minIntegrantes              Int                 @default(10) @map("min_integrantes")
+  precioEstandar              Decimal             @default(60.00) @map("precio_estandar") @db.Decimal(10, 2)
+  precioPromocional           Decimal             @default(50.00) @map("precio_promocional") @db.Decimal(10, 2)
+  /// Tipo vigente del grupo (spec 023): lo recalcula el servidor con la modalidad y el número de integrantes.
+  tipoInscripcionId           Int?                @map("tipo_inscripcion_id")
+  activo                      Boolean             @default(true)
+  creadoEn                    DateTime            @default(now()) @map("creado_en")
+  actualizadoEn               DateTime            @updatedAt @map("actualizado_en")
+  evento                      Evento              @relation(fields: [eventoId], references: [id], onDelete: Cascade, map: "fk_delegaciones_evento")
+  tipoInscripcion             TipoInscripcion?    @relation(fields: [tipoInscripcionId], references: [id], onDelete: SetNull, map: "fk_delegaciones_tipo_inscripcion")
+  inscripciones               Inscripcion[]
+  pagos                       DelegacionPago[]
 
   @@index([eventoId], map: "idx_delegaciones_evento")
   @@index([tipoInscripcionId], map: "idx_delegaciones_tipo_inscripcion")
-  /// El número de operación del voucher es único por evento: dos delegaciones del mismo evento
-  /// no pueden compartir el código de un mismo pago (MySQL admite varios NULL).
-  @@unique([eventoId, numeroOperacion], map: "uq_delegaciones_evento_numero_operacion")
   @@map("delegaciones")
+}
+
+enum EstadoPagoDelegacion {
+  PENDIENTE
+  VERIFICADO
+  RECHAZADO
+}
+
+/// Un voucher de una delegación (spec 023). Una delegación puede pagar en varias partes: cada una
+/// con su archivo, su número de operación y el monto que declara el delegado.
+model DelegacionPago {
+  id               Int                  @id @default(autoincrement())
+  delegacionId     Int                  @map("delegacion_id")
+  /// Denormalizado para que el número de operación sea único por evento.
+  eventoId         Int                  @map("evento_id")
+  modalidadPago    String               @map("modalidad_pago") @db.VarChar(40)
+  banco            String?              @db.VarChar(40)
+  billeteraDigital String?              @map("billetera_digital") @db.VarChar(40)
+  tipoOperacion    String?              @map("tipo_operacion") @db.VarChar(40)
+  numeroOperacion  String               @map("numero_operacion") @db.VarChar(100)
+  fechaPago        DateTime             @map("fecha_pago")
+  /// Lo que dice el voucher; el staff lo contrasta con el estado de cuenta.
+  monto            Decimal              @db.Decimal(10, 2)
+  voucherArchivo   String               @map("voucher_archivo")
+  estado           EstadoPagoDelegacion @default(PENDIENTE)
+  motivoRechazo    String?              @map("motivo_rechazo") @db.VarChar(500)
+  revisadoPorId    Int?                 @map("revisado_por_id")
+  revisadoEn       DateTime?            @map("revisado_en")
+  creadoEn         DateTime             @default(now()) @map("creado_en")
+  delegacion       Delegacion           @relation(fields: [delegacionId], references: [id], onDelete: Cascade, map: "fk_delegacion_pagos_delegacion")
+  revisadoPor      Administrador?       @relation("DelegacionPagoRevisor", fields: [revisadoPorId], references: [id], onDelete: SetNull, map: "fk_delegacion_pagos_revisado_por")
+
+  @@unique([eventoId, numeroOperacion], map: "uq_delegacion_pagos_evento_numero_operacion")
+  @@index([delegacionId], map: "idx_delegacion_pagos_delegacion")
+  @@index([revisadoPorId], map: "idx_delegacion_pagos_revisado_por")
+  @@map("delegacion_pagos")
 }
 
 // ─── Actividades y asistencia ────────────────────────────────────────────────
