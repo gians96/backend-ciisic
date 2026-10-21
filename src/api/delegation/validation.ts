@@ -83,6 +83,25 @@ export const editarDelegacionSchema = yup.object({
 
 export type EditarDelegacionInput = yup.InferType<typeof editarDelegacionSchema>
 
+/**
+ * Tarifa de las delegaciones de un evento (spec 024). Cada campo es opcional; el servicio mezcla lo que
+ * llega con lo vigente y comprueba que el promocional no supere al estándar. `aplicarAExistentes` copia la
+ * tarifa a las delegaciones que aún no tienen integrantes ni vouchers.
+ */
+export const tarifaDelegacionesSchema = yup.object({
+    minIntegrantes: yup.number().integer().min(1).max(1000),
+    precioEstandar: yup.number().min(0).max(99999999),
+    precioPromocional: yup.number().min(0).max(99999999),
+    precioVirtual: yup.number().min(0).max(99999999),
+    virtualActivo: yup.boolean(),
+    aplicarAExistentes: yup.boolean(),
+})
+    .test('precios', 'El precio promocional no puede ser mayor que el precio estándar', preciosCoherentes)
+    .test('alguno', 'Indica al menos un dato de la tarifa', (value) => Object.values(value).some((campo) => campo !== undefined))
+    .required()
+
+export type TarifaDelegacionesInput = yup.InferType<typeof tarifaDelegacionesSchema>
+
 export const inscribirEnDelegacionSchema = yup.object({
     participantes: yup.array().of(participanteDelegacionSchema).min(1, 'Registra al menos un participante').max(MAX_INTEGRANTES, `Máximo ${MAX_INTEGRANTES} participantes por carga`).required(),
 }).required()

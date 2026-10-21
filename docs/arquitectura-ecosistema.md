@@ -441,7 +441,12 @@ de **todas** las inscripciones activas del grupo (los `RECHAZADO` y `CANCELADO` 
   `codigoLink` (16 hexadecimales), `modalidad`, `tipoInscripcion` vigente y el resumen `pago`
   (`totalAPagar`, `declarado`, `verificado`, `saldo`).
 - `GET|PUT /api/v1/delegations/:id`: detalle (`pagos[]` e `inscripciones[]`) y edición; la modalidad
-  solo cambia mientras no haya integrantes.
+  solo cambia mientras no haya integrantes. Cambiar `minIntegrantes` o los precios reprecia al grupo.
+- `GET|PUT /api/v1/events/:eventId/delegations/tarifa` (`eventos.configurar`, spec 024): la tarifa del
+  evento —precios de los tipos `delegacion_general`, `delegacion_grupal` y `delegacion_virtual`, mínimo
+  de integrantes y si la virtual se ofrece—. Solo afecta a delegaciones **nuevas**; con
+  `aplicarAExistentes` también a las que aún no tienen integrantes ni vouchers. Contrato en
+  `specs/024-tarifa-delegaciones/contracts/api-tarifa-delegaciones.md`.
 - `POST /api/v1/delegations/:id/inscriptions` (alta manual o masiva, máximo 200) y
   `DELETE …/inscriptions/:inscriptionId` (solo integrantes no aprobados).
 - `POST /api/v1/delegations/:id/approve`: aprueba a los integrantes por revisar y envía las

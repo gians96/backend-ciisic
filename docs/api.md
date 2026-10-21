@@ -58,6 +58,7 @@ nuevo venga verificado con Google (`correoConservado: true`); solo el staff lo c
 | Delegaciones: registro de un grupo con representante y pago conjunto | [`specs/021-delegaciones/contracts/api-delegaciones.md`](../specs/021-delegaciones/contracts/api-delegaciones.md) |
 | Tipos de delegación (General y Promocional) y delegación en inscripciones | [`specs/022-tipos-delegacion/contracts/api-tipos-delegacion.md`](../specs/022-tipos-delegacion/contracts/api-tipos-delegacion.md) |
 | Delegaciones con convenio: modalidad, vouchers múltiples, integrantes editables y aprobación del grupo | [`specs/023-delegaciones-convenio/contracts/api-delegaciones-convenio.md`](../specs/023-delegaciones-convenio/contracts/api-delegaciones-convenio.md) |
+| Tarifa de delegaciones administrable: precios presencial y virtual, mínimo de integrantes y aplicación a las existentes | [`specs/024-tarifa-delegaciones/contracts/api-tarifa-delegaciones.md`](../specs/024-tarifa-delegaciones/contracts/api-tarifa-delegaciones.md) |
 | Rutas legacy (landing anterior) | [`specs/002-multi-evento/contracts/api-publica.md`](../specs/002-multi-evento/contracts/api-publica.md) |
 
 ## Límites

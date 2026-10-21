@@ -5,7 +5,8 @@ import { eventoDelSitio, type SitioRequest } from '../../../middlewares/sitio'
 import { archivosSubidos, mimeDeArchivo, removeUploadedFiles } from '../../../middlewares/upload'
 import * as service from '../services/delegation'
 import * as pagos from '../services/pagos'
-import type { InscribirEnDelegacionInput } from '../validation'
+import * as tarifaAdmin from '../services/tarifa-admin'
+import type { InscribirEnDelegacionInput, TarifaDelegacionesInput } from '../validation'
 import { agregarPagosSchema, estadoPagoDelegacionSchema } from '../validation'
 
 // ─── Staff ──────────────────────────────────────────────────────────────────
@@ -16,6 +17,15 @@ export async function list(req: Request, res: Response) {
 
 export async function create(req: Request, res: Response) {
     res.status(201).json({ success: true, data: await service.crearDelegacion(idParam(req.params.eventId, 'eventId'), req.body) })
+}
+
+/** Tarifa vigente de las delegaciones del evento (precios de los tipos, mínimo y modalidad virtual). */
+export async function tarifa(req: Request, res: Response) {
+    res.json({ success: true, data: await tarifaAdmin.obtenerTarifaAdmin(idParam(req.params.eventId, 'eventId')) })
+}
+
+export async function saveTarifa(req: Request, res: Response) {
+    res.json({ success: true, data: await tarifaAdmin.guardarTarifa(idParam(req.params.eventId, 'eventId'), req.body as TarifaDelegacionesInput) })
 }
 
 export async function find(req: Request, res: Response) {

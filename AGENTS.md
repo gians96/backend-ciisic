@@ -127,7 +127,7 @@ y Google. Documentación: [`docs/`](docs/README.md).
   ponencias que se cruzan (respetan el cupo). La asistencia en puerta inscribe en el acto (origen
   `PUERTA`), no bloquea fuera de horario (solo lo marca) y cancela por `CAMBIO_EN_PUERTA` las inscripciones
   cruzadas a las que la persona no asistió. Gratuitas por ahora: cobro en `specs/019-…/plan-futuro-cobro.md`.
-- Delegaciones (specs 021–023): un grupo con delegado (`Delegacion`, con su `codigoLink`) cuyos integrantes
+- Delegaciones (specs 021–024): un grupo con delegado (`Delegacion`, con su `codigoLink`) cuyos integrantes
   tienen cada uno su inscripción (`delegacion_id`). **El servidor decide el tipo y el precio** (el cliente no
   envía ninguno): presencial `delegacion_general` (S/ 60) con menos de `minIntegrantes` (10) y
   `delegacion_grupal` (S/ 50) desde ahí; virtual `delegacion_virtual` (S/ 30, sin escalas). Esos tres códigos
@@ -138,7 +138,12 @@ y Google. Documentación: [`docs/`](docs/README.md).
   verifica o rechaza y el resumen (`totalAPagar`, `declarado`, `saldo`) solo informa. Con su link el delegado
   **solo agrega** integrantes y vouchers (`/site/delegations/link/:codigoLink/…`); el staff edita todo y aprueba
   al grupo (`aprobarVarias`: credenciales en diferido, una por una). Despliegue: backend primero y el tipo
-  virtual al final (`prisma/preflight/configurar-delegacion-virtual.sql`).
+  virtual al final (`prisma/preflight/configurar-delegacion-virtual.sql`). La tarifa del evento se administra
+  desde el panel (spec 024, `GET|PUT /v1/events/:eventId/delegations/tarifa`): escribe los precios de esos tres
+  tipos (`precio == precioInstitucional`), `eventos.delegaciones_*` (mínimo y respaldo) y, si el evento no tiene
+  el tipo virtual, lo crea; cambiarla **no** altera lo ya copiado a cada delegación (solo `aplicarAExistentes`
+  alcanza a las que no tienen integrantes ni vouchers), y una delegación con integrantes se reprecia con
+  `PUT /v1/delegations/:id`.
 - Reglas del dominio institucional fijas en `src/core/correo-institucional.ts` (`undc.edu.pe`,
   parte local numérica = estudiante).
 - Las rutas legacy existen para la landing anterior y se apagan desde el panel (Sistema).
@@ -217,7 +222,7 @@ con ambos sistemas levantados.
 
 Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Cada cambio
 empieza en `specs/NNN-nombre/` (spec → plan → tasks → contracts) y se marcan las tasks al
-implementar. Specs actuales: 001–014 y 016–023 (ver [README](README.md)); la 015 (certificados) tiene
+implementar. Specs actuales: 001–014 y 016–024 (ver [README](README.md)); la 015 (certificados) tiene
 solo su diseño (`research.md`).
 
 ## Antes de dar por terminado

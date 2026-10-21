@@ -29,7 +29,7 @@ const ESTADOS_REINSCRIBIBLES: readonly CodigoEstadoInscripcion[] = ['RECHAZADO',
 const ESTADOS_SIN_CUPO: CodigoEstadoInscripcion[] = ['RECHAZADO', 'CANCELADO']
 /** Estados de un integrante que el staff puede quitar del grupo (ya aprobado tiene credencial y asistencia). */
 const ESTADOS_QUITABLES: readonly CodigoEstadoInscripcion[] = ['PENDIENTE', 'EN_REVISION', 'RECHAZADO', 'CANCELADO']
-const CUENTAN_COMO_INTEGRANTE = { estado: { codigo: { notIn: ESTADOS_SIN_CUPO } } } as const
+export const CUENTAN_COMO_INTEGRANTE = { estado: { codigo: { notIn: ESTADOS_SIN_CUPO } } } as const
 
 /** El tipo que lleva una delegación (lo recalcula el servidor con la modalidad y el tamaño del grupo). */
 export interface TipoDelegacionResumido {

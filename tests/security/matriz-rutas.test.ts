@@ -169,6 +169,8 @@ const MATRIZ: Record<Clave, Esperada> = {
     // delegation
     'GET /v1/events/:eventId/delegations': g('eventos.configurar', P()),
     'POST /v1/events/:eventId/delegations': g('eventos.configurar', P()),
+    'GET /v1/events/:eventId/delegations/tarifa': g('eventos.configurar', P()),
+    'PUT /v1/events/:eventId/delegations/tarifa': g('eventos.configurar', P()),
     'GET /v1/delegations/:id': g('eventos.configurar', eventoDeDelegacion),
     'PUT /v1/delegations/:id': g('eventos.configurar', eventoDeDelegacion),
     'POST /v1/delegations/:id/inscriptions': g('eventos.configurar', eventoDeDelegacion),
@@ -289,7 +291,7 @@ const esValidacion = (h: Handle) => h.validaCuerpo === true
 /** Limitadores con clave por cuenta: necesitan `req.actor`, que deja la guarda. */
 const LIMITES_POR_ACTOR: readonly RequestHandler[] = [limiteMarcarAsistencia, limiteCheckInPonencia, limiteReenvioCredencial, limiteRenovacionSesion, limiteSwitch]
 /** Total de rutas de /api: una ruta nueva obliga a clasificarla aquí. */
-const TOTAL_RUTAS = 156
+const TOTAL_RUTAS = 158
 
 function clasesDe(ruta: Ruta): Clase[] {
     const clases: Clase[] = []

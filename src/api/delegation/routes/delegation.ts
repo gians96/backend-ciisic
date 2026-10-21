@@ -6,7 +6,7 @@ import { limiteInscripcion, limiteLecturaPublica, limiteTokenInscripcion, limite
 import { requireTokenEvento } from '../../../middlewares/sitio'
 import { MAX_VOUCHERS_POR_ENVIO, uploadVarios, validateUploadedFilesContent } from '../../../middlewares/upload'
 import { eventoDeDelegacion, eventoDelParametro } from '../../../core/resolutores-evento'
-import { crearDelegacionSchema, editarDelegacionSchema, inscribirEnDelegacionSchema } from '../validation'
+import { crearDelegacionSchema, editarDelegacionSchema, inscribirEnDelegacionSchema, tarifaDelegacionesSchema } from '../validation'
 
 /** Hasta `MAX_VOUCHERS_POR_ENVIO` vouchers en el campo `vouchers`, con la firma de cada archivo comprobada. */
 const vouchers = [uploadVarios.array('vouchers', MAX_VOUCHERS_POR_ENVIO), validateUploadedFilesContent]
@@ -40,6 +40,9 @@ const routes: AppRoute[] = [
     // aprobar al grupo también lo hace quien valida inscripciones (Tesorero y Comisión de sus eventos)
     { method: 'get', path: '/v1/events/:eventId/delegations', handler: controller.list, middlewares: [requirePermiso('eventos.configurar', { evento: eventoDelParametro('eventId') })] },
     { method: 'post', path: '/v1/events/:eventId/delegations', handler: controller.create, middlewares: [requirePermiso('eventos.configurar', { evento: eventoDelParametro('eventId') }), validateBody(crearDelegacionSchema)] },
+    // Tarifa del evento (spec 024): precios presencial y virtual y mínimo de integrantes
+    { method: 'get', path: '/v1/events/:eventId/delegations/tarifa', handler: controller.tarifa, middlewares: [requirePermiso('eventos.configurar', { evento: eventoDelParametro('eventId') })] },
+    { method: 'put', path: '/v1/events/:eventId/delegations/tarifa', handler: controller.saveTarifa, middlewares: [requirePermiso('eventos.configurar', { evento: eventoDelParametro('eventId') }), validateBody(tarifaDelegacionesSchema)] },
     { method: 'get', path: '/v1/delegations/:id', handler: controller.find, middlewares: [requirePermiso('eventos.configurar', { evento: eventoDeDelegacion })] },
     { method: 'put', path: '/v1/delegations/:id', handler: controller.update, middlewares: [requirePermiso('eventos.configurar', { evento: eventoDeDelegacion }), validateBody(editarDelegacionSchema)] },
     {
