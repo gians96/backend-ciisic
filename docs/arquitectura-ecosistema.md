@@ -269,47 +269,32 @@ spec 012; la landing la sirve desde su BFF), `POST /inscriptions`, `/student-ver
   Repetir es idempotente (`yaInscrito`) y nunca modifica a una persona que ya existe.
 - **Cambio compatible**: rutas nuevas; la landing anterior no las usa.
 
-### Delegaciones: registro de un grupo con pago conjunto (spec 021)
+### Delegaciones con convenio (specs 021, 022 y 023)
 
-Definido en `backend-ciisic/specs/021-delegaciones/contracts/api-delegaciones.md`. El representante
-de un grupo (universidad, institución) lo inscribe **entero** desde la landing y paga el total con
-**un solo voucher**. Rutas: `GET /api/v1/site/delegations/tarifa` (la tarifa por defecto del
-evento), `GET /api/v1/site/delegations/link/:codigoLink` (una delegación por su link) y
-`POST /api/v1/site/delegations` (el registro, en multipart).
+Definido en `backend-ciisic/specs/023-delegaciones-convenio/contracts/api-delegaciones-convenio.md`
+(continúa las specs 021 y 022 y las reemplaza en dos puntos: el pago ya no es un único voucher y el
+tipo ya no lo elige el delegado). Un **delegado** (de una universidad o institución) inscribe a su
+grupo desde un **link oculto** de la landing, sin menú ni enlaces, y paga con **uno o varios
+vouchers**. Rutas: `GET /api/v1/site/delegations/tarifa` (presencial y virtual),
+`GET /api/v1/site/delegations/link/:codigoLink` (la vista del grupo), `POST /api/v1/site/delegations`
+(registro en multipart: `delegacion`, `representante`, `participantes`, `modalidad`, `pagos` y
+`vouchers`) y, con el link, `POST …/link/:codigoLink/participants` y `POST …/link/:codigoLink/payments`.
 
-- El **pago es de la delegación**: un solo número de operación, fecha, medio y voucher, en
-  `delegaciones`. Cada inscripción lleva un número de operación interno (`DELEGACION-<uuid>`),
-  porque el de la inscripción es único.
-- La **tarifa la calcula el servidor** con el total final del grupo (la promocional desde
-  `minIntegrantes`); el cliente solo muestra un estimado. La tarifa por defecto es **del evento**
-  (`eventos.delegaciones_*`) y cada delegación la copia al crearse.
-- El link de una delegación **exige el token del evento**: una delegación de otro evento responde
-  `404`. Dos delegaciones del mismo evento no pueden compartir el número de operación del voucher.
-- El staff ve el pago conjunto y el voucher del grupo en el panel
-  (`GET /api/v1/delegations/:id/voucher`, `eventos.configurar`).
-
-### Tipos de delegación: General y Promocional (spec 022)
-
-Definido en `backend-ciisic/specs/022-tipos-delegacion/contracts/api-tipos-delegacion.md`. La
-landing pide al representante que elija una de dos tarjetas de tipo de inscripción —«Delegación
-General» (`delegacion_general`) y «Delegación Promocional» (`delegacion_grupal`)— de la categoría
-`DELEGACIONES` del evento; el tipo elegido queda visible en el panel y **no cambia la regla de
-precios** (la promocional aplica desde `minIntegrantes`, como siempre).
-
-- **La tarifa sale de los tipos**: `GET /api/v1/site/delegations/tarifa` resuelve
-  `precioEstandar`/`precioPromocional` desde los precios de `delegacion_general` y
-  `delegacion_grupal`; si faltan, usa `eventos.delegaciones_*`. Cada delegación copia esos
-  precios al crearse (editar los tipos no repricesa grupos existentes).
-- `POST /api/v1/site/delegations` acepta `tipoInscripcionId` (opcional en el contrato; la landing
-  siempre lo envía) y lo guarda en la delegación y en **cada inscripción del grupo**. Inválido →
-  `422 REGISTRATION_TYPE_NOT_AVAILABLE`. Con `codigoLink` la elección **actualiza** el tipo de la
-  delegación existente.
-- El link de la delegación (`GET /api/v1/site/delegations/link/:codigoLink`) expone
-  `tipoInscripcion` (o `null`), para que la landing precargue la tarjeta; el registro responde lo
-  mismo en su `data`.
-- El panel ve el tipo en el listado y el detalle de las delegaciones (`tipoInscripcion`), y el
-  detalle de inscripciones incluye su `delegacion` (grupo e integrantes; el pago conjunto solo
-  con `pagos.ver`). El voucher del grupo también lo puede ver quien solo tiene `pagos.ver`.
+- **El servidor decide el tipo y el precio**; el cliente solo muestra un estimado. Presencial:
+  `delegacion_general` (S/ 60) con menos de `minIntegrantes` (10) y `delegacion_grupal` (S/ 50, sin
+  kit) desde ahí. Virtual: `delegacion_virtual` (S/ 30 sin escalas). Al cruzar el mínimo, **todos**
+  pasan al precio y al tipo nuevos. La tarifa sale de los precios de esos tipos (fallback:
+  `eventos.delegaciones_*`) y cada delegación la copia al crearse.
+- `tarifa.virtual` es `null` mientras el evento no tenga el tipo `delegacion_virtual`: la landing no
+  ofrece la modalidad (y registrar una virtual responde `422 DELEGATION_MODALITY_NOT_AVAILABLE`).
+- **Pagos múltiples** (`delegacion_pagos`): cada voucher lleva su archivo, medio, número de operación
+  (único en el evento), fecha y el monto que dice; el staff lo verifica o rechaza. Cada inscripción
+  del grupo lleva un número de operación interno (`DELEGACION-<uuid>`).
+- El registro es **atómico** (grupo, integrantes y vouchers en una transacción). Con su link el delegado
+  **solo agrega** integrantes y vouchers: no hay rutas del sitio para borrar ni editar.
+- La vista del link **exige el token del evento** (otro evento → `404`) y enmascara documentos y
+  números de operación; no expone el correo ni el teléfono del delegado.
+- **Cambio compatible**: rutas y tablas nuevas; la landing anterior no las usa.
 
 ### Correo conservado al reinscribirse (spec 014)
 
@@ -444,37 +429,29 @@ El panel la consume solo a través de su BFF (`/api/backend/**`), que agrega el
   `specs/019-ponencias-especializadas/contracts/api-ponencias-especializadas.md`. Un panel anterior
   simplemente no muestra esas pantallas.
 
-### Delegaciones
+### Delegaciones (specs 021, 022 y 023)
 
-Módulo de grupos o instituciones que inscriben a sus integrantes con una tarifa por persona según
-el tamaño de la delegación (`minIntegrantes`; por defecto 10). La tarifa se calcula en el servidor:
-`N >= minIntegrantes ? precioPromocional : precioEstandar` (60 → 50 por defecto). Al cruzar el
-mínimo se actualiza el `monto` de **todas** las inscripciones de la delegación.
+Definido en `specs/023-delegaciones-convenio/contracts/api-delegaciones-convenio.md`. Grupos que
+inscriben a sus integrantes con una tarifa por persona que decide el servidor según la modalidad y el
+tamaño del grupo (ver el contrato 3). Cada alta o baja de un integrante recalcula el `monto` y el tipo
+de **todas** las inscripciones activas del grupo (los `RECHAZADO` y `CANCELADO` no cuentan).
 
-- `POST /api/v1/events/:eventId/delegations` (`eventos.configurar`): crea la delegación y su
-  `codigoLink` (16 hexadecimales, único). Cuerpo: `nombre` (obligatorio), `institucion`,
-  `representanteNombre`, `representanteEmail`, `representanteTelefono`, `minIntegrantes`,
-  `precioEstandar`, `precioPromocional`.
-- `GET /api/v1/events/:eventId/delegations`: lista con `totalIntegrantes`, `precioUnitario`,
-  `montoTotal` y `tipoInscripcion` (el que eligió esa delegación: `delegacion_general` /
-  `delegacion_grupal`, o `null`; spec 022).
-- `GET /api/v1/delegations/:id`: detalle con `tipoInscripcion` y `inscripciones` (participante,
-  estado y monto).
-- `POST /api/v1/delegations/:id/inscriptions`: alta manual o masiva
-  (`{ participantes: [{ tipoDocumento, numeroDocumento, nombres, apellidos, correo, celular? }] }`,
-  máximo 200). Rechaza `409 DUPLICATE_PARTICIPANT`, `409 EMAIL_IN_USE` y
-  `409 PARTICIPANT_ALREADY_REGISTERED`; omite a quien ya está en esta delegación y reutiliza la
-  inscripción rechazada o cancelada (spec 017). Responde el detalle con `registrados` y `omitidos`.
-  Las inscripciones que crea o actualiza **heredan el tipo de la delegación** (spec 022).
-- `GET /api/v1/delegations/:id/voucher`: el voucher del grupo; `eventos.configurar` **o**
-  `pagos.ver` (spec 022, para verlo desde el detalle de una inscripción).
-- `GET /api/v1/delegations/link/:codigoLink` (**pública**): datos para el formulario al que lleva el
-  link compartido (delegación, evento, integrantes, tarifa y `tipoInscripcion`), sin correo ni
-  teléfono del representante. El formulario de la landing debe enviar los integrantes a la ruta
-  administrativa o a la que defina su propio contrato.
+- `GET|POST /api/v1/events/:eventId/delegations` (`eventos.configurar`): lista y alta (delegado con
+  documento, correo y celular; `modalidad`; integrantes opcionales). Cada delegación trae su
+  `codigoLink` (16 hexadecimales), `modalidad`, `tipoInscripcion` vigente y el resumen `pago`
+  (`totalAPagar`, `declarado`, `verificado`, `saldo`).
+- `GET|PUT /api/v1/delegations/:id`: detalle (`pagos[]` e `inscripciones[]`) y edición; la modalidad
+  solo cambia mientras no haya integrantes.
+- `POST /api/v1/delegations/:id/inscriptions` (alta manual o masiva, máximo 200) y
+  `DELETE …/inscriptions/:inscriptionId` (solo integrantes no aprobados).
+- `POST /api/v1/delegations/:id/approve`: aprueba a los integrantes por revisar y envía las
+  credenciales en diferido, una por una (`eventos.configurar` o `inscripciones.validar`).
+- Vouchers: `POST /api/v1/delegations/:id/payments` (multipart), `PATCH …/payments/:paymentId`
+  (`PENDIENTE`, `VERIFICADO` o `RECHAZADO`) y `DELETE …`; el archivo en
+  `GET …/payments/:paymentId/voucher` (`eventos.configurar` o `pagos.ver`).
 - En `GET /api/v1/events/:eventId/inscriptions` y `GET /api/v1/inscriptions/:id` cada fila/detalle
-  incluye `delegacion` (`null` si es inscripción individual): `id`, `nombre`, `codigoLink` y
-  `totalIntegrantes`; en el detalle también `pago` (el conjunto del grupo, solo con `pagos.ver`).
+  incluye `delegacion` (`null` si es individual): `id`, `nombre`, `codigoLink` y `totalIntegrantes`;
+  en el detalle también `modalidad` y el resumen `pago` (solo con `pagos.ver`).
 
 ### Escáner, credencial y operación (spec 014)
 
