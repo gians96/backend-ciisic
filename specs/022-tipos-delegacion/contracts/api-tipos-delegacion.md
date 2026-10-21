@@ -1,5 +1,11 @@
 # Contrato: tipos de inscripción de delegación (spec 022)
 
+> **Reemplazado en parte por la spec 023**
+> ([`api-delegaciones-convenio.md`](../../023-delegaciones-convenio/contracts/api-delegaciones-convenio.md)):
+> el delegado **ya no elige** el tipo (`tipoInscripcionId` deja de ser un campo del registro); el
+> servidor lo decide con la modalidad y el número de integrantes (`delegacion_general`,
+> `delegacion_grupal` o `delegacion_virtual`). Los códigos de tipo siguen siendo contrato.
+
 Continúa el contrato de delegaciones (`specs/021-delegaciones/contracts/api-delegaciones.md`):
 agrega la selección del tipo de delegación y la delegación en el listado/detalle de inscripciones.
 

@@ -1,5 +1,11 @@
 # Contrato: registro de delegaciones (spec 021)
 
+> **Reemplazado en parte por la spec 023**
+> ([`api-delegaciones-convenio.md`](../../023-delegaciones-convenio/contracts/api-delegaciones-convenio.md)):
+> el pago ya no es un único voucher de la delegación sino una lista de vouchers (`pagos[]`), el
+> registro lleva `modalidad` y `pagos` + `vouchers`, y `GET /v1/delegations/:id/voucher` pasó a
+> `GET /v1/delegations/:id/payments/:paymentId/voucher`. Lo demás de este contrato sigue vigente.
+
 API del sitio (contrato 3) que consume la landing. El evento sale **siempre** del token de acceso
 (`X-Api-Key`); el cliente nunca envía precios ni montos.
 
