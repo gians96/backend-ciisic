@@ -135,6 +135,58 @@ describe('lista, detalle y CSV según «pagos.ver»', () => {
         expect(r.status).toBe(403)
         expect(r.body.code).toBe('FORBIDDEN')
     })
+
+    it('las inscripciones de una delegación traen su grupo y su pago conjunto (spec 022)', async () => {
+        const enGrupo = inscripcion({
+            delegacion: {
+                id: 8, nombre: 'Ing. de Sistemas UNDC', codigoLink: 'abc123def456',
+                modalidadPago: 'billetera', banco: null, billeteraDigital: 'yape', tipoOperacion: null,
+                numeroOperacion: 'OP-GRUPO', fechaPago: new Date('2026-09-19T00:00:00Z'),
+                montoTotalPagado: new Prisma.Decimal(300), voucherArchivo: 'voucher-8.png',
+                _count: { inscripciones: 5 },
+            },
+        })
+        m.inscripcion.findMany.mockResolvedValue([enGrupo])
+        m.inscripcion.findUnique.mockResolvedValue(enGrupo)
+
+        const lista = await request(app).get('/api/v1/events/2/inscriptions').set(con(tesorero()))
+        expect(lista.status).toBe(200)
+        expect(lista.body.data[0].delegacion).toEqual({
+            id: 8, nombre: 'Ing. de Sistemas UNDC', codigoLink: 'abc123def456', totalIntegrantes: 5,
+        })
+
+        const detalle = await request(app).get('/api/v1/inscriptions/5').set(con(tesorero()))
+        expect(detalle.status).toBe(200)
+        expect(detalle.body.data.delegacion).toMatchObject({
+            id: 8, nombre: 'Ing. de Sistemas UNDC', codigoLink: 'abc123def456', totalIntegrantes: 5,
+            pago: {
+                modalidad: 'billetera', billeteraDigital: 'yape', numeroOperacion: 'OP-GRUPO',
+                fechaPago: '2026-09-19', montoTotalPagado: 300, tieneVoucher: true,
+            },
+        })
+    })
+
+    it('sin «pagos.ver» el bloque de la delegación lleva el pago en null (spec 022)', async () => {
+        m.inscripcion.findUnique.mockResolvedValue(inscripcion({
+            delegacion: {
+                id: 8, nombre: 'Ing. de Sistemas UNDC', codigoLink: 'abc123def456',
+                modalidadPago: 'billetera', banco: null, billeteraDigital: 'yape', tipoOperacion: null,
+                numeroOperacion: 'OP-GRUPO', fechaPago: new Date('2026-09-19T00:00:00Z'),
+                montoTotalPagado: new Prisma.Decimal(300), voucherArchivo: 'voucher-8.png',
+                _count: { inscripciones: 5 },
+            },
+        }))
+        const r = await request(app).get('/api/v1/inscriptions/5').set(con(comision()))
+        expect(r.status).toBe(200)
+        expect(r.body.data.delegacion).toMatchObject({ id: 8, totalIntegrantes: 5, pago: null })
+    })
+
+    it('una inscripción individual no trae delegación', async () => {
+        const lista = await request(app).get('/api/v1/events/2/inscriptions').set(con(tesorero()))
+        expect(lista.body.data[0].delegacion).toBeNull()
+        const detalle = await request(app).get('/api/v1/inscriptions/5').set(con(tesorero()))
+        expect(detalle.body.data.delegacion).toBeNull()
+    })
 })
 
 describe('alcance por evento', () => {

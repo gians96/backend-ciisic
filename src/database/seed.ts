@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import { Prisma } from '@prisma/client'
 import { prisma } from './prisma'
 import { ROL, ROLES, type CodigoRol, type ModalidadAsistencia } from '../core/catalogos'

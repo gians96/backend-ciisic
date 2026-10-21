@@ -8,7 +8,7 @@ import { rutaLegacy } from '../../src/middlewares/legacy'
 import { limiteCheckInPonencia, limiteMarcarAsistencia, limiteReenvioCredencial, limiteRenovacionSesion, limiteSwitch } from '../../src/middlewares/rate-limit'
 import { ALCANCE, type Permiso } from '../../src/core/permisos'
 import {
-    eventoDeActividad, eventoDeAsistencia, eventoDeInscripcion, eventoDeInscripcionPonencia, eventoDelParametro, eventoDeMensaje, eventoDePonencia, eventoDePonenciaEspecializada,
+    eventoDeActividad, eventoDeAsistencia, eventoDeDelegacion, eventoDeInscripcion, eventoDeInscripcionPonencia, eventoDelParametro, eventoDeMensaje, eventoDePonencia, eventoDePonenciaEspecializada,
 } from '../../src/core/resolutores-evento'
 
 /**
@@ -85,6 +85,9 @@ const PUBLICAS: readonly Clave[] = [
 const SITIO: readonly Clave[] = [
     'GET /v1/site/catalogs',
     'POST /v1/site/contact',
+    'GET /v1/site/delegations/tarifa',
+    'GET /v1/site/delegations/link/:codigoLink',
+    'POST /v1/site/delegations',
     'GET /v1/site/document-lookup/dni/:numero',
     'GET /v1/site/event',
     'POST /v1/site/google-verification',
@@ -160,6 +163,14 @@ const MATRIZ: Record<Clave, Esperada> = {
     'GET /v1/events/:eventId/contact-messages': g('mensajes.ver', P()),
     'PATCH /v1/contact-messages/:id': g('mensajes.ver', eventoDeMensaje),
     'DELETE /v1/contact-messages/:id': g('mensajes.eliminar', eventoDeMensaje),
+
+    // delegation
+    'GET /v1/events/:eventId/delegations': g('eventos.configurar', P()),
+    'POST /v1/events/:eventId/delegations': g('eventos.configurar', P()),
+    'GET /v1/delegations/:id': g('eventos.configurar', eventoDeDelegacion),
+    // El voucher del grupo también lo ve quien revisa pagos (spec 022)
+    'GET /v1/delegations/:id/voucher': g(['eventos.configurar', 'pagos.ver'], eventoDeDelegacion),
+    'POST /v1/delegations/:id/inscriptions': g('eventos.configurar', eventoDeDelegacion),
 
     // document-lookup
     'GET /v1/document-lookup/dni/:numero': g('consultas_dni.gestionar'),
@@ -269,7 +280,7 @@ const esValidacion = (h: Handle) => h.validaCuerpo === true
 /** Limitadores con clave por cuenta: necesitan `req.actor`, que deja la guarda. */
 const LIMITES_POR_ACTOR: readonly RequestHandler[] = [limiteMarcarAsistencia, limiteCheckInPonencia, limiteReenvioCredencial, limiteRenovacionSesion, limiteSwitch]
 /** Total de rutas de /api: una ruta nueva obliga a clasificarla aquí. */
-const TOTAL_RUTAS = 140
+const TOTAL_RUTAS = 148
 
 function clasesDe(ruta: Ruta): Clase[] {
     const clases: Clase[] = []
@@ -338,7 +349,7 @@ describe('matriz de rutas (spec 013)', () => {
         expect(malas).toEqual([])
         // La detección de multer y validateBody funciona (si no, lo anterior no probaría nada)
         expect(rutas.filter((r) => r.handles.some(esMulter)).map((r) => r.clave).sort()).toEqual([
-            'POST /v1/inscription', 'POST /v1/papers', 'POST /v1/payment-qr', 'POST /v1/site/inscriptions', 'POST /v1/site/papers', 'PUT /v1/me/photo',
+            'POST /v1/inscription', 'POST /v1/papers', 'POST /v1/payment-qr', 'POST /v1/site/delegations', 'POST /v1/site/inscriptions', 'POST /v1/site/papers', 'PUT /v1/me/photo',
         ].sort())
         expect(rutas.filter((r) => r.handles.some(esValidacion)).length).toBeGreaterThan(30)
     })
