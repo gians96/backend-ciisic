@@ -394,6 +394,12 @@ model Asesor {
   id            Int             @id @default(autoincrement())
   eventoId      Int             @map("evento_id")
   nombre        String          @db.VarChar(200)
+  /// Enlace público del docente (spec 026): token aleatorio de 43 caracteres (256 bits) con el que el docente ve
+  /// el avance de sus estudiantes sin iniciar sesión. `null` = sin enlace (nunca se creó o se desactivó).
+  enlaceToken        String?   @unique(map: "uq_asesores_enlace_token") @map("enlace_token") @db.VarChar(64)
+  enlaceCreadoEn     DateTime? @map("enlace_creado_en")
+  /// Última vez que el docente abrió su enlace (se actualiza como máximo cada 5 minutos).
+  enlaceUltimoAcceso DateTime? @map("enlace_ultimo_acceso")
   creadoEn      DateTime        @default(now()) @map("creado_en")
   actualizadoEn DateTime        @updatedAt @map("actualizado_en")
   evento        Evento          @relation(fields: [eventoId], references: [id], onDelete: Cascade, map: "fk_asesores_evento")

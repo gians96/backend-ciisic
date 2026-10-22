@@ -105,3 +105,8 @@ export const limiteSwitch = limitador(15 * MINUTO, 20, 'Demasiados cambios de pe
 export const limiteLecturaReportes = limitador(MINUTO, 120, undefined, { clave: 'actor' })
 export const limiteDescargaReportes = limitador(MINUTO, 20, 'Demasiadas descargas de reportes. Espera un minuto.', { clave: 'actor' })
 export const limiteCargaPadron = limitador(15 * MINUTO, 10, 'Demasiadas cargas del padrón. Intenta nuevamente en 15 minutos.', { clave: 'actor' })
+
+// Enlaces públicos de los docentes (spec 026). La administración va por cuenta de staff; la vista pública, por visitante
+export const limiteEnlacesAsesores = limitador(15 * MINUTO, 60, undefined, { clave: 'actor' })
+export const limiteVistaDocente = limitador(MINUTO, 40, 'Demasiadas consultas. Espera un momento e inténtalo de nuevo.')
+export const limiteDescargaDocente = limitador(MINUTO, 10, 'Demasiadas descargas. Espera un minuto.')

@@ -6,7 +6,7 @@ import { requireParticipante, requirePermiso, requireSesion, type GuardaPermiso 
 import { requireTokenEvento } from '../../src/middlewares/sitio'
 import { rutaLegacy } from '../../src/middlewares/legacy'
 import {
-    limiteCargaPadron, limiteCheckInPonencia, limiteDescargaReportes, limiteLecturaReportes, limiteMarcarAsistencia, limiteReenvioCredencial, limiteRenovacionSesion, limiteSwitch,
+    limiteCargaPadron, limiteCheckInPonencia, limiteDescargaReportes, limiteEnlacesAsesores, limiteLecturaReportes, limiteMarcarAsistencia, limiteReenvioCredencial, limiteRenovacionSesion, limiteSwitch,
 } from '../../src/middlewares/rate-limit'
 import { ALCANCE, type Permiso } from '../../src/core/permisos'
 import {
@@ -81,6 +81,9 @@ const PUBLICAS: readonly Clave[] = [
     'POST /v1/papers',
     'GET /v1/registration-types',
     'GET /v1/registration-types/:id',
+    // Vista del docente con su enlace (spec 026): sin sesión, el token va en X-Link-Token y hay topes por IP
+    'GET /v1/public/advisor',
+    'GET /v1/public/advisor/export',
 ]
 
 /** API del sitio: el evento sale del token de acceso (`requireTokenEvento`). */
@@ -276,6 +279,10 @@ const MATRIZ: Record<Clave, Esperada> = {
     'GET /v1/events/:eventId/advisory/students': g('reportes.ver', P()),
     'GET /v1/events/:eventId/advisory/export': g('reportes.exportar', P()),
     'POST /v1/events/:eventId/advisory/import': g('reportes.gestionar'),
+    // spec 026: ver, crear, renovar y desactivar los enlaces de los docentes (son credenciales)
+    'GET /v1/events/:eventId/advisory/links': g('reportes.gestionar'),
+    'POST /v1/events/:eventId/advisory/links': g('reportes.gestionar'),
+    'DELETE /v1/events/:eventId/advisory/links/:asesorId': g('reportes.gestionar'),
 
     // system-settings
     'GET /v1/settings': g('sistema.configurar'),
@@ -298,10 +305,10 @@ const esMulter = (h: Handle) => h.name === 'multerMiddleware'
 const esValidacion = (h: Handle) => h.validaCuerpo === true
 /** Limitadores con clave por cuenta: necesitan `req.actor`, que deja la guarda. */
 const LIMITES_POR_ACTOR: readonly RequestHandler[] = [
-    limiteMarcarAsistencia, limiteCheckInPonencia, limiteReenvioCredencial, limiteRenovacionSesion, limiteSwitch, limiteLecturaReportes, limiteDescargaReportes, limiteCargaPadron,
+    limiteMarcarAsistencia, limiteCheckInPonencia, limiteReenvioCredencial, limiteRenovacionSesion, limiteSwitch, limiteLecturaReportes, limiteDescargaReportes, limiteCargaPadron, limiteEnlacesAsesores,
 ]
 /** Total de rutas de /api: una ruta nueva obliga a clasificarla aquí. */
-const TOTAL_RUTAS = 162
+const TOTAL_RUTAS = 167
 
 function clasesDe(ruta: Ruta): Clase[] {
     const clases: Clase[] = []
@@ -391,7 +398,8 @@ describe('matriz de rutas (spec 013)', () => {
         expect(con(limiteReenvioCredencial)).toEqual(['POST /v1/inscriptions/:id/resend-credential'])
         expect(con(limiteRenovacionSesion)).toEqual(['POST /v1/auth/refresh'])
         expect(con(limiteSwitch)).toEqual(['POST /v1/auth/participant/switch'])
-        expect(con(limiteLecturaReportes)).toEqual(['GET /v1/events/:eventId/advisory/summary', 'GET /v1/events/:eventId/advisory/students'])
+        expect(con(limiteLecturaReportes)).toEqual(['GET /v1/events/:eventId/advisory/summary', 'GET /v1/events/:eventId/advisory/students', 'GET /v1/events/:eventId/advisory/links'])
+        expect(con(limiteEnlacesAsesores)).toEqual(['POST /v1/events/:eventId/advisory/links', 'DELETE /v1/events/:eventId/advisory/links/:asesorId'])
         expect(con(limiteDescargaReportes)).toEqual(['GET /v1/events/:eventId/advisory/export'])
         expect(con(limiteCargaPadron)).toEqual(['POST /v1/events/:eventId/advisory/import'])
     })

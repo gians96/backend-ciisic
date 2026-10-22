@@ -25,6 +25,8 @@ export interface DatosReporte {
     resumen: ResumenSeguimiento
     /** Incluye la tabla «Por asesor» (un reporte de un solo asesor no la necesita). */
     conTablaDeAsesores: boolean
+    /** Reporte del enlace público de un docente (spec 026): sin DNI, correo ni nombres de otros asesores. */
+    publico?: boolean
 }
 
 export function marcaDeTiempo(fecha: Date): string {

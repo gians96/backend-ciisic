@@ -164,11 +164,11 @@ export function generarPdf(datos: DatosReporte): Promise<Buffer> {
             dibujante.titulo('Por ciclo y sección')
             const ocupado = 28 + 34 + 28 + columnasNumericas.reduce((suma, c) => suma + c.ancho, 0)
             dibujante.tabla(
-                [{ titulo: 'Ciclo', ancho: 28, centrar: true }, { titulo: 'Sección', ancho: 34, centrar: true }, { titulo: 'Turno', ancho: 28, centrar: true }, ...columnasNumericas, { titulo: 'Asesores', ancho: 782 - ocupado }],
+                [{ titulo: 'Ciclo', ancho: 28, centrar: true }, { titulo: 'Sección', ancho: 34, centrar: true }, { titulo: 'Turno', ancho: 28, centrar: true }, ...columnasNumericas, ...(datos.publico ? [] : [{ titulo: 'Asesores', ancho: 782 - ocupado }])],
                 datos.resumen.porSeccion.map((r) => [
                     { texto: r.ciclo }, { texto: r.seccion }, { texto: r.turnos.join(', ') },
                     ...contadores.map((c) => ({ texto: String(c.valor(r)) })),
-                    { texto: r.asesores.map((a) => a.nombre).join('; ') },
+                    ...(datos.publico ? [] : [{ texto: r.asesores.map((a) => a.nombre).join('; ') }]),
                 ]),
             )
 
@@ -188,17 +188,17 @@ export function generarPdf(datos: DatosReporte): Promise<Buffer> {
             dibujante.titulo(`Alumnos (${datos.filas.length})`)
             const fijas: Columna[] = [
                 { titulo: 'Ciclo', ancho: 28, centrar: true }, { titulo: 'Sec.', ancho: 28, centrar: true }, { titulo: 'Turno', ancho: 30, centrar: true },
-                { titulo: 'Código', ancho: 62 }, { titulo: 'DNI', ancho: 52 }, { titulo: 'Alumno', ancho: 190 }, { titulo: 'Celular', ancho: 58 },
+                { titulo: 'Código', ancho: 62 }, ...(datos.publico ? [] : [{ titulo: 'DNI', ancho: 52 }]), { titulo: 'Alumno', ancho: datos.publico ? 330 : 190 }, { titulo: 'Celular', ancho: 58 },
                 { titulo: 'Situación', ancho: 72, centrar: true }, ...(datos.conPago ? [{ titulo: 'Monto', ancho: 44, centrar: true }] : []),
             ]
             const resto = 782 - fijas.reduce((suma, c) => suma + c.ancho, 0)
             dibujante.tabla(
-                [...fijas, { titulo: 'Asesores', ancho: resto }],
+                [...fijas, ...(datos.publico ? [] : [{ titulo: 'Asesores', ancho: resto }])],
                 datos.filas.map((f) => [
-                    { texto: f.ciclo }, { texto: f.seccion }, { texto: f.turno ?? '' }, { texto: f.codigo }, { texto: f.documento }, { texto: f.nombre }, { texto: f.celular ?? '' },
+                    { texto: f.ciclo }, { texto: f.seccion }, { texto: f.turno ?? '' }, { texto: f.codigo }, ...(datos.publico ? [] : [{ texto: f.documento }]), { texto: f.nombre }, { texto: f.celular ?? '' },
                     { texto: etiquetaDeSituacion(f.situacion), situacion: f.situacion },
                     ...(datos.conPago ? [{ texto: f.monto === null ? '' : f.monto.toFixed(2) }] : []),
-                    { texto: asesoresDe(f) },
+                    ...(datos.publico ? [] : [{ texto: asesoresDe(f) }]),
                 ]),
             )
 

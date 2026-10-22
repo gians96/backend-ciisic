@@ -471,6 +471,20 @@ padrón con las inscripciones del evento (documento, código de estudiante o cor
 - `POST …/advisory/import` (`reportes.gestionar`, solo Owner y Administrador): sube el Excel; `?simular=true` solo valida.
 - Sin `pagos.ver` los montos, fechas de pago y el recaudado van en `null`.
 
+#### Enlace público por docente (spec 026)
+
+Contrato en `specs/026-enlaces-docentes/contracts/api-enlaces-docentes.md` (panel: spec 017). Cada asesor puede tener un token
+personal (256 bits) con el que ve, **sin sesión**, cómo van sus estudiantes. El enlace lo arma el panel:
+`<origen del panel>/seguimiento#<token>` (lo que va tras el `#` no se envía a ningún servidor); el BFF del panel lo reenvía al
+backend en `X-Link-Token`, nunca en una URL.
+
+- `GET|POST /api/v1/events/:eventId/advisory/links` y `DELETE …/links/:asesorId` (`reportes.gestionar`, global): listar, crear/renovar y
+  desactivar enlaces. El token es una credencial: ni el Tesorero ni la Comisión lo ven.
+- `GET /api/v1/public/advisor` y `GET …/export?formato=xlsx|pdf` (sin sesión, `X-Link-Token`): solo los estudiantes de ese asesor y
+  **solo** nombre, código, ciclo, sección, turno, celular y situación (nunca DNI, correo ni montos). Token inválido, desactivado o
+  renovado: `404 LINK_NOT_FOUND`, siempre igual.
+- Recargar el padrón conserva los enlaces por nombre del asesor.
+
 ### Escáner, credencial y operación (spec 014)
 
 Definido en `specs/014-portal-fotocheck-asistencia/contracts/api-asistencia.md` (panel: spec 009).

@@ -151,6 +151,11 @@ y Google. Documentación: [`docs/`](docs/README.md).
   `RECHAZADO`/`CANCELADO` «rechazado» y no cuentan; no pagaron = todo lo que no es `PAGADO`. Sin `pagos.ver` montos, fechas y recaudado van en
   `null`. Un filtro inválido es `422`, nunca se ignora. `exceljs` se carga solo al importar o descargar (`await import`); el PDF es `pdfkit`
   (sin Chromium). Permisos: `reportes.ver`/`reportes.exportar` por evento (Tesorero y Comisión elegible), `reportes.gestionar` global.
+- Enlace público por docente (spec 026): `asesores.enlace_token` (256 bits, en claro a propósito para poder mostrarlo) abre `GET /v1/public/advisor`
+  (+ `/export`) **sin sesión** con `X-Link-Token`: el token **nunca va en una URL** (ni en logs de `morgan`; en el navegador va tras el `#`). La vista pública
+  da solo nombre, código, ciclo, sección, turno, celular y situación: **jamás** DNI, correo, montos, fechas de pago ni otros asesores (hay una prueba que lo
+  comprueba). Token faltante, mal formado, desconocido o desactivado = el mismo `404 LINK_NOT_FOUND`. Ver, crear, renovar y desactivar enlaces es
+  `reportes.gestionar` (global): es una credencial. Recargar el padrón conserva los enlaces por nombre del asesor. Respuestas `no-store` y `noindex`.
 - Reglas del dominio institucional fijas en `src/core/correo-institucional.ts` (`undc.edu.pe`,
   parte local numérica = estudiante).
 - Las rutas legacy existen para la landing anterior y se apagan desde el panel (Sistema).
@@ -229,7 +234,7 @@ con ambos sistemas levantados.
 
 Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Cada cambio
 empieza en `specs/NNN-nombre/` (spec → plan → tasks → contracts) y se marcan las tasks al
-implementar. Specs actuales: 001–014 y 016–025 (ver [README](README.md)); la 015 (certificados) tiene
+implementar. Specs actuales: 001–014 y 016–026 (ver [README](README.md)); la 015 (certificados) tiene
 solo su diseño (`research.md`).
 
 ## Antes de dar por terminado

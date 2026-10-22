@@ -1,6 +1,7 @@
 import { prisma } from '../../../database/prisma'
 import { unprocessable } from '../../../core/http-error'
 import { leerLibroDePadron, type PadronLeido } from './lector-excel'
+import { claveDeTexto } from './seguimiento'
 
 export interface ResultadoImportacion {
     semestre: string
@@ -40,13 +41,27 @@ export async function importarPadron(eventoId: number, contenido: Buffer, opcion
     if (!opciones.aplicar) return resultado
 
     await prisma.$transaction(async (tx) => {
+        // Los enlaces públicos ya entregados a los docentes (spec 026) sobreviven a una nueva carga: se
+        // reasignan al asesor del mismo nombre (sin acentos ni mayúsculas); el resto empieza sin enlace
+        const conEnlace = await tx.asesor.findMany({
+            where: { eventoId, enlaceToken: { not: null } },
+            select: { nombre: true, enlaceToken: true, enlaceCreadoEn: true, enlaceUltimoAcceso: true },
+        })
+        const enlaces = new Map(conEnlace.map((a) => [claveDeTexto(a.nombre), a]))
+
         // Las secciones de cada asesor se borran en cascada
         await tx.asesor.deleteMany({ where: { eventoId } })
         await tx.padronEstudiante.deleteMany({ where: { eventoId } })
         await tx.padronEstudiante.createMany({ data: leido.estudiantes.map((e) => ({ ...e, eventoId, semestre })) })
         for (const asesor of leido.asesores) {
+            const enlace = enlaces.get(claveDeTexto(asesor.nombre))
             await tx.asesor.create({
-                data: { eventoId, nombre: asesor.nombre, secciones: { create: asesor.secciones.map(({ ciclo, seccion }) => ({ eventoId, ciclo, seccion })) } },
+                data: {
+                    eventoId,
+                    nombre: asesor.nombre,
+                    ...(enlace ? { enlaceToken: enlace.enlaceToken, enlaceCreadoEn: enlace.enlaceCreadoEn, enlaceUltimoAcceso: enlace.enlaceUltimoAcceso } : {}),
+                    secciones: { create: asesor.secciones.map(({ ciclo, seccion }) => ({ eventoId, ciclo, seccion })) },
+                },
             })
         }
     }, { maxWait: 10_000, timeout: 60_000 })

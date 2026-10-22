@@ -66,8 +66,8 @@ function hojaResumen(libro: Workbook, datos: DatosReporte): void {
         contadores.map((_, i) => i + 1), dineroDespues(1),
     )
     siguiente = tabla(
-        hoja, siguiente, 'Por ciclo y sección', ['Ciclo', 'Sección', 'Turno', ...contadores.map((c) => c.titulo), 'Asesores'],
-        datos.resumen.porSeccion.map((r) => [r.ciclo, r.seccion, r.turnos.join(', '), ...contadores.map((c) => c.valor(r)), r.asesores.map((a) => a.nombre).join('\n')]),
+        hoja, siguiente, 'Por ciclo y sección', ['Ciclo', 'Sección', 'Turno', ...contadores.map((c) => c.titulo), ...(datos.publico ? [] : ['Asesores'])],
+        datos.resumen.porSeccion.map((r) => [r.ciclo, r.seccion, r.turnos.join(', '), ...contadores.map((c) => c.valor(r)), ...(datos.publico ? [] : [r.asesores.map((a) => a.nombre).join('\n')])]),
         contadores.map((_, i) => i + 3), dineroDespues(3),
     )
     if (datos.conTablaDeAsesores) {
@@ -88,9 +88,12 @@ function hojaResumen(libro: Workbook, datos: DatosReporte): void {
     hoja.getColumn(3 + contadores.length).width = 44
 }
 
-function hojaDeAlumnos(libro: Workbook, nombre: string, filas: readonly FilaSeguimiento[], conPago: boolean): void {
+/** Columnas que no salen en el reporte público de un docente: datos que no necesita para el seguimiento. */
+const COLUMNAS_PRIVADAS = ['DNI', 'Correo', 'Asesores']
+
+function hojaDeAlumnos(libro: Workbook, nombre: string, filas: readonly FilaSeguimiento[], conPago: boolean, publico = false): void {
     const hoja = libro.addWorksheet(nombre, { views: [{ state: 'frozen', ySplit: 1 }] })
-    const columnas: Array<{ titulo: string, ancho: number, valor: (f: FilaSeguimiento) => string | number | null }> = [
+    const todas: Array<{ titulo: string, ancho: number, valor: (f: FilaSeguimiento) => string | number | null }> = [
         { titulo: 'Ciclo', ancho: 8, valor: (f) => f.ciclo },
         { titulo: 'Sección', ancho: 9, valor: (f) => f.seccion },
         { titulo: 'Turno', ancho: 8, valor: (f) => f.turno },
@@ -108,6 +111,7 @@ function hojaDeAlumnos(libro: Workbook, nombre: string, filas: readonly FilaSegu
             : []),
         { titulo: 'Asesores', ancho: 46, valor: (f) => asesoresDe(f).replace(/; /g, '\n') },
     ]
+    const columnas = publico ? todas.filter((c) => !COLUMNAS_PRIVADAS.includes(c.titulo)) : todas
     hoja.columns = columnas.map((c) => ({ header: c.titulo, width: c.ancho }))
     estiloCabecera(hoja, 1, columnas.length)
     const columnaSituacion = columnas.findIndex((c) => c.titulo === 'Situación') + 1
@@ -135,9 +139,9 @@ export async function generarExcel(datos: DatosReporte): Promise<Buffer> {
     libro.created = datos.generadoEn
 
     hojaResumen(libro, datos)
-    hojaDeAlumnos(libro, 'Alumnos', datos.filas, datos.conPago)
-    hojaDeAlumnos(libro, 'Pagaron', datos.alcance.filter((f) => f.situacion === 'PAGADO'), datos.conPago)
-    hojaDeAlumnos(libro, 'No pagaron', datos.alcance.filter((f) => f.situacion !== 'PAGADO'), datos.conPago)
+    hojaDeAlumnos(libro, 'Alumnos', datos.filas, datos.conPago, datos.publico)
+    hojaDeAlumnos(libro, 'Pagaron', datos.alcance.filter((f) => f.situacion === 'PAGADO'), datos.conPago, datos.publico)
+    hojaDeAlumnos(libro, 'No pagaron', datos.alcance.filter((f) => f.situacion !== 'PAGADO'), datos.conPago, datos.publico)
 
     return Buffer.from(await libro.xlsx.writeBuffer())
 }
