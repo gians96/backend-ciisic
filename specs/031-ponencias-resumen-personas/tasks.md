@@ -8,5 +8,5 @@
 - [x] T006 Rutas, controlador, validación y límites por cuenta (`limiteDescargaResumenPonencias`, `limiteAvisosPonencias`)
 - [x] T007 Pruebas (`tests/specialized-talk/resumen.test.ts`) y matriz de rutas (186)
 - [x] T008 Contrato, AGENTS.md, README y `docs/arquitectura-ecosistema.md`
-- [ ] T009 Panel (spec 022): pantalla «Resumen» con filtros, descarga, cancelar y avisar
+- [x] T009 Panel (spec 022): pantalla «Resumen» con filtros, descarga, cancelar y avisar (rama `feat/ponencias-resumen-personas` del panel)
 - [ ] T010 Producción: desplegar, revisar el resumen y decidir a quién se cancela o avisa (con permiso)
