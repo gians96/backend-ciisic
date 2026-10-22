@@ -12,7 +12,9 @@ const numeroDocumento = () => yup.string().trim().required().when('tipoDocumento
 const celular = () => yup.string().trim().matches(/^\+?\d{9,15}$/, 'El celular debe tener entre 9 y 15 dígitos')
 
 /** Plan que elige el integrante (spec 029). Sin plan, el servidor usa el único activo de la delegación. */
-const plan = () => yup.string().trim().uppercase().oneOf([...CODIGOS_PLAN], 'Plan no válido')
+const plan = () => yup.string().trim().uppercase()
+    .transform((valor: unknown) => (valor === '' ? undefined : valor))
+    .oneOf([...CODIGOS_PLAN], 'Plan no válido')
 
 export const participanteDelegacionSchema = yup.object({
     tipoDocumento: yup.string().oneOf(['dni', 'ce']).required(),

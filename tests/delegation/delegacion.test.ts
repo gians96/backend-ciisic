@@ -382,6 +382,12 @@ describe('API del sitio: link individual', () => {
         expect(m.inscripcion.create.mock.calls[0][0].data.tipoInscripcionId).toBe(32)
     })
 
+    it('un plan vacío cuenta como no elegido (PLAN_REQUIRED, no un error de formato)', async () => {
+        const r = await unirse().send(alta({ plan: '', correoPrefijo: 'ana' }))
+        expect(r.status).toBe(422)
+        expect(r.body.code).toBe('PLAN_REQUIRED')
+    })
+
     it('un plan apagado o inexistente no se puede elegir', async () => {
         m.delegacion.findUnique.mockResolvedValue(completa({ dominioCorreo: 'unac.edu.pe', planes: categoria([conKit, { ...sinKit, activo: false }, virtual]) }))
         const apagado = await unirse().send(alta({ correoPrefijo: 'ana', plan: 'SIN_KIT' }))
