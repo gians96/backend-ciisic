@@ -8,14 +8,14 @@ const { ponencias } = JSON.parse(fs.readFileSync(archivo, 'utf8')) as { ponencia
 
 describe('prisma/datos/ponencias-especializadas-2026.json', () => {
     it('todas las ponencias cumplen el esquema de creación', async () => {
-        await expect(yup.array().of(crearPonenciaSchema).required().validate(ponencias, { abortEarly: false })).resolves.toHaveLength(18)
+        await expect(yup.array().of(crearPonenciaSchema).required().validate(ponencias, { abortEarly: false })).resolves.toHaveLength(19)
     })
 
-    it('hay 7 el martes 27 y 11 el miércoles 28, todas de 12:00 a 12:45', async () => {
+    it('hay 7 el martes 27 y 12 el miércoles 28, todas de 12:00 a 12:45', async () => {
         const lista = await yup.array().of(crearPonenciaSchema).required().validate(ponencias)
         const porDia = (fecha: string) => lista.filter((p) => p.fecha === fecha)
         expect(porDia('2026-10-27')).toHaveLength(7)
-        expect(porDia('2026-10-28')).toHaveLength(11)
+        expect(porDia('2026-10-28')).toHaveLength(12)
         for (const p of lista) expect([p.horaInicio, p.horaFin]).toEqual(['12:00', '12:45'])
     })
 
