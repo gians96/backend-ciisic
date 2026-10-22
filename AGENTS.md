@@ -144,6 +144,13 @@ y Google. Documentación: [`docs/`](docs/README.md).
   el tipo virtual, lo crea; cambiarla **no** altera lo ya copiado a cada delegación (solo `aplicarAExistentes`
   alcanza a las que no tienen integrantes ni vouchers), y una delegación con integrantes se reprecia con
   `PUT /v1/delegations/:id`.
+- Seguimiento por asesor (spec 025, `src/api/advisory`): el padrón de estudiantes de la facultad (`padron_estudiantes`) y sus
+  asesores (`asesores`, `asesores_secciones`) se cargan con el Excel de la facultad (`POST /v1/events/:eventId/advisory/import`, reemplaza todo;
+  `?simular=true` solo valida) y **el pago no se guarda**: cada consulta lo cruza con las inscripciones por documento, luego código de
+  estudiante y luego correo (`services/seguimiento.ts`, puro). **Pagó = inscripción `APROBADO`**; `PENDIENTE`/`EN_REVISION` son «en revisión»,
+  `RECHAZADO`/`CANCELADO` «rechazado» y no cuentan; no pagaron = todo lo que no es `PAGADO`. Sin `pagos.ver` montos, fechas y recaudado van en
+  `null`. Un filtro inválido es `422`, nunca se ignora. `exceljs` se carga solo al importar o descargar (`await import`); el PDF es `pdfkit`
+  (sin Chromium). Permisos: `reportes.ver`/`reportes.exportar` por evento (Tesorero y Comisión elegible), `reportes.gestionar` global.
 - Reglas del dominio institucional fijas en `src/core/correo-institucional.ts` (`undc.edu.pe`,
   parte local numérica = estudiante).
 - Las rutas legacy existen para la landing anterior y se apagan desde el panel (Sistema).
@@ -222,7 +229,7 @@ con ambos sistemas levantados.
 
 Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Cada cambio
 empieza en `specs/NNN-nombre/` (spec → plan → tasks → contracts) y se marcan las tasks al
-implementar. Specs actuales: 001–014 y 016–024 (ver [README](README.md)); la 015 (certificados) tiene
+implementar. Specs actuales: 001–014 y 016–025 (ver [README](README.md)); la 015 (certificados) tiene
 solo su diseño (`research.md`).
 
 ## Antes de dar por terminado

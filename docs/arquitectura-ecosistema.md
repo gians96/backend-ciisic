@@ -458,6 +458,19 @@ de **todas** las inscripciones activas del grupo (los `RECHAZADO` y `CANCELADO` 
   incluye `delegacion` (`null` si es individual): `id`, `nombre`, `codigoLink` y `totalIntegrantes`;
   en el detalle también `modalidad` y el resumen `pago` (solo con `pagos.ver`).
 
+### Seguimiento por asesor (spec 025)
+
+Definido en `specs/025-reportes-asesores/contracts/api-seguimiento-asesores.md` (panel: spec 016). El padrón de
+estudiantes de la facultad y sus asesores viven en el backend; **el pago no se guarda**: cada consulta cruza el
+padrón con las inscripciones del evento (documento, código de estudiante o correo) y *pagó* es solo una inscripción
+`APROBADO`.
+
+- `GET /api/v1/events/:eventId/advisory/summary` y `…/students` (`reportes.ver`): indicadores, cuadros por ciclo,
+  sección y asesor, y el listado paginado, con filtros (`asesorId`, `ciclo`, `seccion`, `turno`, `situacion`, `q`).
+- `GET …/advisory/export?formato=xlsx|pdf` (`reportes.exportar`): el mismo reporte, por asesor o general.
+- `POST …/advisory/import` (`reportes.gestionar`, solo Owner y Administrador): sube el Excel; `?simular=true` solo valida.
+- Sin `pagos.ver` los montos, fechas de pago y el recaudado van en `null`.
+
 ### Escáner, credencial y operación (spec 014)
 
 Definido en `specs/014-portal-fotocheck-asistencia/contracts/api-asistencia.md` (panel: spec 009).

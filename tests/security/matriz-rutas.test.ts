@@ -5,7 +5,9 @@ import * as auth from '../../src/middlewares/auth'
 import { requireParticipante, requirePermiso, requireSesion, type GuardaPermiso } from '../../src/middlewares/auth'
 import { requireTokenEvento } from '../../src/middlewares/sitio'
 import { rutaLegacy } from '../../src/middlewares/legacy'
-import { limiteCheckInPonencia, limiteMarcarAsistencia, limiteReenvioCredencial, limiteRenovacionSesion, limiteSwitch } from '../../src/middlewares/rate-limit'
+import {
+    limiteCargaPadron, limiteCheckInPonencia, limiteDescargaReportes, limiteLecturaReportes, limiteMarcarAsistencia, limiteReenvioCredencial, limiteRenovacionSesion, limiteSwitch,
+} from '../../src/middlewares/rate-limit'
 import { ALCANCE, type Permiso } from '../../src/core/permisos'
 import {
     eventoDeActividad, eventoDeAsistencia, eventoDeDelegacion, eventoDeInscripcion, eventoDeInscripcionPonencia, eventoDelParametro, eventoDeMensaje, eventoDePonencia, eventoDePonenciaEspecializada,
@@ -269,6 +271,12 @@ const MATRIZ: Record<Clave, Esperada> = {
     'POST /v1/specialized-talks/:id/check-in': g('especializadas.asistencia', eventoDePonenciaEspecializada),
     'DELETE /v1/specialized-talk-registrations/:id/attendance': g('especializadas.asistencia', eventoDeInscripcionPonencia),
 
+    // advisory (spec 025): el seguimiento por asesor lo ven y descargan las cuentas del evento; el padrón lo carga una cuenta global
+    'GET /v1/events/:eventId/advisory/summary': g('reportes.ver', P()),
+    'GET /v1/events/:eventId/advisory/students': g('reportes.ver', P()),
+    'GET /v1/events/:eventId/advisory/export': g('reportes.exportar', P()),
+    'POST /v1/events/:eventId/advisory/import': g('reportes.gestionar'),
+
     // system-settings
     'GET /v1/settings': g('sistema.configurar'),
     'PUT /v1/settings': g('sistema.configurar'),
@@ -289,9 +297,11 @@ const esGuarda = (h: Handle) => Object.prototype.hasOwnProperty.call(h, 'guarda'
 const esMulter = (h: Handle) => h.name === 'multerMiddleware'
 const esValidacion = (h: Handle) => h.validaCuerpo === true
 /** Limitadores con clave por cuenta: necesitan `req.actor`, que deja la guarda. */
-const LIMITES_POR_ACTOR: readonly RequestHandler[] = [limiteMarcarAsistencia, limiteCheckInPonencia, limiteReenvioCredencial, limiteRenovacionSesion, limiteSwitch]
+const LIMITES_POR_ACTOR: readonly RequestHandler[] = [
+    limiteMarcarAsistencia, limiteCheckInPonencia, limiteReenvioCredencial, limiteRenovacionSesion, limiteSwitch, limiteLecturaReportes, limiteDescargaReportes, limiteCargaPadron,
+]
 /** Total de rutas de /api: una ruta nueva obliga a clasificarla aquí. */
-const TOTAL_RUTAS = 158
+const TOTAL_RUTAS = 162
 
 function clasesDe(ruta: Ruta): Clase[] {
     const clases: Clase[] = []
@@ -360,7 +370,7 @@ describe('matriz de rutas (spec 013)', () => {
         expect(malas).toEqual([])
         // La detección de multer y validateBody funciona (si no, lo anterior no probaría nada)
         expect(rutas.filter((r) => r.handles.some(esMulter)).map((r) => r.clave).sort()).toEqual([
-            'POST /v1/inscription', 'POST /v1/papers', 'POST /v1/delegations/:id/payments', 'POST /v1/payment-qr', 'POST /v1/site/delegations', 'POST /v1/site/delegations/link/:codigoLink/payments', 'POST /v1/site/inscriptions', 'POST /v1/site/papers', 'PUT /v1/me/photo',
+            'POST /v1/inscription', 'POST /v1/papers', 'POST /v1/events/:eventId/advisory/import', 'POST /v1/delegations/:id/payments', 'POST /v1/payment-qr', 'POST /v1/site/delegations', 'POST /v1/site/delegations/link/:codigoLink/payments', 'POST /v1/site/inscriptions', 'POST /v1/site/papers', 'PUT /v1/me/photo',
         ].sort())
         expect(rutas.filter((r) => r.handles.some(esValidacion)).length).toBeGreaterThan(30)
     })
@@ -381,6 +391,9 @@ describe('matriz de rutas (spec 013)', () => {
         expect(con(limiteReenvioCredencial)).toEqual(['POST /v1/inscriptions/:id/resend-credential'])
         expect(con(limiteRenovacionSesion)).toEqual(['POST /v1/auth/refresh'])
         expect(con(limiteSwitch)).toEqual(['POST /v1/auth/participant/switch'])
+        expect(con(limiteLecturaReportes)).toEqual(['GET /v1/events/:eventId/advisory/summary', 'GET /v1/events/:eventId/advisory/students'])
+        expect(con(limiteDescargaReportes)).toEqual(['GET /v1/events/:eventId/advisory/export'])
+        expect(con(limiteCargaPadron)).toEqual(['POST /v1/events/:eventId/advisory/import'])
     })
 
     it('todo permiso por evento (E) tiene resolutor de evento o filtraPorActor', () => {

@@ -125,6 +125,8 @@ model Evento {
   tokensAcceso            TokenAcceso[]
   asignaciones            AsignacionEvento[]
   delegaciones            Delegacion[]
+  asesores                Asesor[]
+  padronEstudiantes       PadronEstudiante[]
 
   @@index([credencialCorreoId], map: "idx_eventos_credencial_correo")
   @@map("eventos")
@@ -382,6 +384,66 @@ model DelegacionPago {
   @@index([delegacionId], map: "idx_delegacion_pagos_delegacion")
   @@index([revisadoPorId], map: "idx_delegacion_pagos_revisado_por")
   @@map("delegacion_pagos")
+}
+
+// ─── Seguimiento por asesor (spec 025) ───────────────────────────────────────
+
+/// Docente que acompaña a una o más secciones de estudiantes (spec 025). El nombre se guarda tal como
+/// lo escribe la facultad en su Excel («DRA. ANGOMA ASTUCURI MIRIAM»); no es una cuenta del panel.
+model Asesor {
+  id            Int             @id @default(autoincrement())
+  eventoId      Int             @map("evento_id")
+  nombre        String          @db.VarChar(200)
+  creadoEn      DateTime        @default(now()) @map("creado_en")
+  actualizadoEn DateTime        @updatedAt @map("actualizado_en")
+  evento        Evento          @relation(fields: [eventoId], references: [id], onDelete: Cascade, map: "fk_asesores_evento")
+  secciones     AsesorSeccion[]
+
+  @@unique([eventoId, nombre], map: "uq_asesores_evento_nombre")
+  @@map("asesores")
+}
+
+/// Ciclo y sección que atiende un asesor (spec 025). Una sección puede tener varios asesores.
+model AsesorSeccion {
+  asesorId Int    @map("asesor_id")
+  /// Denormalizado para buscar los asesores de una sección sin pasar por `asesores`.
+  eventoId Int    @map("evento_id")
+  ciclo    String @db.VarChar(10)
+  seccion  String @db.VarChar(10)
+  asesor   Asesor @relation(fields: [asesorId], references: [id], onDelete: Cascade, map: "fk_asesores_secciones_asesor")
+
+  @@id([asesorId, ciclo, seccion])
+  @@index([eventoId, ciclo, seccion], map: "idx_asesores_secciones_evento_seccion")
+  @@map("asesores_secciones")
+}
+
+/// Estudiante del padrón de un semestre que sigue cada asesor (spec 025). Lo carga la facultad con su
+/// Excel; el pago **no** se guarda aquí: se cruza en cada consulta con las inscripciones del evento.
+model PadronEstudiante {
+  id           Int      @id @default(autoincrement())
+  eventoId     Int      @map("evento_id")
+  /// Semestre académico del padrón («2026-2»).
+  semestre     String   @db.VarChar(10)
+  documento    String   @db.VarChar(20)
+  codigo       String   @db.VarChar(20)
+  correo       String?  @db.VarChar(191)
+  /// «APELLIDOS NOMBRES» tal como viene del Excel (no se separa).
+  nombre       String   @db.VarChar(200)
+  celular      String?  @db.VarChar(20)
+  carrera      String   @db.VarChar(120)
+  ciclo        String   @db.VarChar(10)
+  turno        String?  @db.VarChar(5)
+  seccion      String   @db.VarChar(10)
+  distrito     String?  @db.VarChar(80)
+  provincia    String?  @db.VarChar(80)
+  departamento String?  @db.VarChar(80)
+  creadoEn     DateTime @default(now()) @map("creado_en")
+  evento       Evento   @relation(fields: [eventoId], references: [id], onDelete: Cascade, map: "fk_padron_estudiantes_evento")
+
+  @@unique([eventoId, codigo], map: "uq_padron_estudiantes_evento_codigo")
+  @@index([eventoId, ciclo, seccion], map: "idx_padron_estudiantes_evento_seccion")
+  @@index([eventoId, documento], map: "idx_padron_estudiantes_evento_documento")
+  @@map("padron_estudiantes")
 }
 
 // ─── Actividades y asistencia ────────────────────────────────────────────────

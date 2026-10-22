@@ -59,6 +59,7 @@ nuevo venga verificado con Google (`correoConservado: true`); solo el staff lo c
 | Tipos de delegación (General y Promocional) y delegación en inscripciones | [`specs/022-tipos-delegacion/contracts/api-tipos-delegacion.md`](../specs/022-tipos-delegacion/contracts/api-tipos-delegacion.md) |
 | Delegaciones con convenio: modalidad, vouchers múltiples, integrantes editables y aprobación del grupo | [`specs/023-delegaciones-convenio/contracts/api-delegaciones-convenio.md`](../specs/023-delegaciones-convenio/contracts/api-delegaciones-convenio.md) |
 | Tarifa de delegaciones administrable: precios presencial y virtual, mínimo de integrantes y aplicación a las existentes | [`specs/024-tarifa-delegaciones/contracts/api-tarifa-delegaciones.md`](../specs/024-tarifa-delegaciones/contracts/api-tarifa-delegaciones.md) |
+| Reportes de seguimiento por asesor: padrón de estudiantes, resumen, listado, descarga Excel/PDF y carga del Excel de la facultad | [`specs/025-reportes-asesores/contracts/api-seguimiento-asesores.md`](../specs/025-reportes-asesores/contracts/api-seguimiento-asesores.md) |
 | Rutas legacy (landing anterior) | [`specs/002-multi-evento/contracts/api-publica.md`](../specs/002-multi-evento/contracts/api-publica.md) |
 
 ## Límites

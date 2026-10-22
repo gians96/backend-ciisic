@@ -109,3 +109,26 @@ export function validateUploadedFilesContent(req: Request, res: Response, next: 
     removeUploadedFiles(req)
     res.status(422).json({ success: false, code: 'INVALID_FILE_CONTENT', message: 'El contenido del archivo no coincide con su formato' })
 }
+
+// ─── Excel del padrón (spec 025) ────────────────────────────────────────────
+
+/** Tamaño máximo del Excel del padrón: el de una facultad pesa menos de 1 MB. */
+export const MAX_BYTES_EXCEL = 5 * 1024 * 1024
+
+/** El Excel se lee en memoria (no se guarda): solo el staff con «reportes.gestionar» lo sube. */
+export const uploadExcel = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: MAX_BYTES_EXCEL, files: 1 },
+    fileFilter: (_req, file, cb) => {
+        if (path.extname(file.originalname).toLowerCase() !== '.xlsx') {
+            cb(new HttpError(422, 'INVALID_FILE_TYPE', 'Archivo no permitido. Sube el Excel de la facultad (.xlsx).'))
+            return
+        }
+        cb(null, true)
+    },
+})
+
+/** Un `.xlsx` es un ZIP: empieza con `PK\x03\x04`. */
+export function esLibroXlsx(contenido: Buffer): boolean {
+    return contenido.length > 4 && contenido[0] === 0x50 && contenido[1] === 0x4b && contenido[2] === 0x03 && contenido[3] === 0x04
+}

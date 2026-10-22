@@ -100,3 +100,8 @@ export const limiteReenvioCredencial = limitador(15 * MINUTO, 20, 'Demasiados re
 export const limiteRenovacionSesion = limitador(15 * MINUTO, 30, undefined, { clave: 'actor' })
 /** Paso del staff a su portal de participante (`POST /v1/auth/participant/switch`, spec 014). */
 export const limiteSwitch = limitador(15 * MINUTO, 20, 'Demasiados cambios de perfil. Intenta nuevamente en 15 minutos.', { clave: 'actor' })
+
+// Reportes de seguimiento por asesor (spec 025), por cuenta de staff
+export const limiteLecturaReportes = limitador(MINUTO, 120, undefined, { clave: 'actor' })
+export const limiteDescargaReportes = limitador(MINUTO, 20, 'Demasiadas descargas de reportes. Espera un minuto.', { clave: 'actor' })
+export const limiteCargaPadron = limitador(15 * MINUTO, 10, 'Demasiadas cargas del padrón. Intenta nuevamente en 15 minutos.', { clave: 'actor' })

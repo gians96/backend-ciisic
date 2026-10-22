@@ -25,6 +25,7 @@ export const ALCANCE = {
     'legacy.usar': 'G',
     'certificados.gestionar': 'G',
     'especializadas.gestionar': 'G',
+    'reportes.gestionar': 'G',
 
     'resumen.ver': 'E',
     'inscripciones.ver': 'E',
@@ -45,6 +46,8 @@ export const ALCANCE = {
     'especializadas.ver': 'E',
     'especializadas.inscribir': 'E',
     'especializadas.asistencia': 'E',
+    'reportes.ver': 'E',
+    'reportes.exportar': 'E',
 } as const
 
 export type Permiso = keyof typeof ALCANCE
@@ -70,6 +73,7 @@ export const ETIQUETAS_PERMISO: Record<Permiso, string> = {
     'legacy.usar': 'Usar las rutas de la versión anterior',
     'certificados.gestionar': 'Gestionar plantillas y emitir certificados',
     'especializadas.gestionar': 'Crear, editar y eliminar ponencias especializadas',
+    'reportes.gestionar': 'Cargar el padrón de estudiantes y los asesores por sección',
 
     'resumen.ver': 'Ver el resumen del evento',
     'inscripciones.ver': 'Ver inscritos (nombre, documento, correo y celular)',
@@ -90,6 +94,8 @@ export const ETIQUETAS_PERMISO: Record<Permiso, string> = {
     'especializadas.ver': 'Ver las ponencias especializadas y sus inscritos',
     'especializadas.inscribir': 'Inscribir manualmente a ponencias especializadas y corregir inscripciones',
     'especializadas.asistencia': 'Tomar asistencia en ponencias especializadas (inscribe al instante con el DNI)',
+    'reportes.ver': 'Ver el seguimiento de estudiantes por asesor',
+    'reportes.exportar': 'Descargar el seguimiento por asesor en Excel y PDF',
 }
 
 /** Un permiso implica otros: se aplican al guardar y al cargar al actor. */
@@ -106,6 +112,8 @@ export const DEPENDENCIAS: Partial<Record<Permiso, readonly Permiso[]>> = {
     'certificados.operar': ['certificados.ver'],
     'especializadas.inscribir': ['especializadas.ver'],
     'especializadas.asistencia': ['especializadas.ver'],
+    'reportes.ver': ['inscripciones.ver'],
+    'reportes.exportar': ['reportes.ver'],
 }
 
 const TODOS = PERMISOS
@@ -123,6 +131,8 @@ const PERMISOS_TESORERO: readonly Permiso[] = [
     'ponencias.ver',
     'mensajes.ver',
     'certificados.ver',
+    'reportes.ver',
+    'reportes.exportar',
 ]
 
 /**
@@ -144,6 +154,8 @@ export const PERMISOS_ELEGIBLES_COMISION: readonly Permiso[] = [
     'especializadas.ver',
     'especializadas.inscribir',
     'especializadas.asistencia',
+    'reportes.ver',
+    'reportes.exportar',
 ]
 
 /** Permiso con el que se crea por defecto una cuenta de la Comisión. */
