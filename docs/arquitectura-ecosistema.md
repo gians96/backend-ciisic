@@ -274,6 +274,9 @@ spec 012; la landing la sirve desde su BFF), `POST /inscriptions`, `/student-ver
   del sitio). Ruta nueva `POST /api/v1/site/specialized-talk-eligibility` (documento + correo → modo presencial o virtual). Solo el modo
   presencial ocupa el `cupo`; `cuposDisponibles` y `llena` son del aforo presencial. Errores: `CONGRESS_REGISTRATION_NOT_FOUND`,
   `CONGRESS_PAYMENT_PENDING`, `CONGRESS_REGISTRATION_REJECTED`, `FREE_ACCESS_ENABLED`. Cambio aditivo (migración con valores por defecto).
+- **Spec 031** (`backend-ciisic/specs/031-ponencias-resumen-personas/contracts/api-ponencias-resumen-personas.md`, solo panel): `GET /api/v1/events/:eventId/specialized-talk-attendees`
+  (+ `/export` a Excel) da una fila por persona con su situación actual en el congreso y totales; `POST …/cancel` cancela (motivo `SIN_CONGRESO`) a quien hoy no puede asistir y,
+  con `notificar`, le envía un comunicado por correo; `POST …/notify` solo avisa. Cambio aditivo (valor nuevo del enum de motivos y una columna nula).
 
 ### Delegaciones con planes propios (specs 021, 022, 023 y 029)
 

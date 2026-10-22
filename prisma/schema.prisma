@@ -570,6 +570,8 @@ enum OrigenInscripcionPonencia {
 enum MotivoCancelacionPonencia {
   STAFF
   CAMBIO_EN_PUERTA
+  /// El staff la canceló porque la persona no está inscrita al congreso con el pago aprobado (spec 031)
+  SIN_CONGRESO
 }
 
 /// Ponencia especializada del evento (no es la `Ponencia` del Call for Papers). La duración se deriva de
@@ -641,6 +643,8 @@ model InscripcionPonencia {
   inscripcionCongresoId Int?                   @map("inscripcion_congreso_id")
   /// Cómo asiste a la ponencia, según su inscripción al congreso. Solo la presencial ocupa aforo.
   modoAsistencia    ModalidadAsistencia        @default(PRESENCIAL) @map("modo_asistencia")
+  /// Cuándo se le envió el comunicado desde el panel (cancelación o aviso previo, spec 031). NULL = sin avisar.
+  avisoEnviadoEn    DateTime?                  @map("aviso_enviado_en")
   creadoEn          DateTime                   @default(now()) @map("creado_en")
   actualizadoEn     DateTime                   @updatedAt @map("actualizado_en")
   ponencia          PonenciaEspecializada      @relation(fields: [ponenciaId], references: [id], map: "fk_inscripciones_ponencia_ponencia")

@@ -57,3 +57,29 @@ export function esFotoValida(foto: string): boolean {
     if (foto.length > 255 || foto.includes('..') || /\s/.test(foto)) return false
     return /^\/(?!\/)[\w./-]+$/.test(foto) || /^https:\/\/[^\s/]+\/\S*$/i.test(foto) || /^https:\/\/[^\s/]+$/i.test(foto)
 }
+
+// ─── Resumen por persona (spec 031) ─────────────────────────────────────────
+
+/** Situación actual de una persona inscrita a ponencias frente a su inscripción al congreso. */
+export type SituacionCongreso = 'APROBADO' | 'PAGO_PENDIENTE' | 'RECHAZADO' | 'NO_INSCRITO'
+
+export const SITUACIONES_CONGRESO: readonly SituacionCongreso[] = ['APROBADO', 'PAGO_PENDIENTE', 'RECHAZADO', 'NO_INSCRITO']
+
+/** La situación que corresponde al veredicto de `resolverElegibilidad`. */
+export function situacionDe(veredicto: Elegibilidad): SituacionCongreso {
+    if (veredicto.ok) return 'APROBADO'
+    switch (veredicto.motivo) {
+        case 'PAGO_PENDIENTE': return 'PAGO_PENDIENTE'
+        case 'RECHAZADA': return 'RECHAZADO'
+        default: return 'NO_INSCRITO'
+    }
+}
+
+/**
+ * Formas con las que puede estar guardado un documento: tal cual y, en el DNI, sin los ceros a la izquierda
+ * (Excel los pierde, y los participantes importados pueden tener 7 dígitos).
+ */
+export function variantesDocumento(tipo: string, numero: string): string[] {
+    const sinCeros = numero.replace(/^0+/, '')
+    return tipo === 'dni' && sinCeros && sinCeros !== numero ? [numero, sinCeros] : [numero]
+}

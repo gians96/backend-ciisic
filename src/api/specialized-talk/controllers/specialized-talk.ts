@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express'
 import { badRequest, idParam } from '../../../core/http-error'
 import type { Actor } from '../../../core/actor'
-import { REGEX_FECHA } from '../../../core/fechas'
+import { REGEX_FECHA, fechaLima } from '../../../core/fechas'
 import { parsePagination } from '../../../core/pagination'
 import type { AuthenticatedRequest } from '../../../middlewares/auth'
 import { eventoDelSitio } from '../../../middlewares/sitio'
@@ -9,10 +9,16 @@ import * as talks from '../services/talks'
 import * as registrations from '../services/registrations'
 import * as checkin from '../services/checkin'
 import * as acceso from '../services/acceso'
+import * as resumen from '../services/resumen'
+import * as avisos from '../services/avisos'
+import { generarExcelResumen } from '../services/exportar-resumen'
+import { contentDisposition, nombreDeArchivo } from '../../advisory/exports/reporte'
+import { obtenerEventoPorId } from '../../event/services/public-event'
+import { SITUACIONES_CONGRESO } from '../../../core/ponencias-especializadas'
 import { verificarCongresista } from '../services/congresista'
 import {
     MODALIDADES, ORIGENES_INSCRIPCION_PONENCIA, ESTADOS_INSCRIPCION_PONENCIA, PROCEDENCIAS,
-    type AsistenteInput, type EditarInscripcionInput, type ElegibilidadInput, type InscripcionSitioInput,
+    type AsistenteInput, type AvisarSinCongresoInput, type CancelarSinCongresoInput, type EditarInscripcionInput, type ElegibilidadInput, type InscripcionSitioInput,
 } from '../validation'
 
 /** La guarda de permisos deja la cuenta en `req.actor`; sin ella la ruta está mal cableada. */
@@ -97,6 +103,45 @@ export async function checkIn(req: Request, res: Response) {
 export async function removeAttendance(req: Request, res: Response) {
     await registrations.anularAsistencia(idParam(req.params.id), actorDe(req))
     res.json({ success: true, data: null })
+}
+
+// ─── Resumen por persona, cancelación y comunicado (spec 031) ───────────────
+
+function filtrosResumen(query: Request['query']): resumen.FiltrosResumen {
+    return {
+        situacion: opcion(query.situacion, SITUACIONES_CONGRESO, 'situacion'),
+        puede: opcion(query.puede, ['si', 'no'] as const, 'puede'),
+        validacion: opcion(query.validacion, ['si', 'no'] as const, 'validacion'),
+        modo: opcion(query.modo, MODALIDADES, 'modo'),
+        aviso: opcion(query.aviso, ['si', 'no'] as const, 'aviso'),
+        q: texto(query.q)?.slice(0, 100),
+    }
+}
+
+export async function attendees(req: Request, res: Response) {
+    const { data, meta } = await resumen.listarResumen(idParam(req.params.eventId, 'eventId'), filtrosResumen(req.query), parsePagination(req.query, 20, 100))
+    res.json({ success: true, data, meta })
+}
+
+/** `GET …/specialized-talk-attendees/export`: el Excel con los filtros de la consulta; siempre se calcula en el momento. */
+export async function attendeesExport(req: Request, res: Response) {
+    const evento = await obtenerEventoPorId(idParam(req.params.eventId, 'eventId'))
+    const filtros = filtrosResumen(req.query)
+    const { personas, accesoLibre } = await resumen.cargarPersonas(evento.id)
+    const generadoEn = new Date()
+    const contenido = await generarExcelResumen(evento, personas, resumen.filtrar(personas, filtros), filtros, accesoLibre, generadoEn)
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', contentDisposition(nombreDeArchivo(`Ponencias especializadas ${evento.codigo} ${fechaLima(generadoEn)}`, 'xlsx')))
+    res.setHeader('Cache-Control', 'no-store')
+    res.send(contenido)
+}
+
+export async function cancelAttendees(req: Request, res: Response) {
+    res.json({ success: true, data: await avisos.cancelarSinCongreso(idParam(req.params.eventId, 'eventId'), req.body as CancelarSinCongresoInput, actorDe(req)) })
+}
+
+export async function notifyAttendees(req: Request, res: Response) {
+    res.json({ success: true, data: await avisos.avisarSinCongreso(idParam(req.params.eventId, 'eventId'), req.body as AvisarSinCongresoInput, actorDe(req)) })
 }
 
 // ─── Acceso libre del evento (spec 030) ─────────────────────────────────────

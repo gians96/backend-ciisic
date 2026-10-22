@@ -41,6 +41,7 @@ virtual, asistencia y perfil con foto).
 | [027](specs/027-enlaces-ciclo) | Enlace público por ciclo: quien lo recibe ve, sin iniciar sesión, cómo van los pagos de todo un ciclo (sin celulares ni datos personales) |
 | [028](specs/028-docentes-dni) | DNI y secciones editables del docente, y una página común donde cada docente consulta a sus estudiantes con su DNI; recargar el Excel conserva lo editado |
 | [030](specs/030-ponencias-validacion-congreso) | Ponencias especializadas solo para congresistas con pago aprobado (documento y correo), modo presencial o virtual (el virtual no ocupa aforo) e interruptor de acceso libre por evento |
+| [031](specs/031-ponencias-resumen-personas) | Resumen por persona de las ponencias especializadas con su situación actual en el congreso, filtros y Excel; cancelar a quien no puede estar inscrito y enviarle un comunicado por correo |
 
 ## Desarrollo local
 

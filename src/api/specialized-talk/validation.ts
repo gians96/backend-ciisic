@@ -130,3 +130,29 @@ export const editarInscripcionSchema = yup.object({
 ).required()
 
 export type EditarInscripcionInput = yup.InferType<typeof editarInscripcionSchema>
+
+// ─── Resumen por persona, cancelación y comunicado (spec 031) ───────────────
+
+const asistenteIds = () => yup.array().of(yup.number().integer().positive().required()).min(1).max(100).required()
+    .test('unicos', 'No repitas personas', (ids) => !ids || new Set(ids).size === ids.length)
+
+const asuntoAviso = () => yup.string().trim().max(150)
+const mensajeAviso = () => yup.string().trim().max(3000)
+
+/** Cancela las inscripciones de quienes no pueden asistir; con `notificar` envía el comunicado por correo. */
+export const cancelarSinCongresoSchema = yup.object({
+    asistenteIds: asistenteIds(),
+    notificar: yup.boolean().default(false),
+    asunto: asuntoAviso(),
+    mensaje: mensajeAviso(),
+}).test('comunicado', 'Escribe el asunto y el mensaje del comunicado', (valor) => !valor.notificar || (Boolean(valor.asunto) && Boolean(valor.mensaje))).required()
+
+/** Solo avisa (sin cancelar). */
+export const avisarSinCongresoSchema = yup.object({
+    asistenteIds: asistenteIds(),
+    asunto: asuntoAviso().required(),
+    mensaje: mensajeAviso().required(),
+}).required()
+
+export type CancelarSinCongresoInput = yup.InferType<typeof cancelarSinCongresoSchema>
+export type AvisarSinCongresoInput = yup.InferType<typeof avisarSinCongresoSchema>

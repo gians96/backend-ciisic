@@ -4,7 +4,7 @@ import path from 'path'
 import { parseArgs } from 'util'
 import type { ModalidadAsistencia } from '@prisma/client'
 import { prisma } from './prisma'
-import { resolverElegibilidad, type MotivoSinAcceso } from '../core/ponencias-especializadas'
+import { resolverElegibilidad, variantesDocumento, type MotivoSinAcceso } from '../core/ponencias-especializadas'
 import { enmascararDocumento } from '../api/activity/services/activity'
 
 /**
@@ -35,12 +35,6 @@ const TEXTO_MOTIVO: Record<MotivoSinAcceso, string> = {
     RECHAZADA: 'inscripción rechazada o cancelada',
 }
 
-/** Los documentos con los que puede estar guardado el participante: tal cual y, si es DNI, sin ceros a la izquierda. */
-function variantes(tipo: string, numero: string): string[] {
-    const sinCeros = numero.replace(/^0+/, '')
-    return tipo === 'dni' && sinCeros && sinCeros !== numero ? [numero, sinCeros] : [numero]
-}
-
 /** Para que Excel abra el CSV en UTF-8. */
 const BOM = String.fromCharCode(0xfeff)
 const celdaCsv = (valor: string | null) => `"${(valor ?? '').replace(/"/g, '""')}"`
@@ -69,7 +63,7 @@ async function validarPonenciasExistentes() {
 
     for (const [asistenteId, delAsistente] of porAsistente) {
         const { asistente } = delAsistente[0]
-        const inscripciones = (await Promise.all(variantes(asistente.tipoDocumentoId, asistente.numeroDocumento).map((numero) =>
+        const inscripciones = (await Promise.all(variantesDocumento(asistente.tipoDocumentoId, asistente.numeroDocumento).map((numero) =>
             prisma.participante.findUnique({
                 where: { tipoDocumentoId_numeroDocumento: { tipoDocumentoId: asistente.tipoDocumentoId, numeroDocumento: numero } },
                 select: { inscripciones: { where: { eventoId: evento.id }, take: 1, select: { id: true, estado: { select: { codigo: true } }, tipoInscripcion: { select: { modalidad: true } } } } },

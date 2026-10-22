@@ -6,7 +6,7 @@ import { requireParticipante, requirePermiso, requireSesion, type GuardaPermiso 
 import { requireTokenEvento } from '../../src/middlewares/sitio'
 import { rutaLegacy } from '../../src/middlewares/legacy'
 import {
-    limiteCargaPadron, limiteCheckInPonencia, limiteDescargaReportes, limiteEnlacesAsesores, limiteGestionDocentes, limiteLecturaReportes, limiteMarcarAsistencia, limiteReenvioCredencial, limiteRenovacionSesion, limiteSwitch,
+    limiteAvisosPonencias, limiteCargaPadron, limiteCheckInPonencia, limiteDescargaReportes, limiteDescargaResumenPonencias, limiteEnlacesAsesores, limiteGestionDocentes, limiteLecturaReportes, limiteMarcarAsistencia, limiteReenvioCredencial, limiteRenovacionSesion, limiteSwitch,
 } from '../../src/middlewares/rate-limit'
 import { ALCANCE, type Permiso } from '../../src/core/permisos'
 import {
@@ -284,6 +284,11 @@ const MATRIZ: Record<Clave, Esperada> = {
     'PATCH /v1/specialized-talk-registrations/:id': g('especializadas.inscribir', eventoDeInscripcionPonencia),
     'POST /v1/specialized-talks/:id/check-in': g('especializadas.asistencia', eventoDePonenciaEspecializada),
     'DELETE /v1/specialized-talk-registrations/:id/attendance': g('especializadas.asistencia', eventoDeInscripcionPonencia),
+    // Resumen por persona (spec 031)
+    'GET /v1/events/:eventId/specialized-talk-attendees': g('especializadas.ver', P()),
+    'GET /v1/events/:eventId/specialized-talk-attendees/export': g('especializadas.ver', P()),
+    'POST /v1/events/:eventId/specialized-talk-attendees/cancel': g('especializadas.inscribir', P()),
+    'POST /v1/events/:eventId/specialized-talk-attendees/notify': g('especializadas.inscribir', P()),
 
     // advisory (spec 025): el seguimiento por asesor lo ven y descargan las cuentas del evento; el padrón lo carga una cuenta global
     'GET /v1/events/:eventId/advisory/summary': g('reportes.ver', P()),
@@ -324,9 +329,10 @@ const esValidacion = (h: Handle) => h.validaCuerpo === true
 /** Limitadores con clave por cuenta: necesitan `req.actor`, que deja la guarda. */
 const LIMITES_POR_ACTOR: readonly RequestHandler[] = [
     limiteMarcarAsistencia, limiteCheckInPonencia, limiteReenvioCredencial, limiteRenovacionSesion, limiteSwitch, limiteLecturaReportes, limiteDescargaReportes, limiteCargaPadron, limiteEnlacesAsesores, limiteGestionDocentes,
+    limiteDescargaResumenPonencias, limiteAvisosPonencias,
 ]
 /** Total de rutas de /api: una ruta nueva obliga a clasificarla aquí. */
-const TOTAL_RUTAS = 182
+const TOTAL_RUTAS = 186
 
 function clasesDe(ruta: Ruta): Clase[] {
     const clases: Clase[] = []
@@ -421,6 +427,8 @@ describe('matriz de rutas (spec 013)', () => {
         expect(con(limiteEnlacesAsesores)).toEqual(['POST /v1/events/:eventId/advisory/links', 'DELETE /v1/events/:eventId/advisory/links/:asesorId', 'POST /v1/events/:eventId/advisory/cycle-links', 'DELETE /v1/events/:eventId/advisory/cycle-links/:ciclo'])
         expect(con(limiteDescargaReportes)).toEqual(['GET /v1/events/:eventId/advisory/export'])
         expect(con(limiteCargaPadron)).toEqual(['POST /v1/events/:eventId/advisory/import'])
+        expect(con(limiteDescargaResumenPonencias)).toEqual(['GET /v1/events/:eventId/specialized-talk-attendees/export'])
+        expect(con(limiteAvisosPonencias)).toEqual(['POST /v1/events/:eventId/specialized-talk-attendees/cancel', 'POST /v1/events/:eventId/specialized-talk-attendees/notify'])
     })
 
     it('todo permiso por evento (E) tiene resolutor de evento o filtraPorActor', () => {

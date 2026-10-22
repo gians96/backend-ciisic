@@ -137,6 +137,14 @@ y Google. Documentación: [`docs/`](docs/README.md).
   evento y correo distinto dan el mismo `422 CONGRESS_REGISTRATION_NOT_FOUND`; el motivo específico (`CONGRESS_PAYMENT_PENDING`,
   `CONGRESS_REGISTRATION_REJECTED`) solo se dice a quien acertó o al staff. Repetir en la landing sella lo anterior sin validar;
   `npm run ponencias-especializadas:validar-existentes` (simula por defecto) empareja lo existente por documento. Nada se cancela solo.
+- Resumen por persona de las ponencias (spec 031, `services/resumen.ts`, `avisos.ts`, `exportar-resumen.ts`): `GET …/specialized-talk-attendees` da **una fila por
+  persona** (no por ponencia) con su situación **actual** frente al congreso (`APROBADO`, `PAGO_PENDIENTE`, `RECHAZADO`, `NO_INSCRITO`), calculada en cada consulta con el
+  documento (también sin ceros a la izquierda: `variantesDocumento`); `puede` = acceso libre o `APROBADO`; `meta.resumen` son los totales de todo el evento, no de los
+  filtros. `POST …/cancel` cancela (`SIN_CONGRESO`) todas las inscripciones vigentes **sin asistencia** de quien **hoy** no puede asistir (el servidor lo vuelve a comprobar:
+  nunca cancela ni avisa a quien sí puede; con el acceso libre `409 FREE_ACCESS_ENABLED`) y, con `notificar`, envía el comunicado por correo con la credencial del evento;
+  la cancelación se guarda primero y un correo que falla no la revierte. `POST …/notify` solo avisa. El mensaje se escapa (nada de HTML) y `{nombre}` es el primer nombre;
+  `inscripciones_ponencia.aviso_enviado_en` marca a quien ya se avisó. `especializadas.ver` ve y descarga el Excel; `especializadas.inscribir` cancela y avisa; ambos con
+  límite por cuenta. En el log solo ids, nunca correos ni mensajes. Pruebas con el envío simulado: nunca se manda un correo real.
 - Delegaciones (specs 021–024 y 029): un grupo con delegado (`Delegacion`) cuyos integrantes tienen cada uno su inscripción
   (`delegacion_id`). **Cada delegación tiene sus propios planes** `CON_KIT`, `SIN_KIT` y `VIRTUAL`: tres tipos reales (`delegacion_con_kit`,
   `delegacion_sin_kit`, `delegacion_virtual`; `precio == precioInstitucional`) de su **categoría oculta** `DELEGACION_<id>`
@@ -254,7 +262,7 @@ con ambos sistemas levantados.
 
 Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Cada cambio
 empieza en `specs/NNN-nombre/` (spec → plan → tasks → contracts) y se marcan las tasks al
-implementar. Specs actuales: 001–014, 016–029 y 030 (ver [README](README.md)); la 015 (certificados) tiene
+implementar. Specs actuales: 001–014, 016–029, 030 y 031 (ver [README](README.md)); la 015 (certificados) tiene
 solo su diseño (`research.md`).
 
 ## Antes de dar por terminado

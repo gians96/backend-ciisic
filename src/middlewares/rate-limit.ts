@@ -102,6 +102,9 @@ export const esCuentaGlobal = (req: Request) => (req as AuthenticatedRequest).ac
 export const limiteMarcarAsistencia = limitador(MINUTO, 120, 'Demasiados registros de asistencia seguidos. Espera un momento.', { clave: 'actor', exenta: esCuentaGlobal })
 /** Asistencia en puerta a ponencias especializadas (inscribe a quien no está): mismo tope que el marcado general. */
 export const limiteCheckInPonencia = limitador(MINUTO, 120, 'Demasiados registros de asistencia seguidos. Espera un momento.', { clave: 'actor', exenta: esCuentaGlobal })
+/** Resumen de ponencias especializadas (spec 031): descarga del Excel y envío de comunicados por correo, por cuenta de staff. */
+export const limiteDescargaResumenPonencias = limitador(MINUTO, 20, 'Demasiadas descargas. Espera un minuto.', { clave: 'actor' })
+export const limiteAvisosPonencias = limitador(15 * MINUTO, 10, 'Demasiados envíos de comunicados. Intenta nuevamente en 15 minutos.', { clave: 'actor' })
 export const limiteReenvioCredencial = limitador(15 * MINUTO, 20, 'Demasiados reenvíos de credencial. Intenta nuevamente en 15 minutos.', { clave: 'actor' })
 export const limiteRenovacionSesion = limitador(15 * MINUTO, 30, undefined, { clave: 'actor' })
 /** Paso del staff a su portal de participante (`POST /v1/auth/participant/switch`, spec 014). */
