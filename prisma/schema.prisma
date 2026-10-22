@@ -395,6 +395,8 @@ model Asesor {
   id            Int             @id @default(autoincrement())
   eventoId      Int             @map("evento_id")
   nombre        String          @db.VarChar(200)
+  /// DNI del docente (spec 028), de 8 dígitos. Con él entra a la página común de consulta; `null` = sin DNI.
+  documento     String?         @db.VarChar(20)
   /// Enlace público del docente (spec 026): token aleatorio de 43 caracteres (256 bits) con el que el docente ve
   /// el avance de sus estudiantes sin iniciar sesión. `null` = sin enlace (nunca se creó o se desactivó).
   enlaceToken        String?   @unique(map: "uq_asesores_enlace_token") @map("enlace_token") @db.VarChar(64)
@@ -407,6 +409,7 @@ model Asesor {
   secciones     AsesorSeccion[]
 
   @@unique([eventoId, nombre], map: "uq_asesores_evento_nombre")
+  @@unique([eventoId, documento], map: "uq_asesores_evento_documento")
   @@map("asesores")
 }
 

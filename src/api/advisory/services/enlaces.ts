@@ -2,6 +2,7 @@ import crypto from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { prisma } from '../../../database/prisma'
 import { notFound } from '../../../core/http-error'
+import { normalizarDni } from './seguimiento'
 
 /**
  * Enlaces públicos de los docentes (spec 026). Cada asesor puede tener un token aleatorio de 256 bits
@@ -92,18 +93,49 @@ export interface AsesorDelEnlace {
     evento: { id: number, nombre: string, nombreCorto: string }
 }
 
-/** Asesor dueño del token (y su evento); anota el acceso. Cualquier token inválido responde igual (`LINK_NOT_FOUND`). */
-export async function asesorDelEnlace(token: string): Promise<AsesorDelEnlace> {
-    if (!REGEX_TOKEN.test(token)) throw enlaceInvalido()
-    const asesor = await prisma.asesor.findUnique({
-        where: { enlaceToken: token },
-        select: { id: true, nombre: true, enlaceUltimoAcceso: true, evento: { select: { id: true, nombre: true, nombreCorto: true } } },
-    })
-    if (!asesor) throw enlaceInvalido()
+const SELECCION_ASESOR_PUBLICO = {
+    id: true,
+    nombre: true,
+    enlaceUltimoAcceso: true,
+    evento: { select: { id: true, nombre: true, nombreCorto: true } },
+} as const
+
+interface AsesorLeido {
+    id: number
+    nombre: string
+    enlaceUltimoAcceso: Date | null
+    evento: AsesorDelEnlace['evento']
+}
+
+/** Anota el acceso (como máximo cada 5 minutos) y deja solo lo que la vista pública necesita. */
+async function registrarAcceso(asesor: AsesorLeido): Promise<AsesorDelEnlace> {
     const ahora = new Date()
     if (!asesor.enlaceUltimoAcceso || ahora.getTime() - asesor.enlaceUltimoAcceso.getTime() > ANOTAR_ACCESO_CADA_MS) {
         // El acceso es un dato de cortesía: si no se puede anotar, el docente igual ve su avance
         await prisma.asesor.update({ where: { id: asesor.id }, data: { enlaceUltimoAcceso: ahora } }).catch(() => undefined)
     }
     return { id: asesor.id, nombre: asesor.nombre, evento: asesor.evento }
+}
+
+/** Asesor dueño del token (y su evento); anota el acceso. Cualquier token inválido responde igual (`LINK_NOT_FOUND`). */
+export async function asesorDelEnlace(token: string): Promise<AsesorDelEnlace> {
+    if (!REGEX_TOKEN.test(token)) throw enlaceInvalido()
+    const asesor = await prisma.asesor.findUnique({ where: { enlaceToken: token }, select: SELECCION_ASESOR_PUBLICO })
+    if (!asesor) throw enlaceInvalido()
+    return registrarAcceso(asesor)
+}
+
+/** El mismo error para un DNI mal escrito o que no es de ningún docente (spec 028): no se distingue cuál fue. */
+export const documentoNoEncontrado = () => notFound('ADVISOR_DOCUMENT_NOT_FOUND', 'No encontramos un docente con ese DNI.')
+
+/**
+ * Asesor con ese DNI (spec 028): la página común de consulta. Si el DNI está en varios eventos se toma el más
+ * reciente. Anota el acceso como el enlace personal.
+ */
+export async function asesorDelDocumento(documento: unknown): Promise<AsesorDelEnlace> {
+    const dni = normalizarDni(documento)
+    if (!dni) throw documentoNoEncontrado()
+    const asesor = await prisma.asesor.findFirst({ where: { documento: dni }, orderBy: { eventoId: 'desc' }, select: SELECCION_ASESOR_PUBLICO })
+    if (!asesor) throw documentoNoEncontrado()
+    return registrarAcceso(asesor)
 }

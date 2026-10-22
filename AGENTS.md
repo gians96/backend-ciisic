@@ -161,6 +161,10 @@ y Google. Documentación: [`docs/`](docs/README.md).
   turno y situación de los estudiantes y el asesor de cada sección, pero **sin celular** (llega a más gente que el docente), DNI, correo ni montos (prueba que lo
   comprueba). Un token de docente no abre un ciclo ni al revés; mismo `404 LINK_NOT_FOUND` único. Administrarlos es `reportes.gestionar`. Los reportes públicos
   usan `DatosReporte.publico: 'DOCENTE' | 'CICLO'` y `columnasOcultas` decide qué columnas no salen.
+- Docentes y DNI (spec 028): `asesores.documento` (8 dígitos, único por evento, `NULL` = sin DNI; `normalizarDni`) se edita con `GET|POST …/advisory/advisors` y `PUT|DELETE …/advisors/:asesorId`
+  (`reportes.gestionar`; el DNI **solo** sale ahí). La página común usa `POST /v1/public/advisor/lookup` (+ `/export`) con `{ documento }` en el **cuerpo** (nunca en la URL): misma vista que el enlace personal, **sin devolver
+  el DNI**, mismo `404 ADVISOR_DOCUMENT_NOT_FOUND` ante cualquier DNI inválido y tope de intentos fallidos por IP (`limiteIntentosDni`, `soloFallos`). El DNI es adivinable: no lo registres en logs ni lo agregues a una URL. Recargar el padrón
+  conserva los docentes (`asesores=conservar`, por defecto si ya hay); `reemplazar` los vuelve a leer del Excel conservando enlace y DNI por nombre.
 - Reglas del dominio institucional fijas en `src/core/correo-institucional.ts` (`undc.edu.pe`,
   parte local numérica = estudiante).
 - Las rutas legacy existen para la landing anterior y se apagan desde el panel (Sistema).
@@ -239,7 +243,7 @@ con ambos sistemas levantados.
 
 Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Cada cambio
 empieza en `specs/NNN-nombre/` (spec → plan → tasks → contracts) y se marcan las tasks al
-implementar. Specs actuales: 001–014 y 016–027 (ver [README](README.md)); la 015 (certificados) tiene
+implementar. Specs actuales: 001–014 y 016–028 (ver [README](README.md)); la 015 (certificados) tiene
 solo su diseño (`research.md`).
 
 ## Antes de dar por terminado

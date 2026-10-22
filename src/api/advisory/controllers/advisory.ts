@@ -6,7 +6,7 @@ import { esLibroXlsx } from '../../../middlewares/upload'
 import type { AuthenticatedRequest } from '../../../middlewares/auth'
 import { obtenerEventoPorId } from '../../event/services/public-event'
 import { cargarSeguimiento } from '../services/consulta'
-import { importarPadron } from '../services/importacion'
+import { importarPadron, MODOS_ASESORES, type ModoAsesores } from '../services/importacion'
 import {
     ETIQUETA_SITUACION,
     FILTROS_SITUACION,
@@ -154,7 +154,8 @@ export async function exportFile(req: AuthenticatedRequest, res: Response) {
 
 /**
  * `POST /v1/events/:eventId/advisory/import` (multipart `file`, opcional `semestre`) — carga el Excel de la
- * facultad. Con `?simular=true` solo valida y cuenta; sin él, reemplaza el padrón y los asesores del evento.
+ * facultad. Con `?simular=true` solo valida y cuenta; sin él, reemplaza el padrón de estudiantes del evento. Los docentes ya cargados se
+ * conservan salvo que se envíe `asesores=reemplazar` (spec 028).
  */
 export async function importPadron(req: AuthenticatedRequest, res: Response) {
     const evento = await obtenerEventoPorId(idParam(req.params.eventId, 'eventId'))
@@ -162,6 +163,11 @@ export async function importPadron(req: AuthenticatedRequest, res: Response) {
     if (!esLibroXlsx(req.file.buffer)) throw unprocessable('INVALID_FILE_CONTENT', 'El contenido del archivo no coincide con un Excel (.xlsx).')
     const simular = req.query.simular === 'true'
     const semestre = typeof req.body?.semestre === 'string' && req.body.semestre.trim() ? req.body.semestre.trim() : undefined
-    const resultado = await importarPadron(evento.id, req.file.buffer, { aplicar: !simular, semestre })
+    // Qué hacer con los docentes ya cargados (spec 028): sin indicarlo se conservan; solo se reemplazan si se pide
+    const pedido = typeof req.body?.asesores === 'string' ? req.body.asesores.trim().toLowerCase() : undefined
+    if (pedido && !(MODOS_ASESORES as readonly string[]).includes(pedido)) {
+        throw unprocessable('VALIDATION_ERROR', 'Los datos enviados no son válidos', { asesores: 'Debe ser conservar o reemplazar' })
+    }
+    const resultado = await importarPadron(evento.id, req.file.buffer, { aplicar: !simular, semestre, asesores: pedido as ModoAsesores | undefined })
     res.status(simular ? 200 : 201).json({ success: true, data: resultado })
 }

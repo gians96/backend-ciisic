@@ -496,6 +496,16 @@ completo (todas sus secciones): `<origen del panel>/seguimiento/ciclo#<token>`, 
   sección, turno y situación, y el asesor de cada sección; **sin** celular, DNI, correo ni montos. Un token de docente no abre un ciclo.
 - Los enlaces viven en `enlaces_ciclo`: recargar el padrón no los toca.
 
+#### Docentes y consulta con el DNI (spec 028)
+
+Contrato en `specs/028-docentes-dni/contracts/api-docentes-dni.md` (panel: spec 019). Los docentes ya no dependen del Excel: se les registra el **DNI** y se editan sus secciones
+desde el panel, y entran a **una sola página común** escribiendo su DNI.
+
+- `GET|POST /api/v1/events/:eventId/advisory/advisors` y `PUT|DELETE …/advisors/:asesorId` (`reportes.gestionar`, global): listar, agregar, editar (nombre, DNI y secciones) y eliminar. El DNI es dato personal: solo sale aquí.
+- `POST /api/v1/public/advisor/lookup` y `…/lookup/export` (sin sesión, `{ documento }` en el cuerpo): la misma vista y reporte que el enlace personal, de los estudiantes de ese docente; **no devuelve el DNI**. DNI inválido o desconocido: el mismo
+  `404 ADVISOR_DOCUMENT_NOT_FOUND`. Límite: 10 intentos **fallidos** cada 15 min por IP.
+- Recargar el padrón (`asesores=conservar|reemplazar`) conserva por defecto a los docentes, sus DNI, sus secciones editadas y sus enlaces.
+
 ### Escáner, credencial y operación (spec 014)
 
 Definido en `specs/014-portal-fotocheck-asistencia/contracts/api-asistencia.md` (panel: spec 009).

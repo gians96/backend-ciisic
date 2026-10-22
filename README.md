@@ -38,6 +38,7 @@ virtual, asistencia y perfil con foto).
 | [025](specs/025-reportes-asesores) | Reportes de seguimiento por asesor: padrón de estudiantes cargado desde el Excel de la facultad, cruce en vivo con las inscripciones, resumen, filtros y descarga en Excel o PDF por docente |
 | [026](specs/026-enlaces-docentes) | Enlace público por docente: cada asesor ve, sin iniciar sesión, cómo van los pagos de sus estudiantes (token de 256 bits, solo lo mínimo necesario, administrable desde el panel) |
 | [027](specs/027-enlaces-ciclo) | Enlace público por ciclo: quien lo recibe ve, sin iniciar sesión, cómo van los pagos de todo un ciclo (sin celulares ni datos personales) |
+| [028](specs/028-docentes-dni) | DNI y secciones editables del docente, y una página común donde cada docente consulta a sus estudiantes con su DNI; recargar el Excel conserva lo editado |
 
 ## Desarrollo local
 

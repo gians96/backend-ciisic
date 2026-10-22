@@ -3,8 +3,8 @@ import { unprocessable } from '../../../core/http-error'
 import { generarExcel } from '../exports/excel'
 import { generarPdf } from '../exports/pdf'
 import { contentDisposition, nombreDeArchivo, type DatosReporte } from '../exports/reporte'
-import { enlaceInvalido } from '../services/enlaces'
-import { seguimientoDelCiclo, seguimientoDelEnlace } from '../services/publico'
+import { documentoNoEncontrado, enlaceInvalido } from '../services/enlaces'
+import { seguimientoDelCiclo, seguimientoDelDocumento, seguimientoDelEnlace } from '../services/publico'
 
 /**
  * Rutas **sin sesión** del docente (spec 026) y del ciclo (spec 027). El token va en `X-Link-Token` y no en la
@@ -23,8 +23,15 @@ function privado(res: Response) {
     res.setHeader('X-Robots-Tag', 'noindex, nofollow')
 }
 
-function formatoDe(req: Request): 'xlsx' | 'pdf' {
-    const pedido = typeof req.query.formato === 'string' ? req.query.formato.trim().toLowerCase() : 'xlsx'
+/** DNI del cuerpo (nunca de la URL: no debe quedar en los registros de acceso). Lo que no sea texto o número es «no encontrado». */
+function documentoDe(req: Request): string {
+    const documento: unknown = req.body?.documento
+    if (typeof documento !== 'string' && typeof documento !== 'number') throw documentoNoEncontrado()
+    return String(documento)
+}
+
+function formatoDe(req: Request, origen: Record<string, unknown> = req.query): 'xlsx' | 'pdf' {
+    const pedido = typeof origen.formato === 'string' ? origen.formato.trim().toLowerCase() : 'xlsx'
     if (pedido !== 'xlsx' && pedido !== 'pdf') throw unprocessable('VALIDATION_ERROR', 'Los filtros no son válidos', { formato: 'Debe ser xlsx o pdf' })
     return pedido
 }
@@ -62,5 +69,19 @@ export async function cycleView(req: Request, res: Response) {
 export async function cycleExportFile(req: Request, res: Response) {
     const formato = formatoDe(req)
     const { reporte } = await seguimientoDelCiclo(tokenDe(req))
+    await enviarReporte(res, reporte, formato)
+}
+
+/** `POST /v1/public/advisor/lookup` — la misma vista del docente, pero entrando con su DNI (página común, spec 028). */
+export async function lookupView(req: Request, res: Response) {
+    const { vista } = await seguimientoDelDocumento(documentoDe(req))
+    privado(res)
+    res.json({ success: true, data: vista })
+}
+
+/** `POST /v1/public/advisor/lookup/export` (`{ documento, formato }`) — su reporte, sin DNI, correo ni montos. */
+export async function lookupExportFile(req: Request, res: Response) {
+    const formato = formatoDe(req, req.body ?? {})
+    const { reporte } = await seguimientoDelDocumento(documentoDe(req))
     await enviarReporte(res, reporte, formato)
 }

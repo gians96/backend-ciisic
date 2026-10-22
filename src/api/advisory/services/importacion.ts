@@ -1,27 +1,42 @@
 import { prisma } from '../../../database/prisma'
 import { unprocessable } from '../../../core/http-error'
 import { leerLibroDePadron, type PadronLeido } from './lector-excel'
-import { claveDeTexto } from './seguimiento'
+import { claveDeTexto, claveSeccion, etiquetaSeccion } from './seguimiento'
 
 export interface ResultadoImportacion {
     semestre: string
     estudiantes: number
+    /** Docentes que quedan tras la carga: los del Excel, o los que ya había si se conservan. */
     asesores: number
     /** Ciclo y sección distintos que tienen al menos un asesor. */
     secciones: number
     advertencias: string[]
     /** `false` en la simulación: se leyó y validó el archivo, pero no se guardó nada. */
     aplicado: boolean
+    /** `true`: se conservaron los docentes, sus DNI y sus secciones (spec 028); del Excel solo se usan los estudiantes. */
+    asesoresConservados: boolean
 }
+
+/** Qué hacer con los docentes al recargar el padrón: dejar los que ya hay (editados a mano) o reemplazarlos por los del Excel. */
+export type ModoAsesores = 'conservar' | 'reemplazar'
+export const MODOS_ASESORES: readonly ModoAsesores[] = ['conservar', 'reemplazar']
 
 const SEMESTRE = /^\d{4}-[12]$/
 
 /**
- * Lee el Excel y, si `aplicar`, **reemplaza** el padrón y los asesores del evento por su contenido (los
- * datos de seguimiento viven solo en estas tablas: ninguna otra depende de ellas). Con `aplicar` en
- * `false` solo valida y cuenta, para mostrar la vista previa antes de confirmar.
+ * Lee el Excel y, si `aplicar`, **reemplaza** el padrón de estudiantes del evento por su contenido (los datos de
+ * seguimiento viven solo en estas tablas: ninguna otra depende de ellas). Con `aplicar` en `false` solo valida y
+ * cuenta, para mostrar la vista previa antes de confirmar.
+ *
+ * Los docentes (spec 028): si el evento ya tiene, **se conservan** con su DNI, sus secciones editadas y su enlace
+ * (`asesores: 'conservar'`, lo habitual); con `'reemplazar'` se vuelven a leer del Excel, conservando su enlace y su
+ * DNI por nombre. Sin docentes previos se cargan siempre los del Excel.
  */
-export async function importarPadron(eventoId: number, contenido: Buffer, opciones: { aplicar: boolean, semestre?: string }): Promise<ResultadoImportacion> {
+export async function importarPadron(
+    eventoId: number,
+    contenido: Buffer,
+    opciones: { aplicar: boolean, semestre?: string, asesores?: ModoAsesores },
+): Promise<ResultadoImportacion> {
     const leido: PadronLeido = await leerLibroDePadron(contenido)
     const semestre = (opciones.semestre ?? leido.semestre).trim()
     if (!SEMESTRE.test(semestre)) {
@@ -30,40 +45,58 @@ export async function importarPadron(eventoId: number, contenido: Buffer, opcion
         })
     }
 
-    const resultado: ResultadoImportacion = {
-        semestre,
-        estudiantes: leido.estudiantes.length,
-        asesores: leido.asesores.length,
-        secciones: new Set(leido.asesores.flatMap((asesor) => asesor.secciones.map((s) => `${s.ciclo}|${s.seccion}`))).size,
-        advertencias: leido.advertencias,
-        aplicado: false,
+    const previos = await prisma.asesor.findMany({ where: { eventoId }, select: { nombre: true, secciones: { select: { ciclo: true, seccion: true } } } })
+    const conservar = previos.length > 0 && (opciones.asesores ?? 'conservar') === 'conservar'
+
+    const advertencias = [...leido.advertencias]
+    let asesores = leido.asesores.length
+    let secciones = new Set(leido.asesores.flatMap((asesor) => asesor.secciones.map((s) => claveSeccion(s.ciclo, s.seccion)))).size
+    if (conservar) {
+        asesores = previos.length
+        secciones = new Set(previos.flatMap((asesor) => asesor.secciones.map((s) => claveSeccion(s.ciclo, s.seccion)))).size
+        if (leido.asesores.length) advertencias.unshift('Se conservaron los docentes y sus secciones actuales: los de la hoja RESUMEN no se usaron.')
+        // Un padrón nuevo puede no traer una sección que un docente conserva
+        const delPadron = new Set(leido.estudiantes.map((e) => claveSeccion(e.ciclo, e.seccion)))
+        for (const asesor of previos) {
+            for (const s of asesor.secciones) {
+                if (!delPadron.has(claveSeccion(s.ciclo, s.seccion))) advertencias.push(`${asesor.nombre} tiene la sección ${etiquetaSeccion(s.ciclo, s.seccion)}, que no está en este padrón.`)
+            }
+        }
     }
+
+    const resultado: ResultadoImportacion = { semestre, estudiantes: leido.estudiantes.length, asesores, secciones, advertencias, aplicado: false, asesoresConservados: conservar }
     if (!opciones.aplicar) return resultado
 
     await prisma.$transaction(async (tx) => {
-        // Los enlaces públicos ya entregados a los docentes (spec 026) sobreviven a una nueva carga: se
-        // reasignan al asesor del mismo nombre (sin acentos ni mayúsculas); el resto empieza sin enlace
-        const conEnlace = await tx.asesor.findMany({
-            where: { eventoId, enlaceToken: { not: null } },
-            select: { nombre: true, enlaceToken: true, enlaceCreadoEn: true, enlaceUltimoAcceso: true },
-        })
-        const enlaces = new Map(conEnlace.map((a) => [claveDeTexto(a.nombre), a]))
+        if (!conservar) {
+            // Los enlaces públicos (spec 026) y el DNI (spec 028) ya entregados a los docentes sobreviven: se reasignan al
+            // asesor del mismo nombre (sin acentos ni mayúsculas); el resto empieza sin enlace ni DNI
+            const conDatos = await tx.asesor.findMany({
+                where: { eventoId, OR: [{ enlaceToken: { not: null } }, { documento: { not: null } }] },
+                select: { nombre: true, documento: true, enlaceToken: true, enlaceCreadoEn: true, enlaceUltimoAcceso: true },
+            })
+            const guardados = new Map(conDatos.map((a) => [claveDeTexto(a.nombre), a]))
 
-        // Las secciones de cada asesor se borran en cascada
-        await tx.asesor.deleteMany({ where: { eventoId } })
+            // Las secciones de cada asesor se borran en cascada
+            await tx.asesor.deleteMany({ where: { eventoId } })
+            await tx.padronEstudiante.deleteMany({ where: { eventoId } })
+            await tx.padronEstudiante.createMany({ data: leido.estudiantes.map((e) => ({ ...e, eventoId, semestre })) })
+            for (const asesor of leido.asesores) {
+                const previo = guardados.get(claveDeTexto(asesor.nombre))
+                await tx.asesor.create({
+                    data: {
+                        eventoId,
+                        nombre: asesor.nombre,
+                        ...(previo?.documento ? { documento: previo.documento } : {}),
+                        ...(previo?.enlaceToken ? { enlaceToken: previo.enlaceToken, enlaceCreadoEn: previo.enlaceCreadoEn, enlaceUltimoAcceso: previo.enlaceUltimoAcceso } : {}),
+                        secciones: { create: asesor.secciones.map(({ ciclo, seccion }) => ({ eventoId, ciclo, seccion })) },
+                    },
+                })
+            }
+            return
+        }
         await tx.padronEstudiante.deleteMany({ where: { eventoId } })
         await tx.padronEstudiante.createMany({ data: leido.estudiantes.map((e) => ({ ...e, eventoId, semestre })) })
-        for (const asesor of leido.asesores) {
-            const enlace = enlaces.get(claveDeTexto(asesor.nombre))
-            await tx.asesor.create({
-                data: {
-                    eventoId,
-                    nombre: asesor.nombre,
-                    ...(enlace ? { enlaceToken: enlace.enlaceToken, enlaceCreadoEn: enlace.enlaceCreadoEn, enlaceUltimoAcceso: enlace.enlaceUltimoAcceso } : {}),
-                    secciones: { create: asesor.secciones.map(({ ciclo, seccion }) => ({ eventoId, ciclo, seccion })) },
-                },
-            })
-        }
     }, { maxWait: 10_000, timeout: 60_000 })
 
     return { ...resultado, aplicado: true }

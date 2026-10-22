@@ -1,5 +1,5 @@
 import { cargarSeguimiento } from './consulta'
-import { asesorDelEnlace } from './enlaces'
+import { asesorDelDocumento, asesorDelEnlace, type AsesorDelEnlace } from './enlaces'
 import { cicloDelEnlace } from './enlaces-ciclo'
 import {
     filtrarAlcance,
@@ -77,7 +77,15 @@ export interface SeguimientoDelEnlace {
 
 /** Lee el estado actual (cruce en vivo) de los estudiantes del docente dueño del token. */
 export async function seguimientoDelEnlace(token: string): Promise<SeguimientoDelEnlace> {
-    const asesor = await asesorDelEnlace(token)
+    return seguimientoDelAsesor(await asesorDelEnlace(token))
+}
+
+/** Lo mismo para el docente con ese DNI (página común de consulta, spec 028): misma vista, otro modo de entrar. */
+export async function seguimientoDelDocumento(documento: unknown): Promise<SeguimientoDelEnlace> {
+    return seguimientoDelAsesor(await asesorDelDocumento(documento))
+}
+
+async function seguimientoDelAsesor(asesor: AsesorDelEnlace): Promise<SeguimientoDelEnlace> {
     const seguimiento = await cargarSeguimiento(asesor.evento.id, false)
     const alcance = filtrarAlcance(seguimiento.filas, { asesorId: asesor.id })
     const generadoEn = new Date()

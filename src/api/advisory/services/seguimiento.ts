@@ -152,6 +152,12 @@ export function normalizarDocumento(valor: unknown): string {
     return /^\d{1,8}$/.test(texto) ? texto.padStart(8, '0') : texto
 }
 
+/** DNI de un docente (spec 028): 8 dígitos; con 7 se completa el cero inicial que pierde Excel. Cualquier otra cosa es `null`. */
+export function normalizarDni(valor: unknown): string | null {
+    const dni = String(valor ?? '').replace(/\s+/g, '')
+    return /^\d{7,8}$/.test(dni) ? dni.padStart(8, '0') : null
+}
+
 export function normalizarCodigo(valor: unknown): string {
     return String(valor ?? '').replace(/\s+/g, '').toUpperCase()
 }

@@ -20,6 +20,8 @@ interface OpcionesLimite {
     omitirEnPruebas?: boolean
     /** Peticiones que no cuentan para el límite. */
     exenta?: (req: Request) => boolean
+    /** Solo cuentan las respuestas de error (4xx y 5xx): topa los intentos fallidos sin penalizar a quien acierta. */
+    soloFallos?: boolean
 }
 
 function claveDe(req: Request, clave: Clave): string {
@@ -39,6 +41,7 @@ export function limitador(windowMs: number, limit: number, message = 'Demasiadas
         // Los encabezados RateLimit-* describen el límite por visitante; el del token no se anuncia
         standardHeaders: clave !== 'token',
         legacyHeaders: false,
+        skipSuccessfulRequests: opciones.soloFallos === true,
         skip: (req) => (omitir && env.NODE_ENV === 'test') || Boolean(opciones.exenta?.(req)),
         keyGenerator: (req) => claveDe(req, clave),
         handler: (req, res, _next, options) => {
@@ -110,3 +113,9 @@ export const limiteCargaPadron = limitador(15 * MINUTO, 10, 'Demasiadas cargas d
 export const limiteEnlacesAsesores = limitador(15 * MINUTO, 60, undefined, { clave: 'actor' })
 export const limiteVistaDocente = limitador(MINUTO, 40, 'Demasiadas consultas. Espera un momento e inténtalo de nuevo.')
 export const limiteDescargaDocente = limitador(MINUTO, 10, 'Demasiadas descargas. Espera un minuto.')
+
+// Docentes y su DNI (spec 028). Gestión por cuenta de staff. La consulta por DNI (sin sesión) es adivinable, así que topa los intentos
+// **fallidos** por visitante (10 cada 15 min); quien acierta no se penaliza y su página puede refrescarse sola (ese tráfico lo topa
+// `limiteVistaDocente`).
+export const limiteGestionDocentes = limitador(15 * MINUTO, 120, undefined, { clave: 'actor' })
+export const limiteIntentosDni = limitador(15 * MINUTO, 10, 'Demasiados intentos con el DNI. Espera unos minutos e inténtalo de nuevo.', { soloFallos: true })

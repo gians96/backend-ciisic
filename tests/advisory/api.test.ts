@@ -212,17 +212,17 @@ describe('carga del padrón', () => {
     }
 
     it('con «simular» solo valida y cuenta: no guarda nada', async () => {
-        const r = await request(app).post('/api/v1/events/2/advisory/import?simular=true').set(con(admin())).attach('file', await libro(), 'padron.xlsx')
+        const r = await request(app).post('/api/v1/events/2/advisory/import?simular=true').set(con(admin())).field('asesores', 'reemplazar').attach('file', await libro(), 'padron.xlsx')
         expect(r.status).toBe(200)
-        expect(r.body.data).toEqual({ semestre: '2026-2', estudiantes: 2, asesores: 2, secciones: 2, advertencias: [], aplicado: false })
+        expect(r.body.data).toEqual({ semestre: '2026-2', estudiantes: 2, asesores: 2, secciones: 2, advertencias: [], aplicado: false, asesoresConservados: false })
         expect(m.padronEstudiante.deleteMany).not.toHaveBeenCalled()
         expect(m.padronEstudiante.createMany).not.toHaveBeenCalled()
     })
 
-    it('reemplaza el padrón y los asesores del evento en una sola transacción', async () => {
-        const r = await request(app).post('/api/v1/events/2/advisory/import').set(con(owner())).attach('file', await libro(), 'padron.xlsx')
+    it('con «reemplazar» reemplaza el padrón y los asesores del evento en una sola transacción', async () => {
+        const r = await request(app).post('/api/v1/events/2/advisory/import').set(con(owner())).field('asesores', 'reemplazar').attach('file', await libro(), 'padron.xlsx')
         expect(r.status).toBe(201)
-        expect(r.body.data).toMatchObject({ aplicado: true, estudiantes: 2, asesores: 2 })
+        expect(r.body.data).toMatchObject({ aplicado: true, estudiantes: 2, asesores: 2, asesoresConservados: false })
         expect(m.asesor.deleteMany).toHaveBeenCalledWith({ where: { eventoId: 2 } })
         expect(m.padronEstudiante.deleteMany).toHaveBeenCalledWith({ where: { eventoId: 2 } })
         const guardados = m.padronEstudiante.createMany.mock.calls[0][0].data
@@ -231,6 +231,42 @@ describe('carga del padrón', () => {
         expect(m.asesor.create).toHaveBeenCalledTimes(2)
         const barrera = m.asesor.create.mock.calls.map((c) => c[0].data).find((d: { nombre: string }) => d.nombre.includes('BARRERA'))
         expect(barrera.secciones.create).toEqual([{ eventoId: 2, ciclo: 'I', seccion: 'A' }, { eventoId: 2, ciclo: 'II', seccion: 'B' }])
+    })
+
+    it('sin indicar nada conserva los docentes que ya hay (spec 028): solo se reemplazan los estudiantes', async () => {
+        const simulada = await request(app).post('/api/v1/events/2/advisory/import?simular=true').set(con(admin())).attach('file', await libro(), 'padron.xlsx')
+        expect(simulada.status).toBe(200)
+        // Los 2 docentes y las 2 secciones son los que ya había, no los del Excel
+        expect(simulada.body.data).toMatchObject({ estudiantes: 2, asesores: 2, secciones: 2, aplicado: false, asesoresConservados: true })
+        expect(simulada.body.data.advertencias[0]).toMatch(/Se conservaron los docentes/)
+
+        const r = await request(app).post('/api/v1/events/2/advisory/import').set(con(owner())).attach('file', await libro(), 'padron.xlsx')
+        expect(r.status).toBe(201)
+        expect(r.body.data).toMatchObject({ aplicado: true, asesoresConservados: true })
+        expect(m.padronEstudiante.deleteMany).toHaveBeenCalledWith({ where: { eventoId: 2 } })
+        expect(m.padronEstudiante.createMany).toHaveBeenCalledTimes(1)
+        expect(m.asesor.deleteMany).not.toHaveBeenCalled()
+        expect(m.asesor.create).not.toHaveBeenCalled()
+    })
+
+    it('avisa de la sección que un docente conserva y que el padrón nuevo ya no trae', async () => {
+        m.asesor.findMany.mockResolvedValue([{ id: 7, eventoId: 2, nombre: 'DRA. ANGOMA ASTUCURI MIRIAM', secciones: [{ asesorId: 7, eventoId: 2, ciclo: 'V', seccion: 'Z' }] }])
+        const r = await request(app).post('/api/v1/events/2/advisory/import?simular=true').set(con(admin())).attach('file', await libro(), 'padron.xlsx')
+        expect(r.body.data.advertencias).toContain('DRA. ANGOMA ASTUCURI MIRIAM tiene la sección V-Z, que no está en este padrón.')
+    })
+
+    it('la primera carga (sin docentes) toma los del Excel, aunque se pida conservar', async () => {
+        m.asesor.findMany.mockResolvedValue([])
+        const r = await request(app).post('/api/v1/events/2/advisory/import').set(con(owner())).field('asesores', 'conservar').attach('file', await libro(), 'padron.xlsx')
+        expect(r.status).toBe(201)
+        expect(r.body.data).toMatchObject({ aplicado: true, asesores: 2, asesoresConservados: false })
+        expect(m.asesor.create).toHaveBeenCalledTimes(2)
+    })
+
+    it('rechaza un valor de «asesores» que no sea conservar o reemplazar', async () => {
+        const r = await request(app).post('/api/v1/events/2/advisory/import?simular=true').set(con(admin())).field('asesores', 'borrar').attach('file', await libro(), 'padron.xlsx')
+        expect(r.status).toBe(422)
+        expect(r.body.fields.asesores).toBeDefined()
     })
 
     it('pide el semestre cuando no se puede deducir y acepta el que escribe la persona', async () => {

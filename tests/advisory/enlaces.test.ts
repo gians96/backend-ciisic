@@ -44,7 +44,7 @@ const inscripcion = (id: number, estado: string, codigoEstudiante: string, monto
 })
 
 /** Filas con enlace por asesor: 7 (Angoma, I-A) con token y 8 (Cárdenas, II-B) y 9 (Barrera, I-A) sin él. */
-let enlaces: Array<{ id: number, nombre: string, enlaceToken: string | null, enlaceCreadoEn: Date | null, enlaceUltimoAcceso: Date | null }>
+let enlaces: Array<{ id: number, nombre: string, documento?: string | null, enlaceToken: string | null, enlaceCreadoEn: Date | null, enlaceUltimoAcceso: Date | null }>
 
 const SECCIONES: Record<number, Array<{ ciclo: string, seccion: string }>> = {
     7: [{ ciclo: 'I', seccion: 'A' }],
@@ -55,7 +55,7 @@ const SECCIONES: Record<number, Array<{ ciclo: string, seccion: string }>> = {
 beforeEach(() => {
     jest.clearAllMocks()
     enlaces = [
-        { id: 7, nombre: 'DRA. ANGOMA ASTUCURI MIRIAM', enlaceToken: TOKEN, enlaceCreadoEn: new Date('2026-10-22T10:00:00.000Z'), enlaceUltimoAcceso: null },
+        { id: 7, nombre: 'DRA. ANGOMA ASTUCURI MIRIAM', documento: '12345678', enlaceToken: TOKEN, enlaceCreadoEn: new Date('2026-10-22T10:00:00.000Z'), enlaceUltimoAcceso: null },
         { id: 8, nombre: 'MG. CÁRDENAS LINO CÉSAR ANDY', enlaceToken: null, enlaceCreadoEn: null, enlaceUltimoAcceso: null },
         { id: 9, nombre: 'MG. MARIA LAURA BARRERA CAJACHAGUA', enlaceToken: null, enlaceCreadoEn: null, enlaceUltimoAcceso: null },
     ]
@@ -69,7 +69,7 @@ beforeEach(() => {
         const ids = args.where?.id?.in
         let filas = enlaces.filter((a) => !ids || ids.includes(a.id))
         if (args.where && 'enlaceToken' in args.where) filas = filas.filter((a) => a.enlaceToken !== null)
-        if (args.select) return Promise.resolve(filas)
+        if (args.select) return Promise.resolve(filas.map((a) => ({ ...a, secciones: SECCIONES[a.id] })))
         return Promise.resolve(enlaces.map((a) => ({ id: a.id, eventoId: 2, nombre: a.nombre, secciones: SECCIONES[a.id].map((s) => ({ asesorId: a.id, eventoId: 2, ...s })) })))
     })
     m.asesor.update.mockImplementation(({ where, data }: { where: { id: number }, data: Record<string, unknown> }) => {
@@ -245,7 +245,7 @@ describe('enlaces públicos: descarga del docente', () => {
     })
 })
 
-describe('enlaces públicos: al recargar el padrón', () => {
+describe('enlaces públicos: al recargar el padrón (reemplazando los docentes)', () => {
     async function libro(): Promise<Buffer> {
         const wb = new ExcelJS.Workbook()
         const hoja = wb.addWorksheet('ESTUDIANTES 2026-2')
@@ -257,13 +257,14 @@ describe('enlaces públicos: al recargar el padrón', () => {
         return Buffer.from(await wb.xlsx.writeBuffer())
     }
 
-    it('el asesor que ya tenía enlace lo conserva (por nombre, sin importar acentos ni mayúsculas) y los demás no reciben uno', async () => {
-        const r = await request(app).post('/api/v1/events/2/advisory/import').set(con(admin())).attach('file', await libro(), 'padron.xlsx')
+    it('el asesor que ya tenía enlace y DNI los conserva (por nombre, sin importar acentos ni mayúsculas) y los demás no reciben uno', async () => {
+        const r = await request(app).post('/api/v1/events/2/advisory/import').set(con(admin())).field('asesores', 'reemplazar').attach('file', await libro(), 'padron.xlsx')
         expect(r.status).toBe(201)
         const creados = m.asesor.create.mock.calls.map((c) => c[0].data as Record<string, unknown>)
         const angoma = creados.find((d) => String(d.nombre).includes('ANGOMA') || String(d.nombre).includes('angoma'))
         const barrera = creados.find((d) => String(d.nombre).includes('BARRERA'))
-        expect(angoma).toMatchObject({ enlaceToken: TOKEN, enlaceCreadoEn: new Date('2026-10-22T10:00:00.000Z'), enlaceUltimoAcceso: null })
+        expect(angoma).toMatchObject({ documento: '12345678', enlaceToken: TOKEN, enlaceCreadoEn: new Date('2026-10-22T10:00:00.000Z'), enlaceUltimoAcceso: null })
         expect(barrera).not.toHaveProperty('enlaceToken')
+        expect(barrera).not.toHaveProperty('documento')
     })
 })

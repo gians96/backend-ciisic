@@ -6,7 +6,7 @@ import { requireParticipante, requirePermiso, requireSesion, type GuardaPermiso 
 import { requireTokenEvento } from '../../src/middlewares/sitio'
 import { rutaLegacy } from '../../src/middlewares/legacy'
 import {
-    limiteCargaPadron, limiteCheckInPonencia, limiteDescargaReportes, limiteEnlacesAsesores, limiteLecturaReportes, limiteMarcarAsistencia, limiteReenvioCredencial, limiteRenovacionSesion, limiteSwitch,
+    limiteCargaPadron, limiteCheckInPonencia, limiteDescargaReportes, limiteEnlacesAsesores, limiteGestionDocentes, limiteLecturaReportes, limiteMarcarAsistencia, limiteReenvioCredencial, limiteRenovacionSesion, limiteSwitch,
 } from '../../src/middlewares/rate-limit'
 import { ALCANCE, type Permiso } from '../../src/core/permisos'
 import {
@@ -86,6 +86,8 @@ const PUBLICAS: readonly Clave[] = [
     'GET /v1/public/advisor/export',
     'GET /v1/public/cycle',
     'GET /v1/public/cycle/export',
+    'POST /v1/public/advisor/lookup',
+    'POST /v1/public/advisor/lookup/export',
 ]
 
 /** API del sitio: el evento sale del token de acceso (`requireTokenEvento`). */
@@ -285,6 +287,10 @@ const MATRIZ: Record<Clave, Esperada> = {
     'GET /v1/events/:eventId/advisory/links': g('reportes.gestionar'),
     'POST /v1/events/:eventId/advisory/links': g('reportes.gestionar'),
     'DELETE /v1/events/:eventId/advisory/links/:asesorId': g('reportes.gestionar'),
+    'GET /v1/events/:eventId/advisory/advisors': g('reportes.gestionar'),
+    'POST /v1/events/:eventId/advisory/advisors': g('reportes.gestionar'),
+    'PUT /v1/events/:eventId/advisory/advisors/:asesorId': g('reportes.gestionar'),
+    'DELETE /v1/events/:eventId/advisory/advisors/:asesorId': g('reportes.gestionar'),
     'GET /v1/events/:eventId/advisory/cycle-links': g('reportes.gestionar'),
     'POST /v1/events/:eventId/advisory/cycle-links': g('reportes.gestionar'),
     'DELETE /v1/events/:eventId/advisory/cycle-links/:ciclo': g('reportes.gestionar'),
@@ -310,10 +316,10 @@ const esMulter = (h: Handle) => h.name === 'multerMiddleware'
 const esValidacion = (h: Handle) => h.validaCuerpo === true
 /** Limitadores con clave por cuenta: necesitan `req.actor`, que deja la guarda. */
 const LIMITES_POR_ACTOR: readonly RequestHandler[] = [
-    limiteMarcarAsistencia, limiteCheckInPonencia, limiteReenvioCredencial, limiteRenovacionSesion, limiteSwitch, limiteLecturaReportes, limiteDescargaReportes, limiteCargaPadron, limiteEnlacesAsesores,
+    limiteMarcarAsistencia, limiteCheckInPonencia, limiteReenvioCredencial, limiteRenovacionSesion, limiteSwitch, limiteLecturaReportes, limiteDescargaReportes, limiteCargaPadron, limiteEnlacesAsesores, limiteGestionDocentes,
 ]
 /** Total de rutas de /api: una ruta nueva obliga a clasificarla aquí. */
-const TOTAL_RUTAS = 172
+const TOTAL_RUTAS = 178
 
 function clasesDe(ruta: Ruta): Clase[] {
     const clases: Clase[] = []
@@ -403,7 +409,8 @@ describe('matriz de rutas (spec 013)', () => {
         expect(con(limiteReenvioCredencial)).toEqual(['POST /v1/inscriptions/:id/resend-credential'])
         expect(con(limiteRenovacionSesion)).toEqual(['POST /v1/auth/refresh'])
         expect(con(limiteSwitch)).toEqual(['POST /v1/auth/participant/switch'])
-        expect(con(limiteLecturaReportes)).toEqual(['GET /v1/events/:eventId/advisory/summary', 'GET /v1/events/:eventId/advisory/students', 'GET /v1/events/:eventId/advisory/links', 'GET /v1/events/:eventId/advisory/cycle-links'])
+        expect(con(limiteLecturaReportes)).toEqual(['GET /v1/events/:eventId/advisory/summary', 'GET /v1/events/:eventId/advisory/students', 'GET /v1/events/:eventId/advisory/advisors', 'GET /v1/events/:eventId/advisory/links', 'GET /v1/events/:eventId/advisory/cycle-links'])
+        expect(con(limiteGestionDocentes)).toEqual(['POST /v1/events/:eventId/advisory/advisors', 'PUT /v1/events/:eventId/advisory/advisors/:asesorId', 'DELETE /v1/events/:eventId/advisory/advisors/:asesorId'])
         expect(con(limiteEnlacesAsesores)).toEqual(['POST /v1/events/:eventId/advisory/links', 'DELETE /v1/events/:eventId/advisory/links/:asesorId', 'POST /v1/events/:eventId/advisory/cycle-links', 'DELETE /v1/events/:eventId/advisory/cycle-links/:ciclo'])
         expect(con(limiteDescargaReportes)).toEqual(['GET /v1/events/:eventId/advisory/export'])
         expect(con(limiteCargaPadron)).toEqual(['POST /v1/events/:eventId/advisory/import'])
