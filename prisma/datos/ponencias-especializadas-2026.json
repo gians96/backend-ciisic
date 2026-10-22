@@ -106,43 +106,13 @@
       }
     },
     {
-      "tema": "De robots a agentes de IA: automatiza como en el futuro",
-      "fecha": "2026-10-27",
-      "horaInicio": "12:00",
-      "horaFin": "12:45",
-      "ambiente": "Laboratorio 8",
-      "cupo": 20,
-      "orden": 8,
-      "ponente": {
-        "nombre": "Mg. Jhonatan Edilfonso Echaccaya Anyosa",
-        "bio": "Ingeniero de Sistemas y maestro en Gestión de la Tecnología de la Información, con estudios de doctorado en Ingeniería de Sistemas. Su perfil se orienta a la transformación digital, automatización de procesos, RPA/RDA, inteligencia artificial, desarrollo de software, liderazgo tecnológico y docencia universitaria. Se desempeña como líder técnico RDA y RPA en Indra/Minsait para BBVA Perú, donde lidera equipos, diseña arquitecturas de automatización, analiza la viabilidad técnica, gestiona iniciativas y pruebas de concepto, controla indicadores y aplica lineamientos de gobierno, seguridad y arquitectura. Trabaja con UiPath, Automation Anywhere, Power Platform, Python, Selenium, Playwright, machine learning, TensorFlow, Keras, APIs REST, Git y herramientas de analítica.",
-        "foto": "/images/ponentes/2026/especializados/jhonatan-echaccaya.webp",
-        "externo": false
-      }
-    },
-    {
-      "tema": "Universidad ciberresiliente 2030: gobernanza, inteligencia artificial y ciberseguridad",
-      "fecha": "2026-10-27",
-      "horaInicio": "12:00",
-      "horaFin": "12:45",
-      "ambiente": "Aula 5",
-      "cupo": 40,
-      "orden": 9,
-      "ponente": {
-        "nombre": "Dr. Carlos Alcides Almidon Ortiz",
-        "bio": "Doctor en Sistemas de Ingeniería, egresado del doctorado en Ingeniería de Sistemas, magíster en Ingeniería de Sistemas e ingeniero de Sistemas colegiado. Cuenta con experiencia como docente de posgrado y universitario, además de formación especializada en infraestructura tecnológica, telecomunicaciones y gestión académica. Su trayectoria incluye certificaciones y estudios en redes, ciberseguridad, domótica, diseño de centros de datos, cableado estructurado, gestión por procesos, configuración de servidores, gerencia, didáctica universitaria, inversión pública, modelamiento de software e investigación formativa. Se desempeña como consultor y capacitador en tecnologías de información, infraestructuras de comunicaciones, seguridad informática y gestión de procesos para instituciones públicas y privadas.",
-        "foto": "/images/ponentes/2026/especializados/carlos-almidon.webp",
-        "externo": false
-      }
-    },
-    {
       "tema": "Implementación de un chatbot con RAG (Retrieval-Augmented Generation)",
       "fecha": "2026-10-28",
       "horaInicio": "12:00",
       "horaFin": "12:45",
       "ambiente": "Laboratorio 1",
       "cupo": 20,
-      "orden": 10,
+      "orden": 8,
       "ponente": {
         "nombre": "Dr. Abraham Esteban Gamarra Moreno",
         "bio": "Doctor en Ingeniería. Docente de pregrado y posgrado, investigador y conferencista internacional con formación en informática, inteligencia artificial, robótica y aprendizaje automático.",
@@ -157,7 +127,7 @@
       "horaFin": "12:45",
       "ambiente": "Laboratorio 2",
       "cupo": 20,
-      "orden": 11,
+      "orden": 9,
       "ponente": {
         "nombre": "Dr. Guido Raúl Larico Uchumaco",
         "bio": "Docente ordinario de la Universidad Nacional de Cañete. Doctor en Ingeniería de Sistemas por la Universidad Nacional Federico Villarreal, doctor en Educación, magíster en Docencia Universitaria por la Universidad Nacional de Educación Enrique Guzmán y Valle y magíster en Informática con mención en Gerencia de Tecnologías de Información y Comunicaciones por la Universidad Nacional del Altiplano. Durante su carrera profesional ha desempeñado diversos cargos y trabajado como consultor y desarrollador de tecnologías libres y abiertas en proyectos de software para empresas privadas y públicas.",
@@ -166,28 +136,13 @@
       }
     },
     {
-      "tema": "Ciberseguridad con Kali Linux",
-      "fecha": "2026-10-28",
-      "horaInicio": "12:00",
-      "horaFin": "12:45",
-      "ambiente": "Laboratorio 3",
-      "cupo": 20,
-      "orden": 12,
-      "ponente": {
-        "nombre": "M.Sc. Daniel Alejandro Yucra Sotomayor",
-        "bio": "Máster universitario en Administración y Gestión Avanzada de Proyectos. Especialista y docente en seguridad de la información, gestión de riesgos tecnológicos, gobierno digital y transformación digital.",
-        "foto": "/images/ponentes/2026/daniel-yucra-enhanced.webp",
-        "externo": false
-      }
-    },
-    {
-      "tema": "Crea una app empresarial en minutos con Power Apps y Power Automate",
+      "tema": "De robots a agentes de IA: automatiza como en el futuro",
       "fecha": "2026-10-28",
       "horaInicio": "12:00",
       "horaFin": "12:45",
       "ambiente": "Laboratorio 4",
       "cupo": 20,
-      "orden": 13,
+      "orden": 10,
       "ponente": {
         "nombre": "Mg. Jhonatan Edilfonso Echaccaya Anyosa",
         "bio": "Ingeniero de Sistemas y maestro en Gestión de la Tecnología de la Información, con estudios de doctorado en Ingeniería de Sistemas. Su perfil se orienta a la transformación digital, automatización de procesos, RPA/RDA, inteligencia artificial, desarrollo de software, liderazgo tecnológico y docencia universitaria. Se desempeña como líder técnico RDA y RPA en Indra/Minsait para BBVA Perú, donde lidera equipos, diseña arquitecturas de automatización, analiza la viabilidad técnica, gestiona iniciativas y pruebas de concepto, controla indicadores y aplica lineamientos de gobierno, seguridad y arquitectura. Trabaja con UiPath, Automation Anywhere, Power Platform, Python, Selenium, Playwright, machine learning, TensorFlow, Keras, APIs REST, Git y herramientas de analítica.",
@@ -202,7 +157,7 @@
       "horaFin": "12:45",
       "ambiente": "Laboratorio 6",
       "cupo": 20,
-      "orden": 14,
+      "orden": 11,
       "ponente": {
         "nombre": "Dra. Amanda Duran Carhuamaca",
         "bio": "Profesional orientada al logro de objetivos mediante el uso de tecnología. Magíster en Informática por la Pontificia Universidad Católica del Perú, ingeniera de Sistemas, candidata a doctora en Ingeniería de Sistemas y con doctorado en Docencia Universitaria. Cuenta con experiencia en gestión y dirección de proyectos, análisis funcional de software y trece años de docencia universitaria. Ha sido directora de una escuela profesional de Ingeniería de Sistemas, docente investigadora en más de diez universidades y expositora de temas de vanguardia en investigación y tecnología.",
@@ -217,7 +172,7 @@
       "horaFin": "12:45",
       "ambiente": "Laboratorio 7",
       "cupo": 20,
-      "orden": 15,
+      "orden": 12,
       "ponente": {
         "nombre": "M.Sc. Mario Jesús Ormachea Mejía",
         "bio": "Ingeniero de Sistemas con Maestría en Gestión de TIC por la Universidad Nacional de Huancavelica y estudios de Doctorado en Ciencias de la Educación (UAC). Posee más de dos décadas de experiencia liderando proyectos de conectividad, infraestructura de redes, servidores y soluciones TIC. Actualmente es docente en la Universidad Nacional Amazónica de Madre de Dios, directivo empresarial, investigador con publicaciones científicas indexadas y ponente en congresos internacionales de computación e innovación tecnológica.",
@@ -232,7 +187,7 @@
       "horaFin": "12:45",
       "ambiente": "Laboratorio 8",
       "cupo": 20,
-      "orden": 16,
+      "orden": 13,
       "ponente": {
         "nombre": "Mg. Percy Ismael Salcedo Rodas",
         "bio": "Ingeniero en Computación e Informática, maestro en Docencia Universitaria e Investigación Educativa y estudiante de doctorado en Ingeniería de Sistemas. Su trayectoria integra ingeniería, tecnologías de la información, docencia universitaria, investigación y gestión académica. Ha desarrollado actividades en la Universidad Nacional de Cañete, Universidad Autónoma del Perú, Universidad Autónoma de Ica, Universidad Nacional de Educación Enrique Guzmán y Valle, Universidad César Vallejo, Universidad Politécnica Amazónica y Universidad Nacional Pedro Ruiz Gallo. Su formación complementaria comprende inteligencia artificial, ciberseguridad, Internet de las Cosas, arquitectura de computadoras, tecnologías educativas, servicios cloud, herramientas digitales y gestión pública; además, participa de manera constante como asistente, ponente y organizador de actividades académicas.",
@@ -245,13 +200,43 @@
       "fecha": "2026-10-28",
       "horaInicio": "12:00",
       "horaFin": "12:45",
-      "ambiente": "Aula 3",
+      "ambiente": "Aula 1",
       "cupo": 40,
-      "orden": 17,
+      "orden": 14,
       "ponente": {
         "nombre": "Dra. Miriam Angoma Astucuri",
         "bio": "Docente ordinaria de la Universidad Nacional de Cañete, adscrita a la Facultad de Ingeniería y a la Escuela Profesional de Ingeniería de Sistemas. Doctora en Sistemas de Ingeniería y magíster en Administración de Empresas con mención en Gestión de Proyectos. Cuenta con estudios de maestría en Docencia en Educación Superior y de segunda especialización en Didáctica Universitaria.",
         "foto": "/images/ponentes/2026/especializados/miriam-angoma.webp",
+        "externo": false
+      }
+    },
+    {
+      "tema": "Universidad ciberresiliente 2030: gobernanza, inteligencia artificial y ciberseguridad",
+      "fecha": "2026-10-28",
+      "horaInicio": "12:00",
+      "horaFin": "12:45",
+      "ambiente": "Aula 2",
+      "cupo": 40,
+      "orden": 15,
+      "ponente": {
+        "nombre": "Dr. Carlos Alcides Almidon Ortiz",
+        "bio": "Doctor en Sistemas de Ingeniería, egresado del doctorado en Ingeniería de Sistemas, magíster en Ingeniería de Sistemas e ingeniero de Sistemas colegiado. Cuenta con experiencia como docente de posgrado y universitario, además de formación especializada en infraestructura tecnológica, telecomunicaciones y gestión académica. Su trayectoria incluye certificaciones y estudios en redes, ciberseguridad, domótica, diseño de centros de datos, cableado estructurado, gestión por procesos, configuración de servidores, gerencia, didáctica universitaria, inversión pública, modelamiento de software e investigación formativa. Se desempeña como consultor y capacitador en tecnologías de información, infraestructuras de comunicaciones, seguridad informática y gestión de procesos para instituciones públicas y privadas.",
+        "foto": "/images/ponentes/2026/especializados/carlos-almidon.webp",
+        "externo": false
+      }
+    },
+    {
+      "tema": "Ciberseguridad con Kali Linux",
+      "fecha": "2026-10-28",
+      "horaInicio": "12:00",
+      "horaFin": "12:45",
+      "ambiente": "Aula 3",
+      "cupo": 40,
+      "orden": 16,
+      "ponente": {
+        "nombre": "M.Sc. Daniel Alejandro Yucra Sotomayor",
+        "bio": "Máster universitario en Administración y Gestión Avanzada de Proyectos. Especialista y docente en seguridad de la información, gestión de riesgos tecnológicos, gobierno digital y transformación digital.",
+        "foto": "/images/ponentes/2026/daniel-yucra-enhanced.webp",
         "externo": false
       }
     },
@@ -262,7 +247,7 @@
       "horaFin": "12:45",
       "ambiente": "Aula 5",
       "cupo": 40,
-      "orden": 18,
+      "orden": 17,
       "ponente": {
         "nombre": "Dr. Jair Emerson Ferreyros Yucra",
         "bio": "Doctor en Ingeniería de Sistemas, magíster scientiae en Informática, ingeniero de Sistemas y licenciado en Matemáticas. Cuenta con estudios concluidos de segunda especialidad centrada en investigación, didáctica y docencia en educación superior, así como estudios concluidos de doctorado en Administración. Sus habilidades comprenden el análisis de sistemas y la gestión de proyectos de tecnologías de la información. Destaca por su capacidad para resolver problemas técnicos y por una comunicación sólida con el personal de las organizaciones y los usuarios finales.",
@@ -277,7 +262,7 @@
       "horaFin": "12:45",
       "ambiente": "Aula 6",
       "cupo": 40,
-      "orden": 19,
+      "orden": 18,
       "ponente": {
         "nombre": "Dr. Wagner Enoc Vicente Ramos",
         "bio": "Docente universitario e investigador de la Universidad Nacional de Cañete con más de quince años de experiencia en pregrado y posgrado. Ingeniero de Sistemas, maestro en Gestión Educativa y doctor en Sistemas de Ingeniería. Se ha desempeñado como director de escuela profesional de Ingeniería de Sistemas y Computación, coordinador de investigación de Ciencias de la Empresa, coordinador de facultad de Ingeniería y director de escuela de posgrado. Es investigador RENACYT y miembro del Institute for Systems and Technologies of Information, Control and Communication; participa como conferencista y par evaluador en congresos nacionales e internacionales sobre ciencias de las organizaciones, transformación digital e inteligencia artificial.",

@@ -12,6 +12,13 @@ landing y la asistencia en puerta solo con el DNI (incluida la inscripción en e
 > `/v1/papers`, permiso `ponencias.ver`). Lo nuevo se llama **ponencias especializadas**
 > (`specialized-talks`, `PonenciaEspecializada`) y no toca nada de lo anterior.
 
+> **Actualización 2026-10-22**: el programa quedó en **18 ponencias** (7 el martes 27 y 11 el miércoles 28; el
+> «19» de arriba es el original). Se quitó el tema de Power Apps y Power Automate; «De robots a agentes de IA»
+> (Echaccaya) pasó al miércoles (laboratorio 4), «Universidad ciberresiliente 2030» (Almidon) al miércoles en el
+> aula 2, «Ciberseguridad con Kali Linux» (Yucra) al aula 3 y «Transformación digital» (Angoma) al aula 1. El
+> seed (`prisma/datos/ponencias-especializadas-2026.json`) refleja el programa vigente; como solo crea las que
+> faltan, un cambio sobre una base ya sembrada se hace desde el panel o con un script puntual.
+
 ## Decisiones
 
 - **Gratuitas por ahora.** El campo `precio` existe (0 = gratuita) pero no hay flujo de cobro: la landing
