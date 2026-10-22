@@ -1,6 +1,6 @@
 import PDFDocument from 'pdfkit'
 import { etiquetaSeccion, type Situacion } from '../services/seguimiento'
-import { asesoresDe, columnasDeContadores, etiquetaDeSituacion, marcaDeTiempo, textoAvance, type DatosReporte } from './reporte'
+import { asesoresDe, columnasDeContadores, columnasOcultas, etiquetaDeSituacion, marcaDeTiempo, textoAvance, type DatosReporte } from './reporte'
 
 const AZUL = '#1e3a5f'
 const GRIS = '#6b7280'
@@ -161,14 +161,18 @@ export function generarPdf(datos: DatosReporte): Promise<Buffer> {
             dibujante.encabezado()
             dibujante.indicadores()
 
+            // Un reporte público omite las columnas de datos que no necesita (ver `columnasOcultas`)
+            const ocultas = columnasOcultas(datos.publico)
+            const ver = (titulo: string) => !ocultas.includes(titulo)
+
             dibujante.titulo('Por ciclo y sección')
             const ocupado = 28 + 34 + 28 + columnasNumericas.reduce((suma, c) => suma + c.ancho, 0)
             dibujante.tabla(
-                [{ titulo: 'Ciclo', ancho: 28, centrar: true }, { titulo: 'Sección', ancho: 34, centrar: true }, { titulo: 'Turno', ancho: 28, centrar: true }, ...columnasNumericas, ...(datos.publico ? [] : [{ titulo: 'Asesores', ancho: 782 - ocupado }])],
+                [{ titulo: 'Ciclo', ancho: 28, centrar: true }, { titulo: 'Sección', ancho: 34, centrar: true }, { titulo: 'Turno', ancho: 28, centrar: true }, ...columnasNumericas, ...(ver('Asesores') ? [{ titulo: 'Asesores', ancho: 782 - ocupado }] : [])],
                 datos.resumen.porSeccion.map((r) => [
                     { texto: r.ciclo }, { texto: r.seccion }, { texto: r.turnos.join(', ') },
                     ...contadores.map((c) => ({ texto: String(c.valor(r)) })),
-                    ...(datos.publico ? [] : [{ texto: r.asesores.map((a) => a.nombre).join('; ') }]),
+                    ...(ver('Asesores') ? [{ texto: r.asesores.map((a) => a.nombre).join('; ') }] : []),
                 ]),
             )
 
@@ -186,19 +190,21 @@ export function generarPdf(datos: DatosReporte): Promise<Buffer> {
             }
 
             dibujante.titulo(`Alumnos (${datos.filas.length})`)
+            // El nombre ocupa lo que dejan las demás columnas (con asesores se reparte el resto con ellos)
+            const anchoAlumno = ver('Asesores') ? (ver('DNI') ? 190 : 250) : 330
             const fijas: Columna[] = [
                 { titulo: 'Ciclo', ancho: 28, centrar: true }, { titulo: 'Sec.', ancho: 28, centrar: true }, { titulo: 'Turno', ancho: 30, centrar: true },
-                { titulo: 'Código', ancho: 62 }, ...(datos.publico ? [] : [{ titulo: 'DNI', ancho: 52 }]), { titulo: 'Alumno', ancho: datos.publico ? 330 : 190 }, { titulo: 'Celular', ancho: 58 },
+                { titulo: 'Código', ancho: 62 }, ...(ver('DNI') ? [{ titulo: 'DNI', ancho: 52 }] : []), { titulo: 'Alumno', ancho: anchoAlumno }, ...(ver('Celular') ? [{ titulo: 'Celular', ancho: 58 }] : []),
                 { titulo: 'Situación', ancho: 72, centrar: true }, ...(datos.conPago ? [{ titulo: 'Monto', ancho: 44, centrar: true }] : []),
             ]
             const resto = 782 - fijas.reduce((suma, c) => suma + c.ancho, 0)
             dibujante.tabla(
-                [...fijas, ...(datos.publico ? [] : [{ titulo: 'Asesores', ancho: resto }])],
+                [...fijas, ...(ver('Asesores') ? [{ titulo: 'Asesores', ancho: resto }] : [])],
                 datos.filas.map((f) => [
-                    { texto: f.ciclo }, { texto: f.seccion }, { texto: f.turno ?? '' }, { texto: f.codigo }, ...(datos.publico ? [] : [{ texto: f.documento }]), { texto: f.nombre }, { texto: f.celular ?? '' },
+                    { texto: f.ciclo }, { texto: f.seccion }, { texto: f.turno ?? '' }, { texto: f.codigo }, ...(ver('DNI') ? [{ texto: f.documento }] : []), { texto: f.nombre }, ...(ver('Celular') ? [{ texto: f.celular ?? '' }] : []),
                     { texto: etiquetaDeSituacion(f.situacion), situacion: f.situacion },
                     ...(datos.conPago ? [{ texto: f.monto === null ? '' : f.monto.toFixed(2) }] : []),
-                    ...(datos.publico ? [] : [{ texto: asesoresDe(f) }]),
+                    ...(ver('Asesores') ? [{ texto: asesoresDe(f) }] : []),
                 ]),
             )
 

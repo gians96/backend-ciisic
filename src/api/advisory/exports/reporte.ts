@@ -25,8 +25,18 @@ export interface DatosReporte {
     resumen: ResumenSeguimiento
     /** Incluye la tabla «Por asesor» (un reporte de un solo asesor no la necesita). */
     conTablaDeAsesores: boolean
-    /** Reporte del enlace público de un docente (spec 026): sin DNI, correo ni nombres de otros asesores. */
-    publico?: boolean
+    /**
+     * Reporte de un enlace público. `DOCENTE` (spec 026): sin DNI, correo ni nombres de otros asesores.
+     * `CICLO` (spec 027): sin DNI, correo ni celular, pero con el asesor de cada sección.
+     */
+    publico?: 'DOCENTE' | 'CICLO'
+}
+
+/** Columnas de alumnos que un reporte público no incluye: lo que no hace falta para el seguimiento. */
+export function columnasOcultas(publico: DatosReporte['publico']): string[] {
+    if (publico === 'DOCENTE') return ['DNI', 'Correo', 'Asesores']
+    if (publico === 'CICLO') return ['DNI', 'Correo', 'Celular']
+    return []
 }
 
 export function marcaDeTiempo(fecha: Date): string {

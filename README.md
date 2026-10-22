@@ -37,6 +37,7 @@ virtual, asistencia y perfil con foto).
 | [020](specs/020-virtual-sin-estudiantes-undc) | Tipos de inscripción que no admiten estudiantes UNDC (interruptor por tipo, usado en los planes virtuales): docentes y externos sí pueden ser virtuales |
 | [025](specs/025-reportes-asesores) | Reportes de seguimiento por asesor: padrón de estudiantes cargado desde el Excel de la facultad, cruce en vivo con las inscripciones, resumen, filtros y descarga en Excel o PDF por docente |
 | [026](specs/026-enlaces-docentes) | Enlace público por docente: cada asesor ve, sin iniciar sesión, cómo van los pagos de sus estudiantes (token de 256 bits, solo lo mínimo necesario, administrable desde el panel) |
+| [027](specs/027-enlaces-ciclo) | Enlace público por ciclo: quien lo recibe ve, sin iniciar sesión, cómo van los pagos de todo un ciclo (sin celulares ni datos personales) |
 
 ## Desarrollo local
 

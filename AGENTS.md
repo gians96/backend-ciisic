@@ -156,6 +156,11 @@ y Google. Documentación: [`docs/`](docs/README.md).
   da solo nombre, código, ciclo, sección, turno, celular y situación: **jamás** DNI, correo, montos, fechas de pago ni otros asesores (hay una prueba que lo
   comprueba). Token faltante, mal formado, desconocido o desactivado = el mismo `404 LINK_NOT_FOUND`. Ver, crear, renovar y desactivar enlaces es
   `reportes.gestionar` (global): es una credencial. Recargar el padrón conserva los enlaces por nombre del asesor. Respuestas `no-store` y `noindex`.
+- Enlace público por ciclo (spec 027): igual que el del docente pero por ciclo completo, en su propia tabla `enlaces_ciclo` (el padrón se reemplaza en cada
+  carga, así que el enlace no puede vivir en él; recargarlo no lo toca). `GET /v1/public/cycle` (+ `/export`) con `X-Link-Token`: nombre, código, ciclo, sección,
+  turno y situación de los estudiantes y el asesor de cada sección, pero **sin celular** (llega a más gente que el docente), DNI, correo ni montos (prueba que lo
+  comprueba). Un token de docente no abre un ciclo ni al revés; mismo `404 LINK_NOT_FOUND` único. Administrarlos es `reportes.gestionar`. Los reportes públicos
+  usan `DatosReporte.publico: 'DOCENTE' | 'CICLO'` y `columnasOcultas` decide qué columnas no salen.
 - Reglas del dominio institucional fijas en `src/core/correo-institucional.ts` (`undc.edu.pe`,
   parte local numérica = estudiante).
 - Las rutas legacy existen para la landing anterior y se apagan desde el panel (Sistema).
@@ -234,7 +239,7 @@ con ambos sistemas levantados.
 
 Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Cada cambio
 empieza en `specs/NNN-nombre/` (spec → plan → tasks → contracts) y se marcan las tasks al
-implementar. Specs actuales: 001–014 y 016–026 (ver [README](README.md)); la 015 (certificados) tiene
+implementar. Specs actuales: 001–014 y 016–027 (ver [README](README.md)); la 015 (certificados) tiene
 solo su diseño (`research.md`).
 
 ## Antes de dar por terminado

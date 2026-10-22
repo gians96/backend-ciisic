@@ -20,7 +20,7 @@ No es una cuenta del panel (los docentes no son staff): el enlace **es** la cred
   backend en el encabezado `X-Link-Token`, así que tampoco queda en los registros de acceso (`morgan`) ni en los de Traefik.
 - **Mínimo necesario**: la vista pública da, por estudiante, solo nombre, código, ciclo, sección, turno, celular y situación.
   **Nunca** DNI, correo, montos, fechas ni número de operación, id de inscripción ni nombres de otros asesores. Los reportes
-  Excel y PDF del enlace tienen las mismas restricciones (`publico: true`: sin DNI, correo ni columna de asesores).
+  Excel y PDF del enlace tienen las mismas restricciones (`publico: 'DOCENTE'`: sin DNI, correo ni columna de asesores).
 - **Un solo error**: un token faltante, mal formado, desconocido o desactivado responde igual (`404 LINK_NOT_FOUND`); un
   token con mal formato ni siquiera consulta la base.
 - **Quién administra**: ver, crear, renovar y desactivar enlaces es `reportes.gestionar` (global: Owner y Administrador). Es

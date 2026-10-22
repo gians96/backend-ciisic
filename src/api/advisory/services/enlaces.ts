@@ -13,7 +13,7 @@ import { notFound } from '../../../core/http-error'
 export const REGEX_TOKEN = /^[A-Za-z0-9_-]{43}$/
 
 /** El último acceso se anota como máximo cada 5 minutos: una escritura por visita no hace falta. */
-const ANOTAR_ACCESO_CADA_MS = 5 * 60 * 1000
+export const ANOTAR_ACCESO_CADA_MS = 5 * 60 * 1000
 
 export const nuevoToken = (): string => crypto.randomBytes(32).toString('base64url')
 

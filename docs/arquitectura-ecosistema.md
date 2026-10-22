@@ -485,6 +485,17 @@ backend en `X-Link-Token`, nunca en una URL.
   renovado: `404 LINK_NOT_FOUND`, siempre igual.
 - Recargar el padrón conserva los enlaces por nombre del asesor.
 
+#### Enlace público por ciclo (spec 027)
+
+Contrato en `specs/027-enlaces-ciclo/contracts/api-enlaces-ciclo.md` (panel: spec 018). Igual que el del docente, pero para un ciclo
+completo (todas sus secciones): `<origen del panel>/seguimiento/ciclo#<token>`, token en `X-Link-Token`.
+
+- `GET|POST /api/v1/events/:eventId/advisory/cycle-links` y `DELETE …/cycle-links/:ciclo` (`reportes.gestionar`, global): listar los ciclos del
+  padrón con su enlace, crear/renovar y desactivar.
+- `GET /api/v1/public/cycle` y `GET …/export?formato=xlsx|pdf` (sin sesión): todos los estudiantes del ciclo con nombre, código, ciclo,
+  sección, turno y situación, y el asesor de cada sección; **sin** celular, DNI, correo ni montos. Un token de docente no abre un ciclo.
+- Los enlaces viven en `enlaces_ciclo`: recargar el padrón no los toca.
+
 ### Escáner, credencial y operación (spec 014)
 
 Definido en `specs/014-portal-fotocheck-asistencia/contracts/api-asistencia.md` (panel: spec 009).

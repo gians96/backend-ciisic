@@ -1,6 +1,6 @@
 import type { Workbook, Worksheet } from 'exceljs'
 import { etiquetaSeccion, type FilaSeguimiento, type Situacion } from '../services/seguimiento'
-import { asesoresDe, columnasDeContadores, etiquetaDeSituacion, marcaDeTiempo, type DatosReporte } from './reporte'
+import { asesoresDe, columnasDeContadores, columnasOcultas, etiquetaDeSituacion, marcaDeTiempo, type DatosReporte } from './reporte'
 
 const AZUL = 'FF1E3A5F'
 const COLORES_SITUACION: Readonly<Record<Situacion, { fondo: string, texto: string }>> = {
@@ -65,9 +65,10 @@ function hojaResumen(libro: Workbook, datos: DatosReporte): void {
         datos.resumen.porCiclo.map((r) => [r.ciclo, ...contadores.map((c) => c.valor(r))]),
         contadores.map((_, i) => i + 1), dineroDespues(1),
     )
+    const conAsesores = !columnasOcultas(datos.publico).includes('Asesores')
     siguiente = tabla(
-        hoja, siguiente, 'Por ciclo y sección', ['Ciclo', 'Sección', 'Turno', ...contadores.map((c) => c.titulo), ...(datos.publico ? [] : ['Asesores'])],
-        datos.resumen.porSeccion.map((r) => [r.ciclo, r.seccion, r.turnos.join(', '), ...contadores.map((c) => c.valor(r)), ...(datos.publico ? [] : [r.asesores.map((a) => a.nombre).join('\n')])]),
+        hoja, siguiente, 'Por ciclo y sección', ['Ciclo', 'Sección', 'Turno', ...contadores.map((c) => c.titulo), ...(conAsesores ? ['Asesores'] : [])],
+        datos.resumen.porSeccion.map((r) => [r.ciclo, r.seccion, r.turnos.join(', '), ...contadores.map((c) => c.valor(r)), ...(conAsesores ? [r.asesores.map((a) => a.nombre).join('\n')] : [])]),
         contadores.map((_, i) => i + 3), dineroDespues(3),
     )
     if (datos.conTablaDeAsesores) {
@@ -88,10 +89,7 @@ function hojaResumen(libro: Workbook, datos: DatosReporte): void {
     hoja.getColumn(3 + contadores.length).width = 44
 }
 
-/** Columnas que no salen en el reporte público de un docente: datos que no necesita para el seguimiento. */
-const COLUMNAS_PRIVADAS = ['DNI', 'Correo', 'Asesores']
-
-function hojaDeAlumnos(libro: Workbook, nombre: string, filas: readonly FilaSeguimiento[], conPago: boolean, publico = false): void {
+function hojaDeAlumnos(libro: Workbook, nombre: string, filas: readonly FilaSeguimiento[], conPago: boolean, publico: DatosReporte['publico']): void {
     const hoja = libro.addWorksheet(nombre, { views: [{ state: 'frozen', ySplit: 1 }] })
     const todas: Array<{ titulo: string, ancho: number, valor: (f: FilaSeguimiento) => string | number | null }> = [
         { titulo: 'Ciclo', ancho: 8, valor: (f) => f.ciclo },
@@ -111,7 +109,8 @@ function hojaDeAlumnos(libro: Workbook, nombre: string, filas: readonly FilaSegu
             : []),
         { titulo: 'Asesores', ancho: 46, valor: (f) => asesoresDe(f).replace(/; /g, '\n') },
     ]
-    const columnas = publico ? todas.filter((c) => !COLUMNAS_PRIVADAS.includes(c.titulo)) : todas
+    const ocultas = columnasOcultas(publico)
+    const columnas = todas.filter((c) => !ocultas.includes(c.titulo))
     hoja.columns = columnas.map((c) => ({ header: c.titulo, width: c.ancho }))
     estiloCabecera(hoja, 1, columnas.length)
     const columnaSituacion = columnas.findIndex((c) => c.titulo === 'Situación') + 1

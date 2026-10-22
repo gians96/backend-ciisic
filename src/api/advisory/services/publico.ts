@@ -1,5 +1,6 @@
 import { cargarSeguimiento } from './consulta'
 import { asesorDelEnlace } from './enlaces'
+import { cicloDelEnlace } from './enlaces-ciclo'
 import {
     filtrarAlcance,
     resumir,
@@ -102,7 +103,89 @@ export async function seguimientoDelEnlace(token: string): Promise<SeguimientoDe
             filas: alcance,
             resumen,
             conTablaDeAsesores: false,
-            publico: true,
+            publico: 'DOCENTE',
+        },
+    }
+}
+
+// ─── Vista pública del ciclo (spec 027) ─────────────────────────────────────
+
+/** Un estudiante en la vista de un ciclo: lo mismo que en la del docente, **sin celular** (la ve más gente). */
+export interface AlumnoPublicoCiclo {
+    nombre: string
+    codigo: string
+    ciclo: string
+    seccion: string
+    turno: string | null
+    situacion: Situacion
+}
+
+export interface VistaPublicaCiclo {
+    ciclo: string
+    evento: { nombre: string, nombreCorto: string }
+    semestre: string | null
+    generadoEn: string
+    totales: ContadoresPublicos
+    /** Cada sección con el nombre de su(s) asesor(es): es dato institucional, no de los estudiantes. */
+    secciones: Array<ContadoresPublicos & { ciclo: string, seccion: string, turnos: string[], asesores: string[] }>
+    alumnos: AlumnoPublicoCiclo[]
+}
+
+const aAlumnoPublicoCiclo = (f: FilaSeguimiento): AlumnoPublicoCiclo => ({
+    nombre: f.nombre,
+    codigo: f.codigo,
+    ciclo: f.ciclo,
+    seccion: f.seccion,
+    turno: f.turno,
+    situacion: f.situacion,
+})
+
+export interface SeguimientoDelCiclo {
+    vista: VistaPublicaCiclo
+    /** Mismos datos armados para el Excel y el PDF (sin DNI, correo, celular ni montos). */
+    reporte: DatosReporte
+}
+
+/**
+ * Lee el estado actual (cruce en vivo) de todos los estudiantes del ciclo dueño del token. Muestra lo mínimo
+ * para el seguimiento, como el del docente, y además el asesor de cada sección; el celular no sale porque
+ * quien recibe el enlace de un ciclo no es el asesor de todos sus estudiantes.
+ */
+export async function seguimientoDelCiclo(token: string): Promise<SeguimientoDelCiclo> {
+    const { ciclo, evento } = await cicloDelEnlace(token)
+    const seguimiento = await cargarSeguimiento(evento.id, false)
+    const alcance = filtrarAlcance(seguimiento.filas, { ciclo })
+    const generadoEn = new Date()
+    const resumen = resumir(alcance, [], false)
+    return {
+        vista: {
+            ciclo,
+            evento: { nombre: evento.nombre, nombreCorto: evento.nombreCorto },
+            semestre: seguimiento.semestre,
+            generadoEn: generadoEn.toISOString(),
+            totales: contadoresPublicos(resumen.totales),
+            secciones: resumen.porSeccion.map((s) => ({
+                ciclo: s.ciclo,
+                seccion: s.seccion,
+                turnos: s.turnos,
+                asesores: s.asesores.map((a) => a.nombre),
+                ...contadoresPublicos(s),
+            })),
+            alumnos: alcance.map(aAlumnoPublicoCiclo),
+        },
+        reporte: {
+            evento: { nombre: evento.nombre, codigo: String(evento.id) },
+            semestre: seguimiento.semestre,
+            generadoEn,
+            titulo: `Seguimiento ciclo ${ciclo}`,
+            filtros: [],
+            conPago: false,
+            alcance,
+            filas: alcance,
+            // La nota «alumnos sin asesor» es de gestión interna: no se muestra a quien recibe el enlace
+            resumen: { ...resumen, alumnosSinAsesor: 0 },
+            conTablaDeAsesores: false,
+            publico: 'CICLO',
         },
     }
 }
