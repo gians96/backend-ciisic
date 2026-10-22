@@ -269,32 +269,24 @@ spec 012; la landing la sirve desde su BFF), `POST /inscriptions`, `/student-ver
   Repetir es idempotente (`yaInscrito`) y nunca modifica a una persona que ya existe.
 - **Cambio compatible**: rutas nuevas; la landing anterior no las usa.
 
-### Delegaciones con convenio (specs 021, 022 y 023)
+### Delegaciones con planes propios (specs 021, 022, 023 y 029)
 
-Definido en `backend-ciisic/specs/023-delegaciones-convenio/contracts/api-delegaciones-convenio.md`
-(continúa las specs 021 y 022 y las reemplaza en dos puntos: el pago ya no es un único voucher y el
-tipo ya no lo elige el delegado). Un **delegado** (de una universidad o institución) inscribe a su
-grupo desde un **link oculto** de la landing, sin menú ni enlaces, y paga con **uno o varios
-vouchers**. Rutas: `GET /api/v1/site/delegations/tarifa` (presencial y virtual),
-`GET /api/v1/site/delegations/link/:codigoLink` (la vista del grupo), `POST /api/v1/site/delegations`
-(registro en multipart: `delegacion`, `representante`, `participantes`, `modalidad`, `pagos` y
-`vouchers`) y, con el link, `POST …/link/:codigoLink/participants` y `POST …/link/:codigoLink/payments`.
+Definido en `backend-ciisic/specs/029-delegaciones-planes/contracts/api-delegaciones-planes.md` (reemplaza la tarifa global y el registro
+público de las specs 021–024). El **staff** crea cada delegación con sus **planes** (Con kit, Sin kit y Virtual, cada uno con su precio) y comparte
+sus links, sin menú ni enlaces en la landing. Rutas del sitio: `GET /api/v1/site/delegations/link/:codigoLink` (la vista del delegado) con
+`POST …/link/:codigoLink/participants` y `POST …/link/:codigoLink/payments` (multipart), y el **link individual**
+`GET /api/v1/site/delegations/join/:codigoInscripcion` + `POST …/join/:codigoInscripcion/participants` (cada integrante se inscribe solo, sin Google).
 
-- **El servidor decide el tipo y el precio**; el cliente solo muestra un estimado. Presencial:
-  `delegacion_general` (S/ 60) con menos de `minIntegrantes` (10) y `delegacion_grupal` (S/ 50, sin
-  kit) desde ahí. Virtual: `delegacion_virtual` (S/ 30 sin escalas). Al cruzar el mínimo, **todos**
-  pasan al precio y al tipo nuevos. La tarifa sale de los precios de esos tipos (fallback:
-  `eventos.delegaciones_*`) y cada delegación la copia al crearse.
-- `tarifa.virtual` es `null` mientras el evento no tenga el tipo `delegacion_virtual`: la landing no
-  ofrece la modalidad (y registrar una virtual responde `422 DELEGATION_MODALITY_NOT_AVAILABLE`).
-- **Pagos múltiples** (`delegacion_pagos`): cada voucher lleva su archivo, medio, número de operación
-  (único en el evento), fecha y el monto que dice; el staff lo verifica o rechaza. Cada inscripción
-  del grupo lleva un número de operación interno (`DELEGACION-<uuid>`).
-- El registro es **atómico** (grupo, integrantes y vouchers en una transacción). Con su link el delegado
-  **solo agrega** integrantes y vouchers: no hay rutas del sitio para borrar ni editar.
-- La vista del link **exige el token del evento** (otro evento → `404`) y enmascara documentos y
-  números de operación; no expone el correo ni el teléfono del delegado.
-- **Cambio compatible**: rutas y tablas nuevas; la landing anterior no las usa.
+- **El servidor decide el tipo y el precio**; el cliente solo envía el `plan` de cada integrante (`CON_KIT`, `SIN_KIT` o `VIRTUAL`). Cada plan es un tipo
+  de la categoría oculta de la delegación y puede tener precio promocional desde `minIntegrantes`; al cruzarlo, todos los integrantes de ese plan pasan al precio nuevo.
+- Con **dominio** en la delegación (`dominioCorreo`, p. ej. `unac.edu.pe`) los correos deben terminar en él (`422 EMAIL_DOMAIN_NOT_ALLOWED`) y en el link individual
+  basta escribir el prefijo (`correoPrefijo`). Link apagado, de otro evento o inexistente: `404`.
+- **Pagos múltiples** (`delegacion_pagos`): del grupo; cada voucher lleva su archivo, medio, número de operación (único en el evento), fecha y el monto que dice; el staff lo
+  verifica o rechaza. Cada inscripción del grupo lleva un número de operación interno (`DELEGACION-<uuid>`).
+- Con su link el delegado **solo agrega** integrantes y vouchers: no hay rutas del sitio para borrar ni editar. Las vistas **exigen el token del evento** (otro evento → `404`) y
+  enmascaran documentos y números de operación; no exponen el correo ni el teléfono del delegado.
+- **Cambio incompatible** (deliberado, con la sección oculta y sin integrantes en producción): se retiran `GET /site/delegations/tarifa` y `POST /site/delegations`. Orden de
+  despliegue: backend, panel y landing.
 
 ### Correo conservado al reinscribirse (spec 014)
 
@@ -429,34 +421,25 @@ El panel la consume solo a través de su BFF (`/api/backend/**`), que agrega el
   `specs/019-ponencias-especializadas/contracts/api-ponencias-especializadas.md`. Un panel anterior
   simplemente no muestra esas pantallas.
 
-### Delegaciones (specs 021, 022 y 023)
+### Delegaciones (specs 021, 022, 023 y 029)
 
-Definido en `specs/023-delegaciones-convenio/contracts/api-delegaciones-convenio.md`. Grupos que
-inscriben a sus integrantes con una tarifa por persona que decide el servidor según la modalidad y el
-tamaño del grupo (ver el contrato 3). Cada alta o baja de un integrante recalcula el `monto` y el tipo
-de **todas** las inscripciones activas del grupo (los `RECHAZADO` y `CANCELADO` no cuentan).
+Definido en `specs/029-delegaciones-planes/contracts/api-delegaciones-planes.md`. Grupos que inscriben a sus integrantes con **planes y precios propios** por delegación; el servidor
+decide el precio de cada uno según su plan y el tamaño del grupo (ver el contrato 3). Cada alta, baja, cambio de plan o de precio recalcula el `monto` de las inscripciones activas
+del grupo (los `RECHAZADO` y `CANCELADO` no cuentan).
 
-- `GET|POST /api/v1/events/:eventId/delegations` (`eventos.configurar`): lista y alta (delegado con
-  documento, correo y celular; `modalidad`; integrantes opcionales). Cada delegación trae su
-  `codigoLink` (16 hexadecimales), `modalidad`, `tipoInscripcion` vigente y el resumen `pago`
-  (`totalAPagar`, `declarado`, `verificado`, `saldo`).
-- `GET|PUT /api/v1/delegations/:id`: detalle (`pagos[]` e `inscripciones[]`) y edición; la modalidad
-  solo cambia mientras no haya integrantes. Cambiar `minIntegrantes` o los precios reprecia al grupo.
-- `GET|PUT /api/v1/events/:eventId/delegations/tarifa` (`eventos.configurar`, spec 024): la tarifa del
-  evento —precios de los tipos `delegacion_general`, `delegacion_grupal` y `delegacion_virtual`, mínimo
-  de integrantes y si la virtual se ofrece—. Solo afecta a delegaciones **nuevas**; con
-  `aplicarAExistentes` también a las que aún no tienen integrantes ni vouchers. Contrato en
-  `specs/024-tarifa-delegaciones/contracts/api-tarifa-delegaciones.md`.
-- `POST /api/v1/delegations/:id/inscriptions` (alta manual o masiva, máximo 200) y
-  `DELETE …/inscriptions/:inscriptionId` (solo integrantes no aprobados).
-- `POST /api/v1/delegations/:id/approve`: aprueba a los integrantes por revisar y envía las
-  credenciales en diferido, una por una (`eventos.configurar` o `inscripciones.validar`).
-- Vouchers: `POST /api/v1/delegations/:id/payments` (multipart), `PATCH …/payments/:paymentId`
-  (`PENDIENTE`, `VERIFICADO` o `RECHAZADO`) y `DELETE …`; el archivo en
-  `GET …/payments/:paymentId/voucher` (`eventos.configurar` o `pagos.ver`).
-- En `GET /api/v1/events/:eventId/inscriptions` y `GET /api/v1/inscriptions/:id` cada fila/detalle
-  incluye `delegacion` (`null` si es individual): `id`, `nombre`, `codigoLink` y `totalIntegrantes`;
-  en el detalle también `modalidad` y el resumen `pago` (solo con `pagos.ver`).
+- `GET|POST /api/v1/events/:eventId/delegations` (`delegaciones.ver`; `delegaciones.gestionar` o `delegaciones.inscribir` para crear): lista y alta (delegado con documento, correo y celular;
+  integrantes opcionales; `planes`, `minIntegrantes`, `dominioCorreo` e `inscripcionIndividual` solo con `delegaciones.gestionar`). Cada delegación trae sus `planes[]`, los links
+  (`codigoLink`, `codigoInscripcion`; solo para quien inscribe o gestiona), el resumen `pago` (`totalAPagar`, `declarado`, `verificado`, `saldo`; solo con `pagos.ver`).
+- `GET /api/v1/delegations/:id` (detalle con `pagos[]` e `inscripciones[]` con su `plan`) y `PUT` (datos del grupo, `delegaciones.inscribir`).
+- `PUT /api/v1/delegations/:id/config` y `POST …/links/regenerate` (`delegaciones.gestionar`, global): planes y precios, mínimo, dominio y links.
+- `POST /api/v1/delegations/:id/inscriptions` (alta manual o masiva, máximo 200, cada uno con su `plan`), `PATCH …/inscriptions/:inscriptionId` (cambiar de plan) y
+  `DELETE …` (solo integrantes no aprobados), todos `delegaciones.inscribir`.
+- `POST /api/v1/delegations/:id/approve`: aprueba a los integrantes por revisar y envía las credenciales en diferido, una por una (`inscripciones.validar`).
+- Vouchers: `POST /api/v1/delegations/:id/payments` (multipart, `delegaciones.inscribir`), `PATCH …/payments/:paymentId` (`PENDIENTE`, `VERIFICADO` o `RECHAZADO`, `inscripciones.validar`) y
+  `DELETE …` (`delegaciones.gestionar`); el archivo en `GET …/payments/:paymentId/voucher` (`pagos.ver`).
+- Se retiran `GET|PUT /api/v1/events/:eventId/delegations/tarifa` (spec 024). Los planes viven en una categoría oculta por delegación: no salen en `registration-categories`.
+- En `GET /api/v1/events/:eventId/inscriptions` y `GET /api/v1/inscriptions/:id` cada fila/detalle incluye `delegacion` (`null` si es individual): `id`, `nombre`, `codigoLink` y
+  `totalIntegrantes`; en el detalle también el resumen `pago` (solo con `pagos.ver`).
 
 ### Seguimiento por asesor (spec 025)
 

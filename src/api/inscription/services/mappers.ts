@@ -4,7 +4,6 @@ import { modalidadDe, monto } from '../../../core/catalogos'
 import { enmascararCorreo } from '../../../core/codigos'
 import { mimeDeArchivo } from '../../../middlewares/upload'
 import { resumenPagos } from '../../delegation/services/pagos'
-import { precioUnitario } from '../../delegation/services/tarifa'
 
 /** Relaciones que se cargan para mostrar una inscripción completa. */
 export const detalleInclude = {
@@ -20,12 +19,9 @@ export const detalleInclude = {
             id: true,
             nombre: true,
             codigoLink: true,
-            modalidad: true,
-            minIntegrantes: true,
-            precioEstandar: true,
-            precioPromocional: true,
             pagos: { select: { monto: true, estado: true } },
-            _count: { select: { inscripciones: { where: { estado: { codigo: { notIn: ['RECHAZADO', 'CANCELADO'] } } } } } },
+            // Lo que suman los integrantes activos: cada uno ya lleva el precio de su plan (spec 029)
+            inscripciones: { where: { estado: { codigo: { notIn: ['RECHAZADO', 'CANCELADO'] } } }, select: { monto: true } },
         },
     },
 } satisfies Prisma.InscripcionInclude
@@ -70,22 +66,21 @@ function pagoOculto() {
 }
 
 /**
- * La delegación a la que pertenece la inscripción (spec 022 y 023): nombre, link, modalidad e
- * integrantes del grupo. El resumen de pagos (lo que debe, lo declarado y el saldo) solo se expone
+ * La delegación a la que pertenece la inscripción (spec 022, 023 y 029): nombre, link e integrantes
+ * del grupo. El resumen de pagos (lo que debe, lo declarado y el saldo) solo se expone
  * con `conPago` (spec 013); el detalle de cada voucher se ve en la delegación.
  */
 function delegacionDe(i: InscripcionDetalle, conPago: boolean) {
     if (!i.delegacion) return null
     const d = i.delegacion
-    const total = d._count.inscripciones
-    const unitario = precioUnitario(monto(d.precioEstandar), monto(d.precioPromocional), d.minIntegrantes, total)
+    const total = d.inscripciones.length
+    const totalAPagar = d.inscripciones.reduce((suma, integrante) => suma + monto(integrante.monto), 0)
     return {
         id: d.id,
         nombre: d.nombre,
         codigoLink: d.codigoLink,
-        modalidad: d.modalidad,
         totalIntegrantes: total,
-        pago: conPago ? resumenPagos(unitario * total, d.pagos) : null,
+        pago: conPago ? resumenPagos(totalAPagar, d.pagos) : null,
     }
 }
 

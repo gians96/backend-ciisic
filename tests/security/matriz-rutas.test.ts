@@ -94,11 +94,11 @@ const PUBLICAS: readonly Clave[] = [
 const SITIO: readonly Clave[] = [
     'GET /v1/site/catalogs',
     'POST /v1/site/contact',
-    'GET /v1/site/delegations/tarifa',
     'GET /v1/site/delegations/link/:codigoLink',
-    'POST /v1/site/delegations',
     'POST /v1/site/delegations/link/:codigoLink/participants',
     'POST /v1/site/delegations/link/:codigoLink/payments',
+    'GET /v1/site/delegations/join/:codigoInscripcion',
+    'POST /v1/site/delegations/join/:codigoInscripcion/participants',
     'GET /v1/site/document-lookup/dni/:numero',
     'GET /v1/site/event',
     'POST /v1/site/google-verification',
@@ -176,21 +176,23 @@ const MATRIZ: Record<Clave, Esperada> = {
     'DELETE /v1/contact-messages/:id': g('mensajes.eliminar', eventoDeMensaje),
 
     // delegation
-    'GET /v1/events/:eventId/delegations': g('eventos.configurar', P()),
-    'POST /v1/events/:eventId/delegations': g('eventos.configurar', P()),
-    'GET /v1/events/:eventId/delegations/tarifa': g('eventos.configurar', P()),
-    'PUT /v1/events/:eventId/delegations/tarifa': g('eventos.configurar', P()),
-    'GET /v1/delegations/:id': g('eventos.configurar', eventoDeDelegacion),
-    'PUT /v1/delegations/:id': g('eventos.configurar', eventoDeDelegacion),
-    'POST /v1/delegations/:id/inscriptions': g('eventos.configurar', eventoDeDelegacion),
-    'DELETE /v1/delegations/:id/inscriptions/:inscriptionId': g('eventos.configurar', eventoDeDelegacion),
-    // Revisar pagos y aprobar al grupo también lo hace quien valida inscripciones (spec 023)
-    'POST /v1/delegations/:id/approve': g(['eventos.configurar', 'inscripciones.validar'], eventoDeDelegacion),
-    'POST /v1/delegations/:id/payments': g('eventos.configurar', eventoDeDelegacion),
-    'PATCH /v1/delegations/:id/payments/:paymentId': g(['eventos.configurar', 'inscripciones.validar'], eventoDeDelegacion),
-    'DELETE /v1/delegations/:id/payments/:paymentId': g('eventos.configurar', eventoDeDelegacion),
-    // El voucher de cada pago también lo ve quien revisa pagos (spec 022)
-    'GET /v1/delegations/:id/payments/:paymentId/voucher': g(['eventos.configurar', 'pagos.ver'], eventoDeDelegacion),
+    // Ver: Tesorero y la Comisión elegida. Inscribir: la Comisión elegida. Gestionar (planes, precios, dominio, links): solo cuentas globales (spec 029)
+    'GET /v1/events/:eventId/delegations': g('delegaciones.ver', P()),
+    'POST /v1/events/:eventId/delegations': g(['delegaciones.gestionar', 'delegaciones.inscribir'], P()),
+    'GET /v1/delegations/:id': g('delegaciones.ver', eventoDeDelegacion),
+    'PUT /v1/delegations/:id': g('delegaciones.inscribir', eventoDeDelegacion),
+    'PUT /v1/delegations/:id/config': g('delegaciones.gestionar', eventoDeDelegacion),
+    'POST /v1/delegations/:id/links/regenerate': g('delegaciones.gestionar', eventoDeDelegacion),
+    'POST /v1/delegations/:id/inscriptions': g('delegaciones.inscribir', eventoDeDelegacion),
+    'PATCH /v1/delegations/:id/inscriptions/:inscriptionId': g('delegaciones.inscribir', eventoDeDelegacion),
+    'DELETE /v1/delegations/:id/inscriptions/:inscriptionId': g('delegaciones.inscribir', eventoDeDelegacion),
+    // Revisar pagos y aprobar al grupo es de quien valida inscripciones (Tesorero)
+    'POST /v1/delegations/:id/approve': g('inscripciones.validar', eventoDeDelegacion),
+    'POST /v1/delegations/:id/payments': g('delegaciones.inscribir', eventoDeDelegacion),
+    'PATCH /v1/delegations/:id/payments/:paymentId': g('inscripciones.validar', eventoDeDelegacion),
+    'DELETE /v1/delegations/:id/payments/:paymentId': g('delegaciones.gestionar', eventoDeDelegacion),
+    // El voucher de cada pago lo ve quien revisa pagos
+    'GET /v1/delegations/:id/payments/:paymentId/voucher': g('pagos.ver', eventoDeDelegacion),
 
     // document-lookup
     'GET /v1/document-lookup/dni/:numero': g('consultas_dni.gestionar'),
@@ -319,7 +321,7 @@ const LIMITES_POR_ACTOR: readonly RequestHandler[] = [
     limiteMarcarAsistencia, limiteCheckInPonencia, limiteReenvioCredencial, limiteRenovacionSesion, limiteSwitch, limiteLecturaReportes, limiteDescargaReportes, limiteCargaPadron, limiteEnlacesAsesores, limiteGestionDocentes,
 ]
 /** Total de rutas de /api: una ruta nueva obliga a clasificarla aquí. */
-const TOTAL_RUTAS = 178
+const TOTAL_RUTAS = 179
 
 function clasesDe(ruta: Ruta): Clase[] {
     const clases: Clase[] = []
@@ -388,7 +390,7 @@ describe('matriz de rutas (spec 013)', () => {
         expect(malas).toEqual([])
         // La detección de multer y validateBody funciona (si no, lo anterior no probaría nada)
         expect(rutas.filter((r) => r.handles.some(esMulter)).map((r) => r.clave).sort()).toEqual([
-            'POST /v1/inscription', 'POST /v1/papers', 'POST /v1/events/:eventId/advisory/import', 'POST /v1/delegations/:id/payments', 'POST /v1/payment-qr', 'POST /v1/site/delegations', 'POST /v1/site/delegations/link/:codigoLink/payments', 'POST /v1/site/inscriptions', 'POST /v1/site/papers', 'PUT /v1/me/photo',
+            'POST /v1/inscription', 'POST /v1/papers', 'POST /v1/events/:eventId/advisory/import', 'POST /v1/delegations/:id/payments', 'POST /v1/payment-qr', 'POST /v1/site/delegations/link/:codigoLink/payments', 'POST /v1/site/inscriptions', 'POST /v1/site/papers', 'PUT /v1/me/photo',
         ].sort())
         expect(rutas.filter((r) => r.handles.some(esValidacion)).length).toBeGreaterThan(30)
     })

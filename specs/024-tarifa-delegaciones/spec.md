@@ -1,5 +1,7 @@
 # Feature Specification: Tarifa de delegaciones administrable
 
+> **Reemplazada por la [spec 029](../029-delegaciones-planes/spec.md)**: ya no hay tarifa global del evento; cada delegación tiene sus propios planes (Con kit, Sin kit y Virtual). `GET|PUT /v1/events/:eventId/delegations/tarifa` fue retirada.
+
 **Created**: 2026-10-21 · **Status**: Implementado en el backend (panel en su repo) · **Contrato**: [`contracts/api-tarifa-delegaciones.md`](contracts/api-tarifa-delegaciones.md)
 
 **Input**: en la pestaña Delegaciones del panel el precio presencial (S/ 60 y S/ 50 desde 10 integrantes) y el

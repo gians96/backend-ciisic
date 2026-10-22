@@ -26,6 +26,7 @@ export const ALCANCE = {
     'certificados.gestionar': 'G',
     'especializadas.gestionar': 'G',
     'reportes.gestionar': 'G',
+    'delegaciones.gestionar': 'G',
 
     'resumen.ver': 'E',
     'inscripciones.ver': 'E',
@@ -48,6 +49,8 @@ export const ALCANCE = {
     'especializadas.asistencia': 'E',
     'reportes.ver': 'E',
     'reportes.exportar': 'E',
+    'delegaciones.ver': 'E',
+    'delegaciones.inscribir': 'E',
 } as const
 
 export type Permiso = keyof typeof ALCANCE
@@ -74,6 +77,7 @@ export const ETIQUETAS_PERMISO: Record<Permiso, string> = {
     'certificados.gestionar': 'Gestionar plantillas y emitir certificados',
     'especializadas.gestionar': 'Crear, editar y eliminar ponencias especializadas',
     'reportes.gestionar': 'Cargar el padrón de estudiantes y los asesores por sección',
+    'delegaciones.gestionar': 'Configurar delegaciones: planes, precios, dominio del correo y links',
 
     'resumen.ver': 'Ver el resumen del evento',
     'inscripciones.ver': 'Ver inscritos (nombre, documento, correo y celular)',
@@ -96,6 +100,8 @@ export const ETIQUETAS_PERMISO: Record<Permiso, string> = {
     'especializadas.asistencia': 'Tomar asistencia en ponencias especializadas (inscribe al instante con el DNI)',
     'reportes.ver': 'Ver el seguimiento de estudiantes por asesor',
     'reportes.exportar': 'Descargar el seguimiento por asesor en Excel y PDF',
+    'delegaciones.ver': 'Ver las delegaciones, sus integrantes y vouchers',
+    'delegaciones.inscribir': 'Crear delegaciones e inscribir y mover a sus integrantes',
 }
 
 /** Un permiso implica otros: se aplican al guardar y al cargar al actor. */
@@ -114,6 +120,7 @@ export const DEPENDENCIAS: Partial<Record<Permiso, readonly Permiso[]>> = {
     'especializadas.asistencia': ['especializadas.ver'],
     'reportes.ver': ['inscripciones.ver'],
     'reportes.exportar': ['reportes.ver'],
+    'delegaciones.inscribir': ['delegaciones.ver'],
 }
 
 const TODOS = PERMISOS
@@ -133,6 +140,7 @@ const PERMISOS_TESORERO: readonly Permiso[] = [
     'certificados.ver',
     'reportes.ver',
     'reportes.exportar',
+    'delegaciones.ver',
 ]
 
 /**
@@ -156,6 +164,8 @@ export const PERMISOS_ELEGIBLES_COMISION: readonly Permiso[] = [
     'especializadas.asistencia',
     'reportes.ver',
     'reportes.exportar',
+    'delegaciones.ver',
+    'delegaciones.inscribir',
 ]
 
 /** Permiso con el que se crea por defecto una cuenta de la Comisión. */

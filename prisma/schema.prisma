@@ -107,11 +107,6 @@ model Evento {
   logoArchivo             String?                 @map("logo_archivo") @db.VarChar(255)
   datosPago               Json?                   @map("datos_pago")
   credencialCorreoId      Int?                    @map("credencial_correo_id")
-  /// Tarifa por defecto de las delegaciones del evento (spec 021). Cada delegación la copia al
-  /// crearse, así un cambio de precio no altera lo ya cobrado.
-  delegacionesMinIntegrantes    Int     @default(10) @map("delegaciones_min_integrantes")
-  delegacionesPrecioEstandar    Decimal @default(60.00) @map("delegaciones_precio_estandar") @db.Decimal(10, 2)
-  delegacionesPrecioPromocional Decimal @default(50.00) @map("delegaciones_precio_promocional") @db.Decimal(10, 2)
   creadoEn                DateTime                @default(now()) @map("creado_en")
   actualizadoEn           DateTime                @updatedAt @map("actualizado_en")
   credencialCorreo        CredencialCorreo?       @relation(fields: [credencialCorreoId], references: [id], onDelete: SetNull, map: "fk_eventos_credencial_correo")
@@ -201,7 +196,11 @@ model CategoriaInscripcion {
   precioDesde     Decimal?          @map("precio_desde") @db.Decimal(10, 2)
   esEstudiantil   Boolean           @default(false) @map("es_estudiantil")
   orden           Int               @default(0)
+  /// Spec 029: categoría oculta de una delegación (`DELEGACION_<id>`) con sus planes Con kit, Sin kit y Virtual.
+  /// No sale en Categorías y tipos ni en la landing; se administra desde Delegaciones.
+  delegacionId    Int?              @unique(map: "uq_categorias_inscripcion_delegacion") @map("delegacion_id")
   evento          Evento            @relation(fields: [eventoId], references: [id], map: "fk_categorias_inscripcion_evento")
+  delegacion      Delegacion?       @relation("PlanesDeDelegacion", fields: [delegacionId], references: [id], onDelete: SetNull, map: "fk_categorias_inscripcion_delegacion")
   tipos           TipoInscripcion[]
 
   @@unique([eventoId, codigo], map: "uq_categorias_inscripcion_evento_codigo")
@@ -218,6 +217,8 @@ model TipoInscripcion {
   caracteristicas        Json?
   precio                 Decimal              @db.Decimal(10, 2)
   precioInstitucional    Decimal              @map("precio_institucional") @db.Decimal(10, 2)
+  /// Spec 029: solo los planes de una delegación. Desde `minIntegrantes` de la delegación el plan cobra este precio.
+  precioPromocional      Decimal?             @map("precio_promocional") @db.Decimal(10, 2)
   disponiblePara         DisponibilidadTipo   @default(TODOS) @map("disponible_para")
   modalidad              ModalidadAsistencia  @default(PRESENCIAL) @map("modalidad")
   /// Spec 020: no se ofrece a estudiantes de la UNDC (verificados o con correo institucional numérico).
@@ -226,7 +227,6 @@ model TipoInscripcion {
   orden                  Int                  @default(0)
   categoria              CategoriaInscripcion @relation(fields: [categoriaId], references: [id], map: "fk_tipos_inscripcion_categoria")
   inscripciones          Inscripcion[]
-  delegaciones           Delegacion[]
 
   @@unique([categoriaId, codigo], map: "uq_tipos_inscripcion_categoria_codigo")
   @@map("tipos_inscripcion")
@@ -317,8 +317,9 @@ model Inscripcion {
   @@map("inscripciones")
 }
 
-/// Delegación o institución que inscribe a su grupo con una tarifa por persona según su tamaño
-/// (presencial: estándar y promocional desde `minIntegrantes`; virtual: tarifa única).
+/// Delegación o institución que inscribe a su grupo. Tiene sus propios planes (Con kit, Sin kit y Virtual): son
+/// tipos de inscripción de su categoría oculta (`planes`), cada uno con su precio, su estado y, opcionalmente, un
+/// precio promocional desde `minIntegrantes` (spec 029). Cada integrante lleva el tipo del plan que eligió.
 model Delegacion {
   id                          Int                 @id @default(autoincrement())
   eventoId                    Int                 @map("evento_id")
@@ -331,23 +332,23 @@ model Delegacion {
   /// Documento del delegado (spec 023): es el contacto del grupo, no necesariamente un integrante.
   representanteTipoDocumento  String?             @map("representante_tipo_documento") @db.VarChar(10)
   representanteDocumento      String?             @map("representante_documento") @db.VarChar(20)
-  /// Cómo asiste el grupo (spec 023): decide el tipo de las inscripciones y la tarifa.
-  modalidad                   ModalidadAsistencia @default(PRESENCIAL)
+  /// Integrantes activos desde los que los planes con precio promocional lo cobran (spec 029).
   minIntegrantes              Int                 @default(10) @map("min_integrantes")
-  precioEstandar              Decimal             @default(60.00) @map("precio_estandar") @db.Decimal(10, 2)
-  precioPromocional           Decimal             @default(50.00) @map("precio_promocional") @db.Decimal(10, 2)
-  /// Tipo vigente del grupo (spec 023): lo recalcula el servidor con la modalidad y el número de integrantes.
-  tipoInscripcionId           Int?                @map("tipo_inscripcion_id")
+  /// Dominio permitido para el correo de los integrantes que se inscriben por link (p. ej. `unac.edu.pe`, sin
+  /// arroba). `null` = cualquiera. El staff queda exento.
+  dominioCorreo               String?             @map("dominio_correo") @db.VarChar(100)
+  /// Link individual (spec 029): con él cada integrante se inscribe solo. `null` = apagado.
+  codigoInscripcion           String?             @unique(map: "uq_delegaciones_codigo_inscripcion") @map("codigo_inscripcion") @db.VarChar(100)
   activo                      Boolean             @default(true)
   creadoEn                    DateTime            @default(now()) @map("creado_en")
   actualizadoEn               DateTime            @updatedAt @map("actualizado_en")
   evento                      Evento              @relation(fields: [eventoId], references: [id], onDelete: Cascade, map: "fk_delegaciones_evento")
-  tipoInscripcion             TipoInscripcion?    @relation(fields: [tipoInscripcionId], references: [id], onDelete: SetNull, map: "fk_delegaciones_tipo_inscripcion")
+  /// Categoría oculta con los planes de la delegación (spec 029).
+  planes                      CategoriaInscripcion? @relation("PlanesDeDelegacion")
   inscripciones               Inscripcion[]
   pagos                       DelegacionPago[]
 
   @@index([eventoId], map: "idx_delegaciones_evento")
-  @@index([tipoInscripcionId], map: "idx_delegaciones_tipo_inscripcion")
   @@map("delegaciones")
 }
 

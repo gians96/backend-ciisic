@@ -181,3 +181,37 @@ describe('roles: alcance y delegación', () => {
         }
     })
 })
+
+describe('permisos de las delegaciones (spec 029)', () => {
+    it('solo gestionar es global; ver e inscribir son por evento', () => {
+        expect(ALCANCE['delegaciones.gestionar']).toBe('G')
+        for (const p of ['delegaciones.ver', 'delegaciones.inscribir'] as const) expect(ALCANCE[p]).toBe('E')
+    })
+
+    it('inscribir implica ver', () => {
+        expect(ordenados(cierre(['delegaciones.inscribir']))).toEqual(['delegaciones.inscribir', 'delegaciones.ver'])
+    })
+
+    it('el Owner y el Administrador los tienen todos', () => {
+        for (const rol of [ROL.OWNER, ROL.ADMINISTRADOR]) {
+            const efectivos = permisosEfectivos(rol)
+            for (const p of ['delegaciones.gestionar', 'delegaciones.ver', 'delegaciones.inscribir'] as const) expect({ rol, p, tiene: efectivos.has(p) }).toEqual({ rol, p, tiene: true })
+        }
+    })
+
+    it('el Tesorero ve las delegaciones y valida pagos, pero no inscribe ni configura', () => {
+        const tesorero = permisosEfectivos(ROL.TESORERO)
+        expect(tesorero.has('delegaciones.ver')).toBe(true)
+        expect(tesorero.has('inscripciones.validar')).toBe(true)
+        expect(tesorero.has('delegaciones.inscribir')).toBe(false)
+        expect(tesorero.has('delegaciones.gestionar')).toBe(false)
+    })
+
+    it('la Comisión puede recibir ver e inscribir, nunca gestionar ni pagos', () => {
+        for (const p of ['delegaciones.ver', 'delegaciones.inscribir'] as const) expect(PERMISOS_ELEGIBLES_COMISION).toContain(p)
+        expect(PERMISOS_ELEGIBLES_COMISION).not.toContain('delegaciones.gestionar')
+        const efectivos = permisosEfectivos(ROL.COMISION, ['delegaciones.inscribir', 'delegaciones.gestionar'])
+        expect(ordenados(efectivos)).toEqual(['delegaciones.inscribir', 'delegaciones.ver'])
+        expect(efectivos.has('pagos.ver')).toBe(false)
+    })
+})

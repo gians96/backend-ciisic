@@ -25,7 +25,7 @@ variable antigua que sobre y **importa una sola vez** las que tienen equivalente
 | **Correo** | Credenciales de Brevo (API key cifrada, remitente, predeterminada, prueba de cuenta, correo de prueba) | `credenciales_correo` |
 | **Consultas DNI** | Tokens de Decolecta/apiperu (límite, renovación, prioridad, prueba) | `tokens_consulta` |
 | **Eventos → Acceso** | Tokens de acceso de la landing del evento (se muestran una vez) | `tokens_acceso` |
-| **Eventos → Delegaciones** | Delegaciones (grupos) del evento: tarifa por persona, mínimo de integrantes y link de seguimiento | `delegaciones` (tarifa por defecto en `eventos`) |
+| **Delegaciones** | Delegaciones (grupos) del evento: planes Con kit / Sin kit / Virtual con su precio, mínimo para el promocional, dominio del correo, links del delegado e individual, integrantes y vouchers | `delegaciones`, `categorias_inscripcion` y `tipos_inscripcion` (sus planes) |
 | **Eventos → Integraciones** | URL y token de deportes-fi | `integraciones_evento` |
 | **Eventos → General** | Datos del evento, remitente/asunto del correo, credencial de correo del evento | `eventos` |
 

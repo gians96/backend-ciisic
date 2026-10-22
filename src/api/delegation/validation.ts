@@ -1,6 +1,6 @@
 import * as yup from 'yup'
 import { fechaLima, REGEX_FECHA } from '../../core/fechas'
-import { MODALIDADES_ASISTENCIA } from '../../core/catalogos'
+import { CODIGOS_PLAN } from './services/planes'
 
 /** Documento igual que en la inscripción pública: DNI de 8 dígitos o carné de 9 a 12 caracteres. */
 const numeroDocumento = () => yup.string().trim().required().when('tipoDocumento', {
@@ -11,13 +11,8 @@ const numeroDocumento = () => yup.string().trim().required().when('tipoDocumento
 
 const celular = () => yup.string().trim().matches(/^\+?\d{9,15}$/, 'El celular debe tener entre 9 y 15 dígitos')
 
-/** Cómo asiste la delegación (spec 023): decide el tipo de sus inscripciones y la tarifa. */
-const modalidad = () => yup.string().oneOf([...MODALIDADES_ASISTENCIA]).default('PRESENCIAL')
-
-function preciosCoherentes(value: { precioEstandar?: number, precioPromocional?: number }) {
-    if (value.precioEstandar === undefined || value.precioPromocional === undefined) return true
-    return value.precioPromocional <= value.precioEstandar
-}
+/** Plan que elige el integrante (spec 029). Sin plan, el servidor usa el único activo de la delegación. */
+const plan = () => yup.string().trim().uppercase().oneOf([...CODIGOS_PLAN], 'Plan no válido')
 
 export const participanteDelegacionSchema = yup.object({
     tipoDocumento: yup.string().oneOf(['dni', 'ce']).required(),
@@ -27,46 +22,74 @@ export const participanteDelegacionSchema = yup.object({
     correo: yup.string().trim().lowercase().email().max(191).required(),
     // Vacío es válido: la carga masiva solo exige documento, nombres y correo
     celular: yup.string().trim().test('celular', 'El celular debe tener entre 9 y 15 dígitos', (valor) => !valor || /^\+?\d{9,15}$/.test(valor)).default(''),
+    plan: plan(),
 }).required()
 
 /** El delegado (spec 023): contacto del grupo y, si marca `esIntegrante`, su primer integrante. */
-const representanteSchema = (esIntegrantePorDefecto: boolean) => yup.object({
+const representanteSchema = () => yup.object({
     nombres: yup.string().trim().min(2).max(120).required(),
     apellidos: yup.string().trim().min(2).max(120).required(),
     tipoDocumento: yup.string().oneOf(['dni', 'ce']).required(),
     numeroDocumento: numeroDocumento(),
     correo: yup.string().trim().lowercase().email().max(191).required(),
     celular: celular().required(),
-    esIntegrante: yup.boolean().default(esIntegrantePorDefecto),
+    esIntegrante: yup.boolean().default(false),
+    /** Plan del delegado si cuenta como integrante. */
+    plan: plan(),
 }).required()
 
 const MAX_INTEGRANTES = 200
 
 const participantes = () => yup.array().of(participanteDelegacionSchema).max(MAX_INTEGRANTES, `Máximo ${MAX_INTEGRANTES} participantes por carga`)
 
+const MAX_PRECIO = 99999999
+
+/** Cambios de un plan: lo que no llega se conserva. `precioPromocional: null` quita la escala. */
+const planCambiosSchema = yup.object({
+    activo: yup.boolean(),
+    precio: yup.number().min(0).max(MAX_PRECIO),
+    precioPromocional: yup.number().min(0).max(MAX_PRECIO).nullable(),
+}).default(undefined)
+
+/** Planes de una delegación (spec 029): cada clave es opcional. */
+export const planesSchema = yup.object({
+    CON_KIT: planCambiosSchema,
+    SIN_KIT: planCambiosSchema,
+    VIRTUAL: planCambiosSchema,
+}).default(undefined)
+
+export type PlanesInput = NonNullable<yup.InferType<typeof planesSchema>>
+
+/** Dominio del correo de los integrantes: `unac.edu.pe` (se admite escribirlo con arroba). Vacío = sin filtro. */
+const dominioCorreo = () => yup.string().nullable()
+    .transform((valor: unknown) => (typeof valor === 'string' ? valor.trim().toLowerCase().replace(/^@/, '') || null : valor))
+    .max(100)
+    .matches(/^(?!-)[a-z0-9-]+(\.[a-z0-9-]+)+$/, { message: 'Escribe un dominio como unac.edu.pe', excludeEmptyString: true })
+
+const minIntegrantes = () => yup.number().integer().min(1).max(1000)
+
 /**
- * Alta de una delegación por el staff (spec 023): el delegado (documento, correo y celular), la
- * modalidad y, si ya los tiene, sus integrantes. La tarifa sale de los tipos del evento; las cifras
- * de abajo son opcionales y solo sirven para un convenio con un precio distinto.
+ * Alta de una delegación por el staff (spec 029): el delegado, sus datos y, si ya los tiene, sus integrantes.
+ * Los planes, el dominio, el mínimo y el link individual solo los fija quien tiene `delegaciones.gestionar`:
+ * sin ellos los tres planes nacen apagados y sin precio.
  */
 export const crearDelegacionSchema = yup.object({
     nombre: yup.string().trim().min(2).max(150).required(),
     institucion: yup.string().trim().max(191).nullable(),
-    modalidad: modalidad(),
-    representante: representanteSchema(false),
+    representante: representanteSchema(),
     participantes: participantes().default([]),
-    minIntegrantes: yup.number().integer().min(1).max(1000),
-    precioEstandar: yup.number().min(0).max(99999999),
-    precioPromocional: yup.number().min(0).max(99999999),
-}).test('precios', 'El precio promocional no puede ser mayor que el precio estándar', preciosCoherentes).required()
+    planes: planesSchema,
+    minIntegrantes: minIntegrantes(),
+    dominioCorreo: dominioCorreo(),
+    inscripcionIndividual: yup.boolean(),
+}).required()
 
 export type CrearDelegacionInput = yup.InferType<typeof crearDelegacionSchema>
 
-/** Edición de los datos de la delegación por el staff. La modalidad solo cambia mientras no tenga integrantes. */
+/** Edición de los datos del grupo por el staff (no toca planes, precios ni links). */
 export const editarDelegacionSchema = yup.object({
     nombre: yup.string().trim().min(2).max(150),
     institucion: yup.string().trim().max(191).nullable(),
-    modalidad: yup.string().oneOf([...MODALIDADES_ASISTENCIA]),
     representante: yup.object({
         nombres: yup.string().trim().min(2).max(120).required(),
         apellidos: yup.string().trim().min(2).max(120).required(),
@@ -76,31 +99,35 @@ export const editarDelegacionSchema = yup.object({
         celular: celular().required(),
     }).default(undefined),
     activo: yup.boolean(),
-    minIntegrantes: yup.number().integer().min(1).max(1000),
-    precioEstandar: yup.number().min(0).max(99999999),
-    precioPromocional: yup.number().min(0).max(99999999),
-}).test('precios', 'El precio promocional no puede ser mayor que el precio estándar', preciosCoherentes).required()
+}).required()
 
 export type EditarDelegacionInput = yup.InferType<typeof editarDelegacionSchema>
 
 /**
- * Tarifa de las delegaciones de un evento (spec 024). Cada campo es opcional; el servicio mezcla lo que
- * llega con lo vigente y comprueba que el promocional no supere al estándar. `aplicarAExistentes` copia la
- * tarifa a las delegaciones que aún no tienen integrantes ni vouchers.
+ * Configuración de la delegación (spec 029, `delegaciones.gestionar`): planes y precios, mínimo para el
+ * promocional, dominio del correo y link individual. Cada campo es opcional; el servicio mezcla lo que llega
+ * con lo vigente.
  */
-export const tarifaDelegacionesSchema = yup.object({
-    minIntegrantes: yup.number().integer().min(1).max(1000),
-    precioEstandar: yup.number().min(0).max(99999999),
-    precioPromocional: yup.number().min(0).max(99999999),
-    precioVirtual: yup.number().min(0).max(99999999),
-    virtualActivo: yup.boolean(),
-    aplicarAExistentes: yup.boolean(),
-})
-    .test('precios', 'El precio promocional no puede ser mayor que el precio estándar', preciosCoherentes)
-    .test('alguno', 'Indica al menos un dato de la tarifa', (value) => Object.values(value).some((campo) => campo !== undefined))
-    .required()
+export const configDelegacionSchema = yup.object({
+    planes: planesSchema,
+    minIntegrantes: minIntegrantes(),
+    dominioCorreo: dominioCorreo(),
+    inscripcionIndividual: yup.boolean(),
+}).test('alguno', 'Indica al menos un dato de la configuración', (valor) => Object.values(valor).some((campo) => campo !== undefined)).required()
 
-export type TarifaDelegacionesInput = yup.InferType<typeof tarifaDelegacionesSchema>
+export type ConfigDelegacionInput = yup.InferType<typeof configDelegacionSchema>
+
+export const regenerarLinkSchema = yup.object({
+    enlace: yup.string().oneOf(['delegado', 'individual']).required(),
+}).required()
+
+export type RegenerarLinkInput = yup.InferType<typeof regenerarLinkSchema>
+
+export const cambiarPlanSchema = yup.object({
+    plan: plan().required(),
+}).required()
+
+export type CambiarPlanInput = yup.InferType<typeof cambiarPlanSchema>
 
 export const inscribirEnDelegacionSchema = yup.object({
     participantes: yup.array().of(participanteDelegacionSchema).min(1, 'Registra al menos un participante').max(MAX_INTEGRANTES, `Máximo ${MAX_INTEGRANTES} participantes por carga`).required(),
@@ -108,6 +135,23 @@ export const inscribirEnDelegacionSchema = yup.object({
 
 export type ParticipanteDelegacionInput = yup.InferType<typeof participanteDelegacionSchema>
 export type InscribirEnDelegacionInput = yup.InferType<typeof inscribirEnDelegacionSchema>
+
+/**
+ * Un integrante que se inscribe solo con el link individual (spec 029). Con dominio en la delegación escribe
+ * solo el prefijo (`correoPrefijo`) o el correo completo; sin dominio, el correo completo. Sin Google.
+ */
+export const inscribirseSchema = yup.object({
+    tipoDocumento: yup.string().oneOf(['dni', 'ce']).required(),
+    numeroDocumento: numeroDocumento(),
+    nombres: yup.string().trim().min(2).max(120).required(),
+    apellidos: yup.string().trim().min(2).max(120).required(),
+    correo: yup.string().trim().lowercase().email().max(191),
+    correoPrefijo: yup.string().trim().lowercase().matches(/^[a-z0-9._%+-]{1,64}$/, 'Escribe solo lo que va antes de la @'),
+    celular: yup.string().trim().test('celular', 'El celular debe tener entre 9 y 15 dígitos', (valor) => !valor || /^\+?\d{9,15}$/.test(valor)).default(''),
+    plan: plan(),
+}).test('correo', 'Escribe tu correo', (valor) => Boolean(valor.correo || valor.correoPrefijo)).required()
+
+export type InscribirseInput = yup.InferType<typeof inscribirseSchema>
 
 /**
  * Un voucher de la delegación (spec 023). El archivo llega aparte (`vouchers`) y se empareja por
@@ -144,22 +188,3 @@ export const estadoPagoDelegacionSchema = yup.object({
 }).required()
 
 export type EstadoPagoDelegacionInput = yup.InferType<typeof estadoPagoDelegacionSchema>
-
-/**
- * Registro público de una delegación (spec 018, ampliado en la 023): el delegado inscribe a su
- * grupo y paga con uno o varios vouchers. La modalidad decide el tipo y la tarifa; el servidor
- * calcula el monto. Con `codigoLink` el registro se suma a una delegación que el staff ya creó.
- */
-export const registroDelegacionSchema = yup.object({
-    codigoLink: yup.string().trim().max(100).nullable(),
-    modalidad: modalidad(),
-    delegacion: yup.object({
-        nombre: yup.string().trim().min(2).max(150).required(),
-        institucion: yup.string().trim().max(191).nullable(),
-    }).required(),
-    representante: representanteSchema(true),
-    participantes: participantes().default([]),
-    pagos: pagos().required(),
-}).required()
-
-export type RegistroDelegacionInput = yup.InferType<typeof registroDelegacionSchema>

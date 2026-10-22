@@ -6,23 +6,21 @@ import { limiteInscripcion, limiteLecturaPublica, limiteTokenInscripcion, limite
 import { requireTokenEvento } from '../../../middlewares/sitio'
 import { MAX_VOUCHERS_POR_ENVIO, uploadVarios, validateUploadedFilesContent } from '../../../middlewares/upload'
 import { eventoDeDelegacion, eventoDelParametro } from '../../../core/resolutores-evento'
-import { crearDelegacionSchema, editarDelegacionSchema, inscribirEnDelegacionSchema, tarifaDelegacionesSchema } from '../validation'
+import {
+    cambiarPlanSchema, configDelegacionSchema, crearDelegacionSchema, editarDelegacionSchema, inscribirEnDelegacionSchema, inscribirseSchema, regenerarLinkSchema,
+} from '../validation'
 
 /** Hasta `MAX_VOUCHERS_POR_ENVIO` vouchers en el campo `vouchers`, con la firma de cada archivo comprobada. */
 const vouchers = [uploadVarios.array('vouchers', MAX_VOUCHERS_POR_ENVIO), validateUploadedFilesContent]
 
+const delEvento = { evento: eventoDelParametro('eventId') }
+const delDelegacion = { evento: eventoDeDelegacion }
+
 const routes: AppRoute[] = [
-    // API del sitio (specs 021 y 023): el evento sale del token de acceso. La delegación se crea con
-    // la tarifa de su modalidad y paga con uno o varios vouchers; con su link el delegado solo agrega
-    // (integrantes y vouchers), nunca borra ni cambia lo ya enviado.
-    { method: 'get', path: '/v1/site/delegations/tarifa', handler: controller.publicTarifa, middlewares: [requireTokenEvento, limiteLecturaPublica, limiteTokenLectura] },
+    // API del sitio (specs 021, 023 y 029): el evento sale del token de acceso. Las delegaciones las crea el staff;
+    // con su link el delegado solo agrega (integrantes con su plan y vouchers) y, con el link individual, cada
+    // integrante se inscribe solo. Nunca se borra ni se cambia lo ya enviado.
     { method: 'get', path: '/v1/site/delegations/link/:codigoLink', handler: controller.publicFind, middlewares: [requireTokenEvento, limiteLecturaPublica, limiteTokenLectura] },
-    {
-        method: 'post',
-        path: '/v1/site/delegations',
-        handler: controller.publicCreate,
-        middlewares: [requireTokenEvento, limiteInscripcion, limiteTokenInscripcion, ...vouchers],
-    },
     {
         method: 'post',
         path: '/v1/site/delegations/link/:codigoLink/participants',
@@ -35,29 +33,52 @@ const routes: AppRoute[] = [
         handler: controller.publicAddPayments,
         middlewares: [requireTokenEvento, limiteInscripcion, limiteTokenInscripcion, ...vouchers],
     },
+    { method: 'get', path: '/v1/site/delegations/join/:codigoInscripcion', handler: controller.publicJoinFind, middlewares: [requireTokenEvento, limiteLecturaPublica, limiteTokenLectura] },
+    {
+        method: 'post',
+        path: '/v1/site/delegations/join/:codigoInscripcion/participants',
+        handler: controller.publicJoin,
+        middlewares: [requireTokenEvento, limiteInscripcion, limiteTokenInscripcion, validateBody(inscribirseSchema)],
+    },
 
-    // Administración: la gestión es configuración del evento (cuentas globales); revisar pagos y
-    // aprobar al grupo también lo hace quien valida inscripciones (Tesorero y Comisión de sus eventos)
-    { method: 'get', path: '/v1/events/:eventId/delegations', handler: controller.list, middlewares: [requirePermiso('eventos.configurar', { evento: eventoDelParametro('eventId') })] },
-    { method: 'post', path: '/v1/events/:eventId/delegations', handler: controller.create, middlewares: [requirePermiso('eventos.configurar', { evento: eventoDelParametro('eventId') }), validateBody(crearDelegacionSchema)] },
-    // Tarifa del evento (spec 024): precios presencial y virtual y mínimo de integrantes
-    { method: 'get', path: '/v1/events/:eventId/delegations/tarifa', handler: controller.tarifa, middlewares: [requirePermiso('eventos.configurar', { evento: eventoDelParametro('eventId') })] },
-    { method: 'put', path: '/v1/events/:eventId/delegations/tarifa', handler: controller.saveTarifa, middlewares: [requirePermiso('eventos.configurar', { evento: eventoDelParametro('eventId') }), validateBody(tarifaDelegacionesSchema)] },
-    { method: 'get', path: '/v1/delegations/:id', handler: controller.find, middlewares: [requirePermiso('eventos.configurar', { evento: eventoDeDelegacion })] },
-    { method: 'put', path: '/v1/delegations/:id', handler: controller.update, middlewares: [requirePermiso('eventos.configurar', { evento: eventoDeDelegacion }), validateBody(editarDelegacionSchema)] },
+    // Administración (spec 029). Ver: Tesorero y la Comisión elegida; inscribir (integrantes, datos del grupo, vouchers):
+    // la Comisión elegida; gestionar (planes, precios, dominio, links): solo Owner y Administrador. Validar vouchers y
+    // aprobar al grupo es de quien valida inscripciones (Tesorero). Los tres son por evento salvo `gestionar` (global).
+    { method: 'get', path: '/v1/events/:eventId/delegations', handler: controller.list, middlewares: [requirePermiso('delegaciones.ver', delEvento)] },
+    {
+        method: 'post',
+        path: '/v1/events/:eventId/delegations',
+        handler: controller.create,
+        middlewares: [requirePermiso(['delegaciones.gestionar', 'delegaciones.inscribir'], delEvento), validateBody(crearDelegacionSchema)],
+    },
+    { method: 'get', path: '/v1/delegations/:id', handler: controller.find, middlewares: [requirePermiso('delegaciones.ver', delDelegacion)] },
+    { method: 'put', path: '/v1/delegations/:id', handler: controller.update, middlewares: [requirePermiso('delegaciones.inscribir', delDelegacion), validateBody(editarDelegacionSchema)] },
+    { method: 'put', path: '/v1/delegations/:id/config', handler: controller.config, middlewares: [requirePermiso('delegaciones.gestionar', delDelegacion), validateBody(configDelegacionSchema)] },
+    {
+        method: 'post',
+        path: '/v1/delegations/:id/links/regenerate',
+        handler: controller.regenerateLink,
+        middlewares: [requirePermiso('delegaciones.gestionar', delDelegacion), validateBody(regenerarLinkSchema)],
+    },
     {
         method: 'post',
         path: '/v1/delegations/:id/inscriptions',
         handler: controller.bulkInscriptions,
-        middlewares: [requirePermiso('eventos.configurar', { evento: eventoDeDelegacion }), validateBody(inscribirEnDelegacionSchema)],
+        middlewares: [requirePermiso('delegaciones.inscribir', delDelegacion), validateBody(inscribirEnDelegacionSchema)],
     },
-    { method: 'delete', path: '/v1/delegations/:id/inscriptions/:inscriptionId', handler: controller.removeInscription, middlewares: [requirePermiso('eventos.configurar', { evento: eventoDeDelegacion })] },
-    { method: 'post', path: '/v1/delegations/:id/approve', handler: controller.approve, middlewares: [requirePermiso(['eventos.configurar', 'inscripciones.validar'], { evento: eventoDeDelegacion })] },
-    { method: 'post', path: '/v1/delegations/:id/payments', handler: controller.addPayments, middlewares: [requirePermiso('eventos.configurar', { evento: eventoDeDelegacion }), ...vouchers] },
-    { method: 'patch', path: '/v1/delegations/:id/payments/:paymentId', handler: controller.paymentState, middlewares: [requirePermiso(['eventos.configurar', 'inscripciones.validar'], { evento: eventoDeDelegacion })] },
-    { method: 'delete', path: '/v1/delegations/:id/payments/:paymentId', handler: controller.removePayment, middlewares: [requirePermiso('eventos.configurar', { evento: eventoDeDelegacion })] },
-    // El voucher también lo ve quien revisa pagos
-    { method: 'get', path: '/v1/delegations/:id/payments/:paymentId/voucher', handler: controller.paymentVoucher, middlewares: [requirePermiso(['eventos.configurar', 'pagos.ver'], { evento: eventoDeDelegacion })] },
+    {
+        method: 'patch',
+        path: '/v1/delegations/:id/inscriptions/:inscriptionId',
+        handler: controller.changePlan,
+        middlewares: [requirePermiso('delegaciones.inscribir', delDelegacion), validateBody(cambiarPlanSchema)],
+    },
+    { method: 'delete', path: '/v1/delegations/:id/inscriptions/:inscriptionId', handler: controller.removeInscription, middlewares: [requirePermiso('delegaciones.inscribir', delDelegacion)] },
+    { method: 'post', path: '/v1/delegations/:id/approve', handler: controller.approve, middlewares: [requirePermiso('inscripciones.validar', delDelegacion)] },
+    { method: 'post', path: '/v1/delegations/:id/payments', handler: controller.addPayments, middlewares: [requirePermiso('delegaciones.inscribir', delDelegacion), ...vouchers] },
+    { method: 'patch', path: '/v1/delegations/:id/payments/:paymentId', handler: controller.paymentState, middlewares: [requirePermiso('inscripciones.validar', delDelegacion)] },
+    { method: 'delete', path: '/v1/delegations/:id/payments/:paymentId', handler: controller.removePayment, middlewares: [requirePermiso('delegaciones.gestionar', delDelegacion)] },
+    // El voucher lo ve quien revisa pagos
+    { method: 'get', path: '/v1/delegations/:id/payments/:paymentId/voucher', handler: controller.paymentVoucher, middlewares: [requirePermiso('pagos.ver', delDelegacion)] },
 ]
 
 export default buildRouter(routes)

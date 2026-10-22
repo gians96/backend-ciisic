@@ -7,7 +7,7 @@ import { conflict, notFound } from '../../../core/http-error'
 import { monto } from '../../../core/catalogos'
 import { aColumnaFecha, fechaSoloDia } from '../../../core/fechas'
 import { uploadedFilePath } from '../../../middlewares/upload'
-import { redondear } from './tarifa'
+import { redondear } from './planes'
 import type { AgregarPagosInput, EstadoPagoDelegacionInput, PagoDelegacionInput } from '../validation'
 
 /**

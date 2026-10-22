@@ -135,7 +135,8 @@ export async function crearEvento(input: CrearEventoInput) {
     const origen = input.copiarDeEventoId
         ? await prisma.evento.findUnique({
             where: { id: input.copiarDeEventoId },
-            include: { categorias: { include: { tipos: true }, orderBy: { orden: 'asc' } } },
+            // Los planes de cada delegación (spec 029) son de esa delegación: no se copian a otro evento
+            include: { categorias: { where: { delegacionId: null }, include: { tipos: true }, orderBy: { orden: 'asc' } } },
         })
         : null
     if (input.copiarDeEventoId && !origen) throw conflict('SOURCE_EVENT_NOT_FOUND', 'El evento a copiar no existe.')
@@ -251,7 +252,8 @@ export async function resumenEvento(id: number, conPago = true) {
     const total = (codigo: string) => resumenEstados.find((item) => item.codigo === codigo)?.total ?? 0
     const montoDe = (codigo: string) => resumenEstados.find((item) => item.codigo === codigo)?.monto ?? 0
 
-    const resumenTipos = tipos.map((tipo) => {
+    // Los planes de las delegaciones (spec 029) son muchos y casi todos vacíos: solo salen los que tienen inscritos
+    const resumenTipos = tipos.filter((tipo) => !tipo.categoria.delegacionId || porTipo.some((item) => item.tipoInscripcionId === tipo.id)).map((tipo) => {
         const filas = porTipo.filter((item) => item.tipoInscripcionId === tipo.id)
         const aprobadas = filas.filter((item) => codigoDeEstado.get(item.estadoId) === 'APROBADO')
         return {

@@ -171,6 +171,20 @@ describe('resumen del evento', () => {
         expect(r.body.data.porTipo[0]).toMatchObject({ aprobadas: 3, montoAprobado: 360 })
     })
 
+    it('los planes de las delegaciones solo salen si tienen inscritos (spec 029)', async () => {
+        m.inscripcion.groupBy.mockImplementation(({ by }: { by: string[] }) => Promise.resolve(by.length === 1
+            ? [{ estadoId: 2, _count: { _all: 4 }, _sum: { monto: 400 } }]
+            : [{ tipoInscripcionId: 7, estadoId: 2, _count: { _all: 3 }, _sum: { monto: 360 } }, { tipoInscripcionId: 42, estadoId: 2, _count: { _all: 1 }, _sum: { monto: 40 } }]))
+        m.tipoInscripcion.findMany.mockResolvedValue([
+            { id: 7, nombre: 'General', etiqueta: null, categoria: { codigo: 'PUBLICO_GENERAL', delegacionId: null } },
+            { id: 41, nombre: 'DELEGACION UNAC', etiqueta: 'CON KIT', categoria: { codigo: 'DELEGACION_5', delegacionId: 5 } },
+            { id: 42, nombre: 'DELEGACION UNAC', etiqueta: 'SIN KIT', categoria: { codigo: 'DELEGACION_5', delegacionId: 5 } },
+        ])
+        const r = await request(app).get('/api/v1/events/2/summary').set('Authorization', `Bearer ${tesorero()}`)
+        expect(r.status).toBe(200)
+        expect(r.body.data.porTipo.map((fila: { tipoInscripcionId: number }) => fila.tipoInscripcionId)).toEqual([7, 42])
+    })
+
     it('la Comisión con «resumen.ver» recibe los conteos y los montos en null (mismas claves)', async () => {
         const r = await request(app).get('/api/v1/events/2/summary').set('Authorization', `Bearer ${comision()}`)
         expect(r.status).toBe(200)

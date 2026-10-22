@@ -1,5 +1,7 @@
 # Feature Specification: Delegaciones con convenio (modalidad, vouchers múltiples y grupo editable)
 
+> **Reemplazada en parte por la [spec 029](../029-delegaciones-planes/spec.md)**: la tarifa global, el tipo según el tamaño del grupo, el registro público de delegaciones y `…/delegations/tarifa` ya no existen; cada delegación tiene sus planes y precios.
+
 **Created**: 2026-10-21 · **Status**: Implementado en el backend (panel y landing en sus repos)
 
 **Input**: hay convenio con delegaciones de otras universidades (UNH, UNAT). Un **delegado** inscribe a

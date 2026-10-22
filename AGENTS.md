@@ -127,23 +127,24 @@ y Google. Documentación: [`docs/`](docs/README.md).
   ponencias que se cruzan (respetan el cupo). La asistencia en puerta inscribe en el acto (origen
   `PUERTA`), no bloquea fuera de horario (solo lo marca) y cancela por `CAMBIO_EN_PUERTA` las inscripciones
   cruzadas a las que la persona no asistió. Gratuitas por ahora: cobro en `specs/019-…/plan-futuro-cobro.md`.
-- Delegaciones (specs 021–024): un grupo con delegado (`Delegacion`, con su `codigoLink`) cuyos integrantes
-  tienen cada uno su inscripción (`delegacion_id`). **El servidor decide el tipo y el precio** (el cliente no
-  envía ninguno): presencial `delegacion_general` (S/ 60) con menos de `minIntegrantes` (10) y
-  `delegacion_grupal` (S/ 50) desde ahí; virtual `delegacion_virtual` (S/ 30, sin escalas). Esos tres códigos
-  de la categoría `DELEGACIONES` son contrato; sin el virtual la modalidad no se ofrece. Cada alta o baja
-  recalcula monto y tipo de **todos** (transacción con `SELECT … FOR UPDATE` de la delegación); `RECHAZADO` y
-  `CANCELADO` no cuentan. El pago son **vouchers** (`DelegacionPago`): varios, cada uno con su número de
-  operación (único por evento y distinto de los de `inscripciones`) y el monto que declara; el staff los
-  verifica o rechaza y el resumen (`totalAPagar`, `declarado`, `saldo`) solo informa. Con su link el delegado
-  **solo agrega** integrantes y vouchers (`/site/delegations/link/:codigoLink/…`); el staff edita todo y aprueba
-  al grupo (`aprobarVarias`: credenciales en diferido, una por una). Despliegue: backend primero y el tipo
-  virtual al final (`prisma/preflight/configurar-delegacion-virtual.sql`). La tarifa del evento se administra
-  desde el panel (spec 024, `GET|PUT /v1/events/:eventId/delegations/tarifa`): escribe los precios de esos tres
-  tipos (`precio == precioInstitucional`), `eventos.delegaciones_*` (mínimo y respaldo) y, si el evento no tiene
-  el tipo virtual, lo crea; cambiarla **no** altera lo ya copiado a cada delegación (solo `aplicarAExistentes`
-  alcanza a las que no tienen integrantes ni vouchers), y una delegación con integrantes se reprecia con
-  `PUT /v1/delegations/:id`.
+- Delegaciones (specs 021–024 y 029): un grupo con delegado (`Delegacion`) cuyos integrantes tienen cada uno su inscripción
+  (`delegacion_id`). **Cada delegación tiene sus propios planes** `CON_KIT`, `SIN_KIT` y `VIRTUAL`: tres tipos reales (`delegacion_con_kit`,
+  `delegacion_sin_kit`, `delegacion_virtual`; `precio == precioInstitucional`) de su **categoría oculta** `DELEGACION_<id>`
+  (`categorias_inscripcion.delegacion_id`), cada uno con su precio, su estado y, opcional, `precio_promocional` que cobra desde `min_integrantes`
+  (cuentan todos los integrantes activos). No hay tarifa global ni categoría `DELEGACIONES`. **El servidor decide el tipo y el precio** (el cliente solo
+  envía el `plan`): cada integrante lleva el tipo de su plan y cada alta, baja, cambio de plan o de precio recalcula el monto de **todos** los de ese plan
+  (`recalcularGrupo`, transacción con `SELECT … FOR UPDATE` de la delegación); `RECHAZADO` y `CANCELADO` no cuentan. Con varios planes activos hay que elegir
+  (`PLAN_REQUIRED`); un plan apagado rechaza altas nuevas pero conserva a sus integrantes. Esas categorías no salen en Categorías y tipos, la landing ni el
+  clonado de eventos (`delegacionId: null`) y no se editan ahí (`409 DELEGATION_CATEGORY_MANAGED`). El pago son **vouchers** (`DelegacionPago`) **del grupo**: varios,
+  cada uno con su número de operación (único por evento) y el monto que declara; se verifican o rechazan con `inscripciones.validar` y el resumen
+  (`totalAPagar`, `declarado`, `saldo`) solo informa. **Dos links**: `codigoLink` (el delegado agrega integrantes y vouchers y ve el link individual) y
+  `codigoInscripcion` (individual: cada integrante se inscribe solo con `/site/delegations/join/:codigo`; `NULL` = apagado; ambos se regeneran). `dominio_correo`
+  (sin arroba) filtra los correos de los flujos **públicos** (`422 EMAIL_DOMAIN_NOT_ALLOWED`; vale el correo efectivo: el ya registrado si la persona existe): en el individual
+  basta el prefijo (`correoPrefijo`) y **no hay Google**; el staff queda exento. **Solo el staff crea delegaciones** (no hay registro público ni `…/tarifa`). Permisos:
+  `delegaciones.gestionar` (global: planes, precios, mínimo, dominio, links, borrar voucher), `delegaciones.ver` y `delegaciones.inscribir` (por evento: Tesorero ve; Comisión
+  elegible inscribe) y `inscripciones.validar` (aprobar al grupo y vouchers); una Comisión que crea una delegación la deja con los planes **apagados y a S/ 0** y si manda planes,
+  mínimo, dominio o link responde `403`. Sin `pagos.ver` los importes, `pago` y los vouchers van en `null`/`[]`; los links solo los ve quien inscribe o gestiona.
+  Despliegue: backend primero (su migración convierte las delegaciones existentes y borra `DELEGACIONES`); verificación en `prisma/preflight/verificar-delegaciones-planes.sql`.
 - Seguimiento por asesor (spec 025, `src/api/advisory`): el padrón de estudiantes de la facultad (`padron_estudiantes`) y sus
   asesores (`asesores`, `asesores_secciones`) se cargan con el Excel de la facultad (`POST /v1/events/:eventId/advisory/import`, reemplaza todo;
   `?simular=true` solo valida) y **el pago no se guarda**: cada consulta lo cruza con las inscripciones por documento, luego código de
@@ -243,7 +244,7 @@ con ambos sistemas levantados.
 
 Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Cada cambio
 empieza en `specs/NNN-nombre/` (spec → plan → tasks → contracts) y se marcan las tasks al
-implementar. Specs actuales: 001–014 y 016–028 (ver [README](README.md)); la 015 (certificados) tiene
+implementar. Specs actuales: 001–014 y 016–029 (ver [README](README.md)); la 015 (certificados) tiene
 solo su diseño (`research.md`).
 
 ## Antes de dar por terminado

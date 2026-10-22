@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client'
 import request from 'supertest'
 import app from '../../src/app'
 import { prisma } from '../../src/database/prisma'
+import { tiposPublicos } from '../../src/api/registration-type/services/registration-type'
 import { tokenDeRol } from '../helpers/tokens'
 
 jest.mock('../../src/database/prisma', () => ({
@@ -15,8 +16,8 @@ jest.mock('../../src/database/prisma', () => ({
 
 const m = prisma as unknown as {
     evento: { findUnique: jest.Mock }
-    categoriaInscripcion: { findMany: jest.Mock, create: jest.Mock, update: jest.Mock, delete: jest.Mock }
-    tipoInscripcion: { create: jest.Mock, update: jest.Mock, delete: jest.Mock }
+    categoriaInscripcion: { findMany: jest.Mock, findUnique: jest.Mock, create: jest.Mock, update: jest.Mock, delete: jest.Mock }
+    tipoInscripcion: { findUnique: jest.Mock, create: jest.Mock, update: jest.Mock, delete: jest.Mock }
     inscripcion: { groupBy: jest.Mock }
 }
 
@@ -97,5 +98,41 @@ describe('escritura de categorías y tipos', () => {
         const r = await request(app).post('/api/v1/events/2/registration-categories').set(con(tokenDeRol('ADMIN'))).send({})
         expect(r.status).toBe(422)
         expect(r.body.code).toBe('VALIDATION_ERROR')
+    })
+})
+
+describe('categorías de delegación (spec 029)', () => {
+    const delegacion = () => tokenDeRol('ADMIN')
+
+    it('no salen en Categorías y tipos ni en la landing: los planes se ven desde Delegaciones', async () => {
+        await request(app).get('/api/v1/events/2/registration-categories').set(con(delegacion()))
+        expect(m.categoriaInscripcion.findMany.mock.calls[0][0].where).toEqual({ eventoId: 2, delegacionId: null })
+
+        m.categoriaInscripcion.findMany.mockClear()
+        await tiposPublicos(2, 'estudiantes')
+        expect(m.categoriaInscripcion.findMany.mock.calls[0][0].where).toEqual({ eventoId: 2, delegacionId: null, codigo: 'ESTUDIANTES' })
+    })
+
+    it('sus planes no se editan ni se borran desde Categorías y tipos (409)', async () => {
+        const enDelegacion = { ...categoria, id: 9, codigo: 'DELEGACION_5', delegacionId: 5 }
+        m.categoriaInscripcion.findUnique.mockResolvedValue(enDelegacion)
+        m.tipoInscripcion.findUnique.mockResolvedValue({ ...categoria.tipos[0], categoria: { delegacionId: 5 } })
+
+        const pruebas: Array<[string, string, object]> = [
+            ['put', '/api/v1/registration-categories/9', { nombre: 'Otro' }],
+            ['delete', '/api/v1/registration-categories/9', {}],
+            ['post', '/api/v1/registration-categories/9/types', { codigo: 'nuevo', nombre: 'Nuevo', precio: 10, precioInstitucional: 10 }],
+            ['put', '/api/v1/registration-types/7', { nombre: 'Otro' }],
+            ['delete', '/api/v1/registration-types/7', {}],
+        ]
+        for (const [metodo, ruta, cuerpo] of pruebas) {
+            const r = await (request(app) as unknown as Record<string, (p: string) => request.Test>)[metodo](ruta).set(con(delegacion())).send(cuerpo)
+            expect({ ruta, status: r.status, code: r.body.code }).toEqual({ ruta, status: 409, code: 'DELEGATION_CATEGORY_MANAGED' })
+        }
+        expect(m.categoriaInscripcion.update).not.toHaveBeenCalled()
+        expect(m.categoriaInscripcion.delete).not.toHaveBeenCalled()
+        expect(m.tipoInscripcion.create).not.toHaveBeenCalled()
+        expect(m.tipoInscripcion.update).not.toHaveBeenCalled()
+        expect(m.tipoInscripcion.delete).not.toHaveBeenCalled()
     })
 })

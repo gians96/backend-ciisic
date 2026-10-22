@@ -102,6 +102,13 @@ describe('crear un evento copiando otro (spec 018)', () => {
         expect(data[1]).toMatchObject({ codigo: 'general_virtual', excluyeEstudiantesUndc: true })
     })
 
+    it('al copiar de otro evento no se llevan las categorías de las delegaciones (spec 029)', async () => {
+        await request(app).post('/api/v1/events').set(admin())
+            .send({ codigo: 'ciisic-ix-2027', nombre: 'IX Congreso', nombreCorto: 'IX CIISIC', fechaInicio: '2027-10-26', fechaFin: '2027-10-30', copiarDeEventoId: 1 })
+        const consulta = m.evento.findUnique.mock.calls.map((llamada) => llamada[0]).find((arg) => arg.where.id === 1)
+        expect(consulta.include.categorias.where).toEqual({ delegacionId: null })
+    })
+
     it('sin copiar no se crean categorías ni tipos', async () => {
         const r = await request(app).post('/api/v1/events').set(admin())
             .send({ codigo: 'ciisic-x-2028', nombre: 'X Congreso', nombreCorto: 'X CIISIC', fechaInicio: '2028-10-26', fechaFin: '2028-10-30' })

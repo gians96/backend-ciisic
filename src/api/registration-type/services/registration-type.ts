@@ -48,10 +48,13 @@ export function aCategoria(categoria: CategoriaInscripcion) {
 
 // ─── Público ────────────────────────────────────────────────────────────────
 
-/** Categorías con tipos activos de un evento (landing). */
+/**
+ * Categorías con tipos activos de un evento (landing). Las categorías de delegación (spec 029) no salen: sus planes
+ * solo se ofrecen con el link de cada delegación.
+ */
 export async function tiposPublicos(eventoId: number, categoria?: string) {
     const categorias = await prisma.categoriaInscripcion.findMany({
-        where: { eventoId, ...(categoria ? { codigo: categoria.toUpperCase() } : {}) },
+        where: { eventoId, delegacionId: null, ...(categoria ? { codigo: categoria.toUpperCase() } : {}) },
         include: { tipos: { where: { activo: true }, orderBy: [{ orden: 'asc' }, { id: 'asc' }] } },
         orderBy: [{ orden: 'asc' }, { id: 'asc' }],
     })
@@ -99,26 +102,29 @@ export function aTipoLegacy(tipo: TipoInscripcion) {
 
 export async function tiposLegacy(eventoId: number) {
     const tipos = await prisma.tipoInscripcion.findMany({
-        where: { categoria: { eventoId } },
+        where: { categoria: { eventoId, delegacionId: null } },
         orderBy: [{ categoria: { orden: 'asc' } }, { orden: 'asc' }, { id: 'asc' }],
     })
     return tipos.map(aTipoLegacy)
 }
 
 export async function tipoLegacy(eventoId: number, id: number) {
-    const tipo = await prisma.tipoInscripcion.findFirst({ where: { id, categoria: { eventoId } } })
+    const tipo = await prisma.tipoInscripcion.findFirst({ where: { id, categoria: { eventoId, delegacionId: null } } })
     if (!tipo) throw notFound('REGISTRATION_TYPE_NOT_FOUND', `Tipo de inscripción con id ${id} no encontrado`)
     return aTipoLegacy(tipo)
 }
 
 // ─── Administración ─────────────────────────────────────────────────────────
 
-/** Categorías y tipos del evento para el panel. Sin `conPago` los precios van en null (mismas claves). */
+/**
+ * Categorías y tipos del evento para el panel. Sin `conPago` los precios van en null (mismas claves). Las
+ * categorías de delegación (spec 029) no salen: sus planes se administran desde Delegaciones.
+ */
 export async function categoriasDeEvento(eventoId: number, conPago = true) {
     await obtenerEventoPorId(eventoId)
     const [categorias, conteos] = await Promise.all([
         prisma.categoriaInscripcion.findMany({
-            where: { eventoId },
+            where: { eventoId, delegacionId: null },
             include: { tipos: { orderBy: [{ orden: 'asc' }, { id: 'asc' }] } },
             orderBy: [{ orden: 'asc' }, { id: 'asc' }],
         }),
@@ -138,7 +144,13 @@ export async function categoriasDeEvento(eventoId: number, conPago = true) {
 async function obtenerCategoria(id: number) {
     const categoria = await prisma.categoriaInscripcion.findUnique({ where: { id } })
     if (!categoria) throw notFound('CATEGORY_NOT_FOUND', 'La categoría no existe.')
+    exigirNoEsDeDelegacion(categoria.delegacionId)
     return categoria
+}
+
+/** Los planes de una delegación (spec 029) se administran desde Delegaciones, no desde Categorías y tipos. */
+function exigirNoEsDeDelegacion(delegacionId: number | null | undefined) {
+    if (delegacionId) throw conflict('DELEGATION_CATEGORY_MANAGED', 'Esta categoría pertenece a una delegación: sus planes se administran desde Delegaciones.')
 }
 
 async function verificarCodigoCategoria(eventoId: number, codigo: string, exceptoId?: number) {
@@ -214,8 +226,9 @@ export async function crearTipo(categoriaId: number, input: CrearTipoInput) {
 }
 
 export async function actualizarTipo(id: number, input: ActualizarTipoInput) {
-    const actual = await prisma.tipoInscripcion.findUnique({ where: { id } })
+    const actual = await prisma.tipoInscripcion.findUnique({ where: { id }, include: { categoria: { select: { delegacionId: true } } } })
     if (!actual) throw notFound('REGISTRATION_TYPE_NOT_FOUND', 'El tipo de inscripción no existe.')
+    exigirNoEsDeDelegacion(actual.categoria?.delegacionId)
     if (input.codigo && input.codigo !== actual.codigo) await verificarCodigoTipo(actual.categoriaId, input.codigo, id)
     const precio = input.precio ?? monto(actual.precio)
     const precioInstitucional = input.precioInstitucional ?? monto(actual.precioInstitucional)
@@ -238,8 +251,9 @@ export async function actualizarTipo(id: number, input: ActualizarTipoInput) {
 }
 
 export async function eliminarTipo(id: number) {
-    const tipo = await prisma.tipoInscripcion.findUnique({ where: { id } })
+    const tipo = await prisma.tipoInscripcion.findUnique({ where: { id }, include: { categoria: { select: { delegacionId: true } } } })
     if (!tipo) throw notFound('REGISTRATION_TYPE_NOT_FOUND', 'El tipo de inscripción no existe.')
+    exigirNoEsDeDelegacion(tipo.categoria?.delegacionId)
     const usos = await prisma.inscripcion.count({ where: { tipoInscripcionId: id } })
     if (usos) throw conflict('REGISTRATION_TYPE_IN_USE', 'El tipo tiene inscripciones; desactívelo en lugar de eliminarlo.')
     await prisma.tipoInscripcion.delete({ where: { id } })
