@@ -101,6 +101,21 @@ export const inscripcionSitioSchema = yup.object({
 
 export type InscripcionSitioInput = yup.InferType<typeof inscripcionSitioSchema>
 
+/**
+ * Verificación previa de la landing (spec 030): el documento y el correo con los que la persona se inscribió
+ * al congreso. Es un POST para que ni el documento ni el correo viajen en la URL.
+ */
+export const elegibilidadSchema = participanteSchema.pick(['tipoDocumento', 'numeroDocumento']).shape({
+    correo: yup.string().trim().lowercase().email().max(191).required(),
+}).required()
+
+export type ElegibilidadInput = yup.InferType<typeof elegibilidadSchema>
+
+/** Interruptor del evento: encendido, las ponencias se inscriben solo con el documento. */
+export const accesoPonenciasSchema = yup.object({
+    accesoLibre: yup.boolean().required(),
+}).required()
+
 export const editarInscripcionSchema = yup.object({
     estado: yup.string().oneOf([...ESTADOS_INSCRIPCION_PONENCIA]),
     asistente: yup.object({

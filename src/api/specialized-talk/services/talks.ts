@@ -8,15 +8,21 @@ import { duracionMinutos } from '../../../core/ponencias-especializadas'
 import { obtenerEventoPorId } from '../../event/services/public-event'
 import type { ActualizarPonenciaInput, CrearPonenciaInput } from '../validation'
 
+/**
+ * `inscritos` es el total vigente; solo los `presenciales` ocupan aforo (spec 030): los virtuales no tienen
+ * límite y nunca agotan el cupo.
+ */
 export interface Conteo {
     inscritos: number
+    presenciales: number
+    virtuales: number
     asistentes: number
 }
 
-const SIN_INSCRITOS: Conteo = { inscritos: 0, asistentes: 0 }
+const SIN_INSCRITOS: Conteo = { inscritos: 0, presenciales: 0, virtuales: 0, asistentes: 0 }
 
-function cuposDisponibles(ponencia: Pick<PonenciaEspecializada, 'cupo'>, inscritos: number): number | null {
-    return ponencia.cupo === null ? null : Math.max(0, ponencia.cupo - inscritos)
+function cuposDisponibles(ponencia: Pick<PonenciaEspecializada, 'cupo'>, presenciales: number): number | null {
+    return ponencia.cupo === null ? null : Math.max(0, ponencia.cupo - presenciales)
 }
 
 function datosBase(ponencia: PonenciaEspecializada) {
@@ -50,14 +56,16 @@ export function aPonencia(ponencia: PonenciaEspecializada, conteo: Conteo = SIN_
         ...datosBase(ponencia),
         publicada: ponencia.publicada,
         inscritos: conteo.inscritos,
+        inscritosPresenciales: conteo.presenciales,
+        inscritosVirtuales: conteo.virtuales,
         asistentes: conteo.asistentes,
-        cuposDisponibles: cuposDisponibles(ponencia, conteo.inscritos),
+        cuposDisponibles: cuposDisponibles(ponencia, conteo.presenciales),
     }
 }
 
-/** Respuesta del sitio: sin datos de inscritos, solo los cupos que quedan. */
-export function aPonenciaPublica(ponencia: PonenciaEspecializada, inscritos: number) {
-    const disponibles = cuposDisponibles(ponencia, inscritos)
+/** Respuesta del sitio: sin datos de inscritos, solo los cupos presenciales que quedan (`llena` = aforo presencial completo). */
+export function aPonenciaPublica(ponencia: PonenciaEspecializada, presenciales: number) {
+    const disponibles = cuposDisponibles(ponencia, presenciales)
     return { ...datosBase(ponencia), cuposDisponibles: disponibles, llena: disponibles === 0 }
 }
 
@@ -67,18 +75,26 @@ export async function obtenerPonencia(id: number): Promise<PonenciaEspecializada
     return ponencia
 }
 
-/** Inscritos vigentes y los que ya asistieron, por ponencia del evento (o de las ids dadas). */
+/** Inscritos vigentes (presenciales y virtuales) y los que ya asistieron, por ponencia del evento (o de las ids dadas). */
 export async function conteosPorPonencia(filtro: { eventoId: number } | { ids: number[] }): Promise<Map<number, Conteo>> {
     const ponencia = 'eventoId' in filtro ? { eventoId: filtro.eventoId } : { id: { in: filtro.ids } }
     const base = { ponencia, estado: 'INSCRITO' as const }
     const [inscritos, asistentes] = await Promise.all([
-        prisma.inscripcionPonencia.groupBy({ by: ['ponenciaId'], where: base, _count: { _all: true } }),
+        prisma.inscripcionPonencia.groupBy({ by: ['ponenciaId', 'modoAsistencia'], where: base, _count: { _all: true } }),
         prisma.inscripcionPonencia.groupBy({ by: ['ponenciaId'], where: { ...base, asistioEn: { not: null } }, _count: { _all: true } }),
     ])
     const conteos = new Map<number, Conteo>()
-    for (const fila of inscritos) conteos.set(fila.ponenciaId, { inscritos: fila._count._all, asistentes: 0 })
+    for (const fila of inscritos) {
+        const actual = conteos.get(fila.ponenciaId) ?? { ...SIN_INSCRITOS }
+        const total = fila._count._all
+        conteos.set(fila.ponenciaId, {
+            ...actual,
+            inscritos: actual.inscritos + total,
+            ...(fila.modoAsistencia === 'VIRTUAL' ? { virtuales: actual.virtuales + total } : { presenciales: actual.presenciales + total }),
+        })
+    }
     for (const fila of asistentes) {
-        const actual = conteos.get(fila.ponenciaId) ?? { inscritos: 0, asistentes: 0 }
+        const actual = conteos.get(fila.ponenciaId) ?? { ...SIN_INSCRITOS }
         conteos.set(fila.ponenciaId, { ...actual, asistentes: fila._count._all })
     }
     return conteos
@@ -108,7 +124,7 @@ export async function listarPublicas(eventoId: number) {
         prisma.ponenciaEspecializada.findMany({ where: { eventoId, publicada: true }, orderBy: ORDEN }),
         conteosPorPonencia({ eventoId }),
     ])
-    return ponencias.map((ponencia) => aPonenciaPublica(ponencia, conteos.get(ponencia.id)?.inscritos ?? 0))
+    return ponencias.map((ponencia) => aPonenciaPublica(ponencia, conteos.get(ponencia.id)?.presenciales ?? 0))
 }
 
 /** Dos ponencias presenciales no pueden usar el mismo ambiente a la vez (el nombre se compara sin distinguir mayúsculas). */
@@ -166,9 +182,10 @@ export async function actualizarPonencia(id: number, input: ActualizarPonenciaIn
     const ambiente = input.ambiente ?? actual.ambiente
     if (modalidad === 'PRESENCIAL') await exigirAmbienteLibre(actual.eventoId, ambiente, inicio, fin, id)
 
+    // El cupo es el aforo presencial: los virtuales no lo ocupan
     if (input.cupo !== undefined && input.cupo !== null) {
-        const inscritos = await prisma.inscripcionPonencia.count({ where: { ponenciaId: id, estado: 'INSCRITO' } })
-        if (input.cupo < inscritos) throw conflict('CAPACITY_BELOW_REGISTERED', `Ya hay ${inscritos} inscritos: el cupo no puede ser menor.`)
+        const presenciales = await prisma.inscripcionPonencia.count({ where: { ponenciaId: id, estado: 'INSCRITO', modoAsistencia: 'PRESENCIAL' } })
+        if (input.cupo < presenciales) throw conflict('CAPACITY_BELOW_REGISTERED', `Ya hay ${presenciales} inscritos presenciales: el cupo no puede ser menor.`)
     }
 
     const { ponente } = input

@@ -26,7 +26,8 @@ const m = prisma as unknown as { __bd: EstadoBd, evento: { findUnique: jest.Mock
 const dni = consultarDni as jest.Mock
 const oficiales = nombresOficiales as jest.Mock
 
-const EVENTO = { id: 2, codigo: 'ciisic-viii', estado: 'PUBLICADO' }
+// Acceso libre encendido: estas pruebas cubren el comportamiento sin validar el congreso (spec 019); la validación está en validacion-congreso.test.ts
+const EVENTO = { id: 2, codigo: 'ciisic-viii', estado: 'PUBLICADO', ponenciasAccesoLibre: true }
 const comision = (permisos: string[], eventoIds = [2]) => tokenDeRol('COMISION', 40, { eventoIds, permisos })
 const gestion = () => comision(['especializadas.ver', 'especializadas.inscribir'])
 const con = (token: string) => ({ Authorization: `Bearer ${token}` })

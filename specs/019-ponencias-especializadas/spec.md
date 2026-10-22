@@ -21,6 +21,11 @@ landing y la asistencia en puerta solo con el DNI (incluida la inscripción en e
 > programa vigente; como solo crea las que faltan, un cambio sobre una base ya sembrada se hace desde el panel o con
 > un script puntual.
 
+> **Actualización 2026-10-22 (spec 030)**: las ponencias ya no son libres. Con el acceso libre del evento apagado (por defecto) solo se
+> inscribe un congresista con el pago aprobado, y el cupo cuenta únicamente las inscripciones presenciales (las virtuales no tienen
+> límite). Ver [`030-ponencias-validacion-congreso`](../030-ponencias-validacion-congreso/spec.md). Lo descrito abajo vale tal cual con el
+> acceso libre encendido.
+
 ## Decisiones
 
 - **Gratuitas por ahora.** El campo `precio` existe (0 = gratuita) pero no hay flujo de cobro: la landing

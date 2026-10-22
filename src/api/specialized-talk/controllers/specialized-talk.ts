@@ -8,9 +8,11 @@ import { eventoDelSitio } from '../../../middlewares/sitio'
 import * as talks from '../services/talks'
 import * as registrations from '../services/registrations'
 import * as checkin from '../services/checkin'
+import * as acceso from '../services/acceso'
+import { verificarCongresista } from '../services/congresista'
 import {
     MODALIDADES, ORIGENES_INSCRIPCION_PONENCIA, ESTADOS_INSCRIPCION_PONENCIA, PROCEDENCIAS,
-    type AsistenteInput, type EditarInscripcionInput, type InscripcionSitioInput,
+    type AsistenteInput, type EditarInscripcionInput, type ElegibilidadInput, type InscripcionSitioInput,
 } from '../validation'
 
 /** La guarda de permisos deja la cuenta en `req.actor`; sin ella la ruta está mal cableada. */
@@ -72,6 +74,8 @@ export async function listRegistrations(req: Request, res: Response) {
         asistencia: opcion(req.query.asistencia, ['si', 'no'] as const, 'asistencia'),
         procedencia: opcion(req.query.procedencia, [...PROCEDENCIAS, 'SIN_DATO'] as const, 'procedencia'),
         origen: opcion(req.query.origen, ORIGENES_INSCRIPCION_PONENCIA, 'origen'),
+        validacion: opcion(req.query.validacion, ['si', 'no'] as const, 'validacion'),
+        modo: opcion(req.query.modo, MODALIDADES, 'modo'),
         q: texto(q)?.slice(0, 100),
     }
     const { data, meta } = await registrations.listarInscripciones(idParam(req.params.eventId, 'eventId'), filtros, parsePagination(req.query, 20, 100))
@@ -95,10 +99,28 @@ export async function removeAttendance(req: Request, res: Response) {
     res.json({ success: true, data: null })
 }
 
+// ─── Acceso libre del evento (spec 030) ─────────────────────────────────────
+
+export async function getAccess(req: Request, res: Response) {
+    res.json({ success: true, data: await acceso.obtenerAcceso(idParam(req.params.eventId, 'eventId')) })
+}
+
+export async function putAccess(req: Request, res: Response) {
+    const { accesoLibre } = req.body as { accesoLibre: boolean }
+    res.json({ success: true, data: await acceso.guardarAcceso(idParam(req.params.eventId, 'eventId'), accesoLibre, actorDe(req)) })
+}
+
 // ─── Sitio (token del evento) ───────────────────────────────────────────────
 
+/** `meta.accesoLibre` le dice a la landing qué formulario mostrar; el servidor decide igual al inscribir. */
 export async function publicList(req: Request, res: Response) {
-    res.json({ success: true, data: await talks.listarPublicas(eventoDelSitio(req).id) })
+    const evento = eventoDelSitio(req)
+    res.json({ success: true, data: await talks.listarPublicas(evento.id), meta: { accesoLibre: evento.ponenciasAccesoLibre === true } })
+}
+
+export async function eligibility(req: Request, res: Response) {
+    const { tipoDocumento, numeroDocumento, correo } = req.body as ElegibilidadInput
+    res.json({ success: true, data: await verificarCongresista(eventoDelSitio(req).id, { tipoDocumento, numeroDocumento, correo }) })
 }
 
 export async function publicRegister(req: Request, res: Response) {

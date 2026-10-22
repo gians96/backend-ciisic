@@ -2,10 +2,10 @@ import * as controller from '../controllers/specialized-talk'
 import { AppRoute, buildRouter } from '../../../core/routes'
 import { requirePermiso } from '../../../middlewares/auth'
 import { requireTokenEvento } from '../../../middlewares/sitio'
-import { limiteCheckInPonencia, limiteInscripcion, limiteLecturaPublica, limiteTokenInscripcion, limiteTokenLectura } from '../../../middlewares/rate-limit'
+import { limiteCheckInPonencia, limiteInscripcion, limiteLecturaPublica, limiteTokenInscripcion, limiteTokenLectura, limiteTokenVerificacionCongresista, limiteVerificacionCongresista } from '../../../middlewares/rate-limit'
 import { validateBody } from '../../../middlewares/validate'
 import { eventoDeInscripcionPonencia, eventoDelParametro, eventoDePonenciaEspecializada } from '../../../core/resolutores-evento'
-import { actualizarPonenciaSchema, crearPonenciaSchema, editarInscripcionSchema, inscripcionSitioSchema, personaSchema } from '../validation'
+import { accesoPonenciasSchema, actualizarPonenciaSchema, crearPonenciaSchema, editarInscripcionSchema, elegibilidadSchema, inscripcionSitioSchema, personaSchema } from '../validation'
 
 const gestionar = requirePermiso('especializadas.gestionar')
 
@@ -15,6 +15,10 @@ const routes: AppRoute[] = [
     { method: 'post', path: '/v1/events/:eventId/specialized-talks', handler: controller.create, middlewares: [gestionar, validateBody(crearPonenciaSchema)] },
     { method: 'put', path: '/v1/specialized-talks/:id', handler: controller.update, middlewares: [gestionar, validateBody(actualizarPonenciaSchema)] },
     { method: 'delete', path: '/v1/specialized-talks/:id', handler: controller.remove, middlewares: [gestionar] },
+
+    // Acceso libre del evento (spec 030): quien ve el programa lo consulta; solo quien lo gestiona lo cambia
+    { method: 'get', path: '/v1/events/:eventId/specialized-talks/access', handler: controller.getAccess, middlewares: [requirePermiso(['especializadas.ver', 'especializadas.gestionar'], { evento: eventoDelParametro('eventId') })] },
+    { method: 'put', path: '/v1/events/:eventId/specialized-talks/access', handler: controller.putAccess, middlewares: [gestionar, validateBody(accesoPonenciasSchema)] },
 
     // Inscripciones (cuentas por evento: solo en sus eventos)
     { method: 'get', path: '/v1/events/:eventId/specialized-talk-registrations', handler: controller.listRegistrations, middlewares: [requirePermiso('especializadas.ver', { evento: eventoDelParametro('eventId') })] },
@@ -27,6 +31,7 @@ const routes: AppRoute[] = [
 
     // API del sitio (el evento sale del token)
     { method: 'get', path: '/v1/site/specialized-talks', handler: controller.publicList, middlewares: [requireTokenEvento, limiteLecturaPublica, limiteTokenLectura] },
+    { method: 'post', path: '/v1/site/specialized-talk-eligibility', handler: controller.eligibility, middlewares: [requireTokenEvento, limiteVerificacionCongresista, limiteTokenVerificacionCongresista, validateBody(elegibilidadSchema)] },
     { method: 'post', path: '/v1/site/specialized-talk-registrations', handler: controller.publicRegister, middlewares: [requireTokenEvento, limiteInscripcion, limiteTokenInscripcion, validateBody(inscripcionSitioSchema)] },
 ]
 

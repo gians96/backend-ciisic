@@ -6,6 +6,7 @@ import { consultarDni } from '../../document-lookup/services/lookup'
 import { apellidosDe, nombresOficiales } from '../../document-lookup/services/cache'
 import { enmascararDocumento } from '../../activity/services/activity'
 import type { AsistenteInput } from '../validation'
+import type { Congresista } from './congresista'
 
 /**
  * - `SITIO`: el visitante anónimo de la landing. Los nombres oficiales salen solo de la caché de
@@ -68,15 +69,39 @@ async function completarVacios(actual: AsistentePonencia, input: AsistenteInput)
 }
 
 /**
+ * Con un congresista validado (spec 030) los datos de la persona salen de su inscripción al congreso:
+ * nombres, correo y celular, y la procedencia (interno = correo institucional o estudiante UNDC) si no
+ * viene indicada. No se consulta el DNI: ya es el nombre con el que se inscribió.
+ */
+function conDatosDelCongreso(input: AsistenteInput, congresista: Congresista): AsistenteInput {
+    const { participante, inscripcion } = congresista
+    return {
+        ...input,
+        nombres: participante.nombres.slice(0, 120),
+        apellidos: participante.apellidos.slice(0, 120),
+        correo: participante.correo.slice(0, 191),
+        celular: participante.celular,
+        procedencia: input.procedencia ?? (inscripcion.interno ? 'INTERNO' : 'EXTERNO'),
+    }
+}
+
+/**
  * Asistente por documento; lo crea si no existe. Va antes de abrir la transacción de inscripción para
  * no mantener bloqueos mientras se consulta una API externa. Desde el sitio nunca modifica a uno existente.
  */
-export async function obtenerOCrearAsistente(input: AsistenteInput, modo: ModoResolucion): Promise<{ asistente: AsistentePonencia, creado: boolean }> {
+export async function obtenerOCrearAsistente(
+    entrada: AsistenteInput,
+    modo: ModoResolucion,
+    congresista: Congresista | null = null,
+): Promise<{ asistente: AsistentePonencia, creado: boolean }> {
+    const input = congresista ? conDatosDelCongreso(entrada, congresista) : entrada
     const where = claveDocumento(input)
     const existente = await prisma.asistentePonencia.findUnique({ where })
     if (existente) return { asistente: modo === 'PANEL' ? await completarVacios(existente, input) : existente, creado: false }
 
-    const { nombres, apellidos } = await nombresPara(input, modo)
+    const { nombres, apellidos } = congresista
+        ? { nombres: input.nombres as string, apellidos: input.apellidos as string }
+        : await nombresPara(input, modo)
     try {
         const asistente = await prisma.asistentePonencia.create({
             data: {

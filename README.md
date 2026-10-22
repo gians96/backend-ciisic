@@ -40,6 +40,7 @@ virtual, asistencia y perfil con foto).
 | [029](specs/029-delegaciones-planes) | Delegaciones con planes y tarifa propios: Con kit, Sin kit y Virtual por delegación (cada integrante elige el suyo), links del delegado e individual, filtro por correo institucional y permisos de Tesorero y Comisión (reemplaza la tarifa global de las specs 021–024) |
 | [027](specs/027-enlaces-ciclo) | Enlace público por ciclo: quien lo recibe ve, sin iniciar sesión, cómo van los pagos de todo un ciclo (sin celulares ni datos personales) |
 | [028](specs/028-docentes-dni) | DNI y secciones editables del docente, y una página común donde cada docente consulta a sus estudiantes con su DNI; recargar el Excel conserva lo editado |
+| [030](specs/030-ponencias-validacion-congreso) | Ponencias especializadas solo para congresistas con pago aprobado (documento y correo), modo presencial o virtual (el virtual no ocupa aforo) e interruptor de acceso libre por evento |
 
 ## Desarrollo local
 

@@ -1,9 +1,32 @@
+import { modalidadDe, type ModalidadAsistencia } from './catalogos'
 import { fechaLima, fechaSoloDia } from './fechas'
 
 /**
- * Reglas puras de las ponencias especializadas (spec 019): cruces de horario, duración y la
- * ventana de asistencia. Sin acceso a la BD para poder probarlas solas.
+ * Reglas puras de las ponencias especializadas (spec 019 y 030): cruces de horario, duración, la
+ * ventana de asistencia y quién puede inscribirse. Sin acceso a la BD para poder probarlas solas.
  */
+
+/** Por qué una persona no puede inscribirse a las ponencias (spec 030). */
+export type MotivoSinAcceso = 'NO_ENCONTRADA' | 'PAGO_PENDIENTE' | 'RECHAZADA'
+
+export type Elegibilidad = { ok: true, modo: ModalidadAsistencia } | { ok: false, motivo: MotivoSinAcceso }
+
+/** El correo escrito coincide con el registrado (sin distinguir mayúsculas ni espacios en los bordes). */
+export function correosCoinciden(registrado: string, escrito: string): boolean {
+    return registrado.trim().toLowerCase() === escrito.trim().toLowerCase()
+}
+
+/**
+ * Decide con la inscripción de la persona al congreso (`null` si no existe o los datos no coinciden):
+ * solo el pago aprobado da acceso, y el modo sale del tipo de inscripción (sin tipo, como una cortesía,
+ * es presencial).
+ */
+export function resolverElegibilidad(inscripcion: { estado: string, modalidadTipo: unknown } | null): Elegibilidad {
+    if (!inscripcion) return { ok: false, motivo: 'NO_ENCONTRADA' }
+    if (inscripcion.estado === 'APROBADO') return { ok: true, modo: modalidadDe(inscripcion.modalidadTipo) }
+    if (inscripcion.estado === 'PENDIENTE' || inscripcion.estado === 'EN_REVISION') return { ok: false, motivo: 'PAGO_PENDIENTE' }
+    return { ok: false, motivo: 'RECHAZADA' }
+}
 
 export interface Ventana {
     horaInicio: Date

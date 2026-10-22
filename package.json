@@ -17,7 +17,9 @@
     "credenciales:pregenerar": "node ./dist/src/database/pregenerarCredenciales.js",
     "credenciales:pregenerar:dev": "ts-node ./src/database/pregenerarCredenciales.ts",
     "seed:ponencias-especializadas": "node ./dist/src/database/seedPonenciasEspecializadas.js",
-    "seed:ponencias-especializadas:dev": "ts-node ./src/database/seedPonenciasEspecializadas.ts"
+    "seed:ponencias-especializadas:dev": "ts-node ./src/database/seedPonenciasEspecializadas.ts",
+    "ponencias-especializadas:validar-existentes": "node ./dist/src/database/validarPonenciasExistentes.js",
+    "ponencias-especializadas:validar-existentes:dev": "ts-node ./src/database/validarPonenciasExistentes.ts"
   },
   "keywords": [],
   "author": "",

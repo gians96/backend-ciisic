@@ -127,6 +127,16 @@ y Google. Documentación: [`docs/`](docs/README.md).
   ponencias que se cruzan (respetan el cupo). La asistencia en puerta inscribe en el acto (origen
   `PUERTA`), no bloquea fuera de horario (solo lo marca) y cancela por `CAMBIO_EN_PUERTA` las inscripciones
   cruzadas a las que la persona no asistió. Gratuitas por ahora: cobro en `specs/019-…/plan-futuro-cobro.md`.
+- Ponencias especializadas solo para congresistas (spec 030): con `eventos.ponencias_acceso_libre` **apagado** (por defecto) solo
+  se inscribe quien tiene una `Inscripcion` `APROBADO` del evento (mismo tipo y número de documento; en la landing además el
+  correo registrado, sin distinguir mayúsculas). `resolverAcceso` (`services/congresista.ts`) es el único punto de decisión
+  (landing, alta manual, puerta y reactivación; staff y puerta solo con el documento). El **modo** (`InscripcionPonencia.modoAsistencia`)
+  sale de `tipoInscripcion.modalidad` (sin tipo = presencial) y **solo el presencial ocupa el `cupo`** (`exigirCupo(tx, ponencia, modo)`;
+  `cuposDisponibles` y `llena` son del aforo presencial); `inscripcionCongresoId` NULL = «sin validar» (acceso libre o inscripción
+  anterior). Con el interruptor encendido todo funciona solo con el documento. Con el correo en la petición, documento desconocido, otro
+  evento y correo distinto dan el mismo `422 CONGRESS_REGISTRATION_NOT_FOUND`; el motivo específico (`CONGRESS_PAYMENT_PENDING`,
+  `CONGRESS_REGISTRATION_REJECTED`) solo se dice a quien acertó o al staff. Repetir en la landing sella lo anterior sin validar;
+  `npm run ponencias-especializadas:validar-existentes` (simula por defecto) empareja lo existente por documento. Nada se cancela solo.
 - Delegaciones (specs 021–024 y 029): un grupo con delegado (`Delegacion`) cuyos integrantes tienen cada uno su inscripción
   (`delegacion_id`). **Cada delegación tiene sus propios planes** `CON_KIT`, `SIN_KIT` y `VIRTUAL`: tres tipos reales (`delegacion_con_kit`,
   `delegacion_sin_kit`, `delegacion_virtual`; `precio == precioInstitucional`) de su **categoría oculta** `DELEGACION_<id>`
@@ -244,7 +254,7 @@ con ambos sistemas levantados.
 
 Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Cada cambio
 empieza en `specs/NNN-nombre/` (spec → plan → tasks → contracts) y se marcan las tasks al
-implementar. Specs actuales: 001–014 y 016–029 (ver [README](README.md)); la 015 (certificados) tiene
+implementar. Specs actuales: 001–014, 016–029 y 030 (ver [README](README.md)); la 015 (certificados) tiene
 solo su diseño (`research.md`).
 
 ## Antes de dar por terminado

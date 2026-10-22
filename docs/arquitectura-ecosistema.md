@@ -256,7 +256,7 @@ CORS está abierto a cualquier origen; la landing lo usa desde su servidor Nitro
 `GET /document-lookup/dni/:numero`, `GET /payment-qr/:archivo` (imagen del QR de una billetera,
 spec 012; la landing la sirve desde su BFF), `POST /inscriptions`, `/student-verification`,
 `/google-verification`, `/papers`, `/contact`, `GET /specialized-talks` y
-`POST /specialized-talk-registrations` (spec 019).
+`POST /specialized-talk-registrations` (spec 019) y `POST /specialized-talk-eligibility` (spec 030).
 
 ### Ponencias especializadas (spec 019)
 
@@ -268,6 +268,12 @@ spec 012; la landing la sirve desde su BFF), `POST /inscriptions`, `/student-ver
   (`409 TALK_ENDED`), no disponibles (`404 TALK_NOT_FOUND`) y de pago (`422 PAID_TALK_UNAVAILABLE`).
   Repetir es idempotente (`yaInscrito`) y nunca modifica a una persona que ya existe.
 - **Cambio compatible**: rutas nuevas; la landing anterior no las usa.
+- **Spec 030** (`backend-ciisic/specs/030-ponencias-validacion-congreso/contracts/api-ponencias-validacion-congreso.md`): solo se
+  inscribe un congresista con la inscripción `APROBADO` (documento y correo en la landing; documento en staff y puerta), salvo que el
+  evento tenga encendido el **acceso libre** (`GET|PUT /api/v1/events/:eventId/specialized-talks/access`, `meta.accesoLibre` en la lista
+  del sitio). Ruta nueva `POST /api/v1/site/specialized-talk-eligibility` (documento + correo → modo presencial o virtual). Solo el modo
+  presencial ocupa el `cupo`; `cuposDisponibles` y `llena` son del aforo presencial. Errores: `CONGRESS_REGISTRATION_NOT_FOUND`,
+  `CONGRESS_PAYMENT_PENDING`, `CONGRESS_REGISTRATION_REJECTED`, `FREE_ACCESS_ENABLED`. Cambio aditivo (migración con valores por defecto).
 
 ### Delegaciones con planes propios (specs 021, 022, 023 y 029)
 

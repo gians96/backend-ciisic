@@ -70,6 +70,8 @@ export function crearBdPonencias() {
             asistente: bd.asistentes.find((a) => a.id === fila.asistenteId),
             registradoPor: null,
             asistenciaPor: null,
+            // Spec 030: la inscripción al congreso con la que se validó; las pruebas la siembran en `__congreso`
+            inscripcionCongreso: fila.__congreso ?? null,
         }
     }
 
@@ -101,9 +103,13 @@ export function crearBdPonencias() {
             }),
             count: jest.fn(async ({ where }: { where?: Fila } = {}) => tabla(modelo).filter((f) => cumple(modelo, f, where)).length),
             groupBy: jest.fn(async ({ by, where }: { by: string[], where?: Fila }) => {
-                const grupos = new Map<unknown, number>()
-                for (const f of tabla(modelo).filter((x) => cumple(modelo, x, where))) grupos.set(f[by[0]], (grupos.get(f[by[0]]) ?? 0) + 1)
-                return [...grupos.entries()].map(([clave, total]) => ({ [by[0]]: clave, _count: { _all: total } }))
+                const grupos = new Map<string, { claves: Fila, total: number }>()
+                for (const f of tabla(modelo).filter((x) => cumple(modelo, x, where))) {
+                    const claves = Object.fromEntries(by.map((campo) => [campo, f[campo]]))
+                    const llave = JSON.stringify(claves)
+                    grupos.set(llave, { claves, total: (grupos.get(llave)?.total ?? 0) + 1 })
+                }
+                return [...grupos.values()].map(({ claves, total }) => ({ ...claves, _count: { _all: total } }))
             }),
             create: jest.fn(async ({ data }: { data: Fila }) => {
                 for (const columnas of unicas) {
@@ -142,7 +148,7 @@ export function crearBdPonencias() {
     const cliente: Fila = {
         ponenciaEspecializada: delegado('ponencias', { publicada: true, modalidad: 'PRESENCIAL', precio: 0, cupo: null, orden: 0, ponenteBio: null, ponenteFoto: null, ponenteExterno: false }),
         asistentePonencia: delegado('asistentes', { correo: null, celular: null, procedencia: null }, [['tipoDocumentoId', 'numeroDocumento']]),
-        inscripcionPonencia: delegado('inscripciones', { estado: 'INSCRITO', asistioEn: null, asistenciaPorId: null, registradoPorId: null, esFueraDeHorario: false, canceladoEn: null, motivoCancelacion: null }, [['ponenciaId', 'asistenteId']]),
+        inscripcionPonencia: delegado('inscripciones', { estado: 'INSCRITO', asistioEn: null, asistenciaPorId: null, registradoPorId: null, esFueraDeHorario: false, canceladoEn: null, motivoCancelacion: null, inscripcionCongresoId: null, modoAsistencia: 'PRESENCIAL' }, [['ponenciaId', 'asistenteId']]),
         $queryRaw: jest.fn(async () => []),
     }
     // Las transacciones se ejecutan de una en una: equivale al `SELECT … FOR UPDATE` de la fila de la ponencia
@@ -193,7 +199,8 @@ export function sembrarAsistente(bd: EstadoBd, datos: Fila = {}): Fila {
 
 export function sembrarInscripcion(bd: EstadoBd, datos: Fila): Fila {
     return sembrar(bd, 'inscripciones', {
-        estado: 'INSCRITO', origen: 'LANDING', registradoPorId: null, asistioEn: null, asistenciaPorId: null, esFueraDeHorario: false, canceladoEn: null, motivoCancelacion: null, ...datos,
+        estado: 'INSCRITO', origen: 'LANDING', registradoPorId: null, asistioEn: null, asistenciaPorId: null, esFueraDeHorario: false, canceladoEn: null, motivoCancelacion: null,
+        inscripcionCongresoId: null, modoAsistencia: 'PRESENCIAL', ...datos,
     })
 }
 

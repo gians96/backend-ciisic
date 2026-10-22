@@ -107,6 +107,9 @@ model Evento {
   logoArchivo             String?                 @map("logo_archivo") @db.VarChar(255)
   datosPago               Json?                   @map("datos_pago")
   credencialCorreoId      Int?                    @map("credencial_correo_id")
+  /// Ponencias especializadas (spec 030): encendido, cualquiera se inscribe solo con su documento; apagado
+  /// (por defecto), solo quien tiene una inscripción aprobada al congreso.
+  ponenciasAccesoLibre    Boolean                 @default(false) @map("ponencias_acceso_libre")
   creadoEn                DateTime                @default(now()) @map("creado_en")
   actualizadoEn           DateTime                @updatedAt @map("actualizado_en")
   credencialCorreo        CredencialCorreo?       @relation(fields: [credencialCorreoId], references: [id], onDelete: SetNull, map: "fk_eventos_credencial_correo")
@@ -306,6 +309,7 @@ model Inscripcion {
   clasificacion          Clasificacion?    @relation(fields: [clasificacionId], references: [id], onDelete: SetNull, map: "fk_inscripciones_clasificacion")
   estado                 EstadoInscripcion @relation(fields: [estadoId], references: [id], map: "fk_inscripciones_estado")
   revisadoPor            Administrador?    @relation("InscripcionRevisor", fields: [revisadoPorId], references: [id], onDelete: SetNull, map: "fk_inscripciones_revisado_por")
+  inscripcionesPonencia  InscripcionPonencia[]
 
   @@unique([eventoId, participanteId], map: "uq_inscripciones_evento_participante")
   @@index([participanteId], map: "idx_inscripciones_participante")
@@ -632,10 +636,16 @@ model InscripcionPonencia {
   esFueraDeHorario  Boolean                    @default(false) @map("es_fuera_de_horario")
   canceladoEn       DateTime?                  @map("cancelado_en")
   motivoCancelacion MotivoCancelacionPonencia? @map("motivo_cancelacion")
+  /// Inscripción aprobada al congreso con la que se validó (spec 030). NULL = sin validar (acceso libre o
+  /// inscripciones anteriores a la validación).
+  inscripcionCongresoId Int?                   @map("inscripcion_congreso_id")
+  /// Cómo asiste a la ponencia, según su inscripción al congreso. Solo la presencial ocupa aforo.
+  modoAsistencia    ModalidadAsistencia        @default(PRESENCIAL) @map("modo_asistencia")
   creadoEn          DateTime                   @default(now()) @map("creado_en")
   actualizadoEn     DateTime                   @updatedAt @map("actualizado_en")
   ponencia          PonenciaEspecializada      @relation(fields: [ponenciaId], references: [id], map: "fk_inscripciones_ponencia_ponencia")
   asistente         AsistentePonencia          @relation(fields: [asistenteId], references: [id], map: "fk_inscripciones_ponencia_asistente")
+  inscripcionCongreso Inscripcion?             @relation(fields: [inscripcionCongresoId], references: [id], onDelete: SetNull, map: "fk_inscripciones_ponencia_congreso")
   registradoPor     Administrador?             @relation("InscripcionPonenciaRegistradaPor", fields: [registradoPorId], references: [id], onDelete: SetNull, map: "fk_inscripciones_ponencia_registrado_por")
   asistenciaPor     Administrador?             @relation("InscripcionPonenciaAsistenciaPor", fields: [asistenciaPorId], references: [id], onDelete: SetNull, map: "fk_inscripciones_ponencia_asistencia_por")
 
@@ -643,6 +653,8 @@ model InscripcionPonencia {
   @@index([asistenteId], map: "idx_inscripciones_ponencia_asistente")
   @@index([registradoPorId], map: "idx_inscripciones_ponencia_registrado_por")
   @@index([asistenciaPorId], map: "idx_inscripciones_ponencia_asistencia_por")
+  @@index([inscripcionCongresoId], map: "idx_inscripciones_ponencia_congreso")
+  @@index([ponenciaId, estado, modoAsistencia], map: "idx_inscripciones_ponencia_cupo")
   @@map("inscripciones_ponencia")
 }
 

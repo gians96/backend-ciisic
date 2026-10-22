@@ -30,7 +30,8 @@ const enCurso = (datos: Record<string, unknown> = {}) => sembrarPonencia(m.__bd,
 beforeEach(() => {
     reiniciar(m.__bd)
     jest.clearAllMocks()
-    m.evento.findUnique.mockImplementation(({ where }: { where: { id: number } }) => Promise.resolve({ id: where.id, codigo: `evento-${where.id}`, estado: 'PUBLICADO' }))
+    // Acceso libre encendido: estas pruebas cubren la puerta sin validar el congreso (spec 019); la validación está en validacion-congreso.test.ts
+    m.evento.findUnique.mockImplementation(({ where }: { where: { id: number } }) => Promise.resolve({ id: where.id, codigo: `evento-${where.id}`, estado: 'PUBLICADO', ponenciasAccesoLibre: true }))
     dni.mockResolvedValue({ numero: '12345678', nombres: 'JUAN CARLOS', apellidoPaterno: 'QUISPE', apellidoMaterno: 'MAMANI' })
 })
 

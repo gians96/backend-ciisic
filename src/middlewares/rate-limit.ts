@@ -58,6 +58,8 @@ const DIA = 24 * 60 * MINUTO
 // Por visitante
 export const limiteLecturaPublica = limitador(MINUTO, 120)
 export const limiteInscripcion = limitador(15 * MINUTO, 10, 'Demasiados intentos de inscripción. Intenta nuevamente en 15 minutos.')
+/** Verificación previa a las ponencias (spec 030): aparte de `limiteInscripcion` para no gastar su cupo; sigue siendo un tope para adivinar documento y correo. */
+export const limiteVerificacionCongresista = limitador(15 * MINUTO, 20, 'Demasiados intentos de verificación. Intenta nuevamente en 15 minutos.')
 export const limiteVerificacion = limitador(MINUTO, 20)
 export const limiteConsultaDocumento = limitador(MINUTO, 10, 'Demasiadas consultas. Espera un minuto e inténtalo nuevamente.')
 export const limitePonencias = limitador(15 * MINUTO, 10, 'Demasiados intentos. Intenta nuevamente en 15 minutos.')
@@ -81,6 +83,7 @@ export const limiteTokenDniDiario = porToken(DIA, 1500, 'El sitio superó el lí
 export const limiteTokenVerificacion = porToken(MINUTO, 50)
 export const limiteTokenGoogle = porToken(MINUTO, 300)
 export const limiteTokenInscripcion = porToken(15 * MINUTO, 150)
+export const limiteTokenVerificacionCongresista = porToken(15 * MINUTO, 300)
 export const limiteTokenPonencias = porToken(15 * MINUTO, 60)
 export const limiteTokenContacto = porToken(15 * MINUTO, 60)
 

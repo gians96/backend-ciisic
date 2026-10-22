@@ -111,6 +111,8 @@ const SITIO: readonly Clave[] = [
     // Ponencias especializadas (spec 019)
     'GET /v1/site/specialized-talks',
     'POST /v1/site/specialized-talk-registrations',
+    // Verificación previa del congresista (spec 030)
+    'POST /v1/site/specialized-talk-eligibility',
 ]
 
 const PARTICIPANTE: readonly Clave[] = [
@@ -274,6 +276,9 @@ const MATRIZ: Record<Clave, Esperada> = {
     'POST /v1/events/:eventId/specialized-talks': g('especializadas.gestionar'),
     'PUT /v1/specialized-talks/:id': g('especializadas.gestionar'),
     'DELETE /v1/specialized-talks/:id': g('especializadas.gestionar'),
+    // Acceso libre del evento (spec 030)
+    'GET /v1/events/:eventId/specialized-talks/access': g(['especializadas.ver', 'especializadas.gestionar'], P()),
+    'PUT /v1/events/:eventId/specialized-talks/access': g('especializadas.gestionar'),
     'GET /v1/events/:eventId/specialized-talk-registrations': g('especializadas.ver', P()),
     'POST /v1/specialized-talks/:id/registrations': g('especializadas.inscribir', eventoDePonenciaEspecializada),
     'PATCH /v1/specialized-talk-registrations/:id': g('especializadas.inscribir', eventoDeInscripcionPonencia),
@@ -321,7 +326,7 @@ const LIMITES_POR_ACTOR: readonly RequestHandler[] = [
     limiteMarcarAsistencia, limiteCheckInPonencia, limiteReenvioCredencial, limiteRenovacionSesion, limiteSwitch, limiteLecturaReportes, limiteDescargaReportes, limiteCargaPadron, limiteEnlacesAsesores, limiteGestionDocentes,
 ]
 /** Total de rutas de /api: una ruta nueva obliga a clasificarla aquí. */
-const TOTAL_RUTAS = 179
+const TOTAL_RUTAS = 182
 
 function clasesDe(ruta: Ruta): Clase[] {
     const clases: Clase[] = []
