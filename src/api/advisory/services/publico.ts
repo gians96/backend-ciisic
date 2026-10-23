@@ -2,6 +2,7 @@ import { cargarSeguimiento } from './consulta'
 import { asesorDelDocumento, asesorDelEnlace, type AsesorDelEnlace } from './enlaces'
 import { cicloDelEnlace } from './enlaces-ciclo'
 import {
+    etiquetaSeccion,
     filtrarAlcance,
     resumir,
     type Contadores,
@@ -32,6 +33,8 @@ export interface AlumnoPublico {
     ciclo: string
     seccion: string
     turno: string | null
+    /** Etiquetas («VI-A1») de **todas** sus secciones dentro del alcance del docente; nunca las de otro docente (spec 033). */
+    secciones: string[]
     celular: string | null
     situacion: Situacion
 }
@@ -65,6 +68,7 @@ const aAlumnoPublico = (f: FilaSeguimiento): AlumnoPublico => ({
     ciclo: f.ciclo,
     seccion: f.seccion,
     turno: f.turno,
+    secciones: f.secciones.map((s) => etiquetaSeccion(s.ciclo, s.seccion)),
     celular: f.celular,
     situacion: f.situacion,
 })
@@ -125,6 +129,8 @@ export interface AlumnoPublicoCiclo {
     ciclo: string
     seccion: string
     turno: string | null
+    /** Etiquetas de sus secciones **dentro de ese ciclo** (spec 033). */
+    secciones: string[]
     situacion: Situacion
 }
 
@@ -145,6 +151,7 @@ const aAlumnoPublicoCiclo = (f: FilaSeguimiento): AlumnoPublicoCiclo => ({
     ciclo: f.ciclo,
     seccion: f.seccion,
     turno: f.turno,
+    secciones: f.secciones.map((s) => etiquetaSeccion(s.ciclo, s.seccion)),
     situacion: f.situacion,
 })
 

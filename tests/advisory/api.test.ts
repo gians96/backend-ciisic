@@ -8,6 +8,7 @@ jest.mock('../../src/database/prisma', () => {
     const cliente = {
         evento: { findUnique: jest.fn() },
         padronEstudiante: { findMany: jest.fn(), deleteMany: jest.fn(), createMany: jest.fn() },
+        padronSeccion: { createMany: jest.fn() },
         asesor: { findMany: jest.fn(), deleteMany: jest.fn(), create: jest.fn() },
         inscripcion: { findMany: jest.fn() },
         $transaction: jest.fn(),
@@ -19,6 +20,7 @@ jest.mock('../../src/database/prisma', () => {
 const m = prisma as unknown as {
     evento: { findUnique: jest.Mock }
     padronEstudiante: { findMany: jest.Mock, deleteMany: jest.Mock, createMany: jest.Mock }
+    padronSeccion: { createMany: jest.Mock }
     asesor: { findMany: jest.Mock, deleteMany: jest.Mock, create: jest.Mock }
     inscripcion: { findMany: jest.Mock }
 }
@@ -217,6 +219,7 @@ describe('carga del padrón', () => {
         expect(r.body.data).toEqual({ semestre: '2026-2', estudiantes: 2, asesores: 2, secciones: 2, advertencias: [], aplicado: false, asesoresConservados: false })
         expect(m.padronEstudiante.deleteMany).not.toHaveBeenCalled()
         expect(m.padronEstudiante.createMany).not.toHaveBeenCalled()
+        expect(m.padronSeccion.createMany).not.toHaveBeenCalled()
     })
 
     it('con «reemplazar» reemplaza el padrón y los asesores del evento en una sola transacción', async () => {
@@ -228,6 +231,14 @@ describe('carga del padrón', () => {
         const guardados = m.padronEstudiante.createMany.mock.calls[0][0].data
         expect(guardados).toHaveLength(2)
         expect(guardados[0]).toMatchObject({ eventoId: 2, semestre: '2026-2', documento: '60344947', codigo: '2621010003', ciclo: 'I', seccion: 'A', turno: 'M' })
+        // Spec 033: cada alumno del Excel queda con su única sección en `padron_secciones` (y la columna `secciones` no va a `padron_estudiantes`)
+        expect(guardados[0]).not.toHaveProperty('secciones')
+        expect(m.padronSeccion.createMany).toHaveBeenCalledWith({
+            data: [
+                { eventoId: 2, codigo: '2621010003', ciclo: 'I', seccion: 'A', turno: 'M', cursos: 1 },
+                { eventoId: 2, codigo: '2621010004', ciclo: 'II', seccion: 'B', turno: 'T', cursos: 1 },
+            ],
+        })
         expect(m.asesor.create).toHaveBeenCalledTimes(2)
         const barrera = m.asesor.create.mock.calls.map((c) => c[0].data).find((d: { nombre: string }) => d.nombre.includes('BARRERA'))
         expect(barrera.secciones.create).toEqual([{ eventoId: 2, ciclo: 'I', seccion: 'A' }, { eventoId: 2, ciclo: 'II', seccion: 'B' }])
@@ -245,6 +256,7 @@ describe('carga del padrón', () => {
         expect(r.body.data).toMatchObject({ aplicado: true, asesoresConservados: true })
         expect(m.padronEstudiante.deleteMany).toHaveBeenCalledWith({ where: { eventoId: 2 } })
         expect(m.padronEstudiante.createMany).toHaveBeenCalledTimes(1)
+        expect(m.padronSeccion.createMany).toHaveBeenCalledTimes(1)
         expect(m.asesor.deleteMany).not.toHaveBeenCalled()
         expect(m.asesor.create).not.toHaveBeenCalled()
     })
@@ -292,5 +304,6 @@ describe('carga del padrón', () => {
         expect((await request(app).post('/api/v1/events/2/advisory/import').set(con(tesorero())).attach('file', await libro(), 'padron.xlsx')).status).toBe(403)
         expect((await request(app).post('/api/v1/events/2/advisory/import').set(con(comision(['reportes.exportar']))).attach('file', await libro(), 'padron.xlsx')).status).toBe(403)
         expect(m.padronEstudiante.createMany).not.toHaveBeenCalled()
+        expect(m.padronSeccion.createMany).not.toHaveBeenCalled()
     })
 })

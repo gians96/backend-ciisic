@@ -19,7 +19,9 @@
     "seed:ponencias-especializadas": "node ./dist/src/database/seedPonenciasEspecializadas.js",
     "seed:ponencias-especializadas:dev": "ts-node ./src/database/seedPonenciasEspecializadas.ts",
     "ponencias-especializadas:validar-existentes": "node ./dist/src/database/validarPonenciasExistentes.js",
-    "ponencias-especializadas:validar-existentes:dev": "ts-node ./src/database/validarPonenciasExistentes.ts"
+    "ponencias-especializadas:validar-existentes:dev": "ts-node ./src/database/validarPonenciasExistentes.ts",
+    "padron:desde-jp": "node ./dist/src/database/sincronizarPadronJp.js",
+    "padron:desde-jp:dev": "ts-node ./src/database/sincronizarPadronJp.ts"
   },
   "keywords": [],
   "author": "",
@@ -38,6 +40,7 @@
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.1",
     "multer": "^2.0.2",
+    "mysql2": "^3.24.6",
     "pdfkit": "^0.17.2",
     "prisma": "^6.15.0",
     "puppeteer": "^24.43.1",

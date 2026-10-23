@@ -1,6 +1,6 @@
 import type { Workbook, Worksheet } from 'exceljs'
 import { etiquetaSeccion, type FilaSeguimiento, type Situacion } from '../services/seguimiento'
-import { asesoresDe, columnasDeContadores, columnasOcultas, etiquetaDeSituacion, marcaDeTiempo, type DatosReporte } from './reporte'
+import { asesoresDe, columnasDeContadores, columnasOcultas, etiquetaDeSituacion, marcaDeTiempo, otrasSeccionesDe, type DatosReporte } from './reporte'
 
 const AZUL = 'FF1E3A5F'
 const COLORES_SITUACION: Readonly<Record<Situacion, { fondo: string, texto: string }>> = {
@@ -95,6 +95,7 @@ function hojaDeAlumnos(libro: Workbook, nombre: string, filas: readonly FilaSegu
         { titulo: 'Ciclo', ancho: 8, valor: (f) => f.ciclo },
         { titulo: 'Sección', ancho: 9, valor: (f) => f.seccion },
         { titulo: 'Turno', ancho: 8, valor: (f) => f.turno },
+        { titulo: 'Otras secciones', ancho: 16, valor: (f) => otrasSeccionesDe(f) },
         { titulo: 'Código', ancho: 14, valor: (f) => f.codigo },
         { titulo: 'DNI', ancho: 11, valor: (f) => f.documento },
         { titulo: 'Alumno', ancho: 42, valor: (f) => f.nombre },

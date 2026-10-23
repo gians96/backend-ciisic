@@ -1,6 +1,6 @@
 import PDFDocument from 'pdfkit'
 import { etiquetaSeccion, type Situacion } from '../services/seguimiento'
-import { asesoresDe, columnasDeContadores, columnasOcultas, etiquetaDeSituacion, marcaDeTiempo, textoAvance, type DatosReporte } from './reporte'
+import { asesoresDe, columnasDeContadores, columnasOcultas, etiquetaDeSituacion, marcaDeTiempo, otrasSeccionesDe, textoAvance, type DatosReporte } from './reporte'
 
 const AZUL = '#1e3a5f'
 const GRIS = '#6b7280'
@@ -191,9 +191,12 @@ export function generarPdf(datos: DatosReporte): Promise<Buffer> {
 
             dibujante.titulo(`Alumnos (${datos.filas.length})`)
             // El nombre ocupa lo que dejan las demás columnas (con asesores se reparte el resto con ellos)
-            const anchoAlumno = ver('Asesores') ? (ver('DNI') ? 190 : 250) : 330
+            // «Otras secciones» (spec 033) solo aparece si algún alumno cursa en más de una dentro del alcance; su ancho sale del de Alumno
+            const hayOtras = datos.filas.some((f) => f.secciones.length > 1)
+            const anchoAlumno = (ver('Asesores') ? (ver('DNI') ? 190 : 250) : 330) - (hayOtras ? 56 : 0)
             const fijas: Columna[] = [
                 { titulo: 'Ciclo', ancho: 28, centrar: true }, { titulo: 'Sec.', ancho: 28, centrar: true }, { titulo: 'Turno', ancho: 30, centrar: true },
+                ...(hayOtras ? [{ titulo: 'Otras', ancho: 56 }] : []),
                 { titulo: 'Código', ancho: 62 }, ...(ver('DNI') ? [{ titulo: 'DNI', ancho: 52 }] : []), { titulo: 'Alumno', ancho: anchoAlumno }, ...(ver('Celular') ? [{ titulo: 'Celular', ancho: 58 }] : []),
                 { titulo: 'Situación', ancho: 72, centrar: true }, ...(datos.conPago ? [{ titulo: 'Monto', ancho: 44, centrar: true }] : []),
             ]
@@ -201,7 +204,7 @@ export function generarPdf(datos: DatosReporte): Promise<Buffer> {
             dibujante.tabla(
                 [...fijas, ...(ver('Asesores') ? [{ titulo: 'Asesores', ancho: resto }] : [])],
                 datos.filas.map((f) => [
-                    { texto: f.ciclo }, { texto: f.seccion }, { texto: f.turno ?? '' }, { texto: f.codigo }, ...(ver('DNI') ? [{ texto: f.documento }] : []), { texto: f.nombre }, ...(ver('Celular') ? [{ texto: f.celular ?? '' }] : []),
+                    { texto: f.ciclo }, { texto: f.seccion }, { texto: f.turno ?? '' }, ...(hayOtras ? [{ texto: otrasSeccionesDe(f) }] : []), { texto: f.codigo }, ...(ver('DNI') ? [{ texto: f.documento }] : []), { texto: f.nombre }, ...(ver('Celular') ? [{ texto: f.celular ?? '' }] : []),
                     { texto: etiquetaDeSituacion(f.situacion), situacion: f.situacion },
                     ...(datos.conPago ? [{ texto: f.monto === null ? '' : f.monto.toFixed(2) }] : []),
                     ...(ver('Asesores') ? [{ texto: asesoresDe(f) }] : []),

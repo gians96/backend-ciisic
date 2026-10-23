@@ -501,6 +501,12 @@ desde el panel, y entran a **una sola página común** escribiendo su DNI.
   `404 ADVISOR_DOCUMENT_NOT_FOUND`. Límite: 10 intentos **fallidos** cada 15 min por IP.
 - Recargar el padrón (`asesores=conservar|reemplazar`) conserva por defecto a los docentes, sus DNI, sus secciones editadas y sus enlaces.
 
+#### Secciones por curso (spec 033)
+
+Contrato en `specs/033-padron-secciones-jp/contracts/api-secciones-por-curso.md` (panel: spec 023). Un alumno puede cursar en **varias** secciones (la sección va ligada al curso, no al alumno):
+cada fila de `…/advisory/students` agrega `secciones` (cada una con `cursos` y sus `asesores`; la principal primero) y los totales cuentan al alumno una vez. Las vistas públicas agregan `secciones: string[]`
+(etiquetas de su alcance: nunca las de otro docente ni otros asesores). Aditivo: el panel anterior sigue funcionando. Los datos salen de JP con el script `npm run padron:desde-jp` (solo lectura sobre JP; ver `docs/operacion.md`).
+
 ### Escáner, credencial y operación (spec 014)
 
 Definido en `specs/014-portal-fotocheck-asistencia/contracts/api-asistencia.md` (panel: spec 009).

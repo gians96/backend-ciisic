@@ -47,7 +47,7 @@ const unicos = (valores: readonly string[]) => [...new Set(valores.filter(Boolea
  */
 export async function cargarSeguimiento(eventoId: number, conPago: boolean): Promise<Seguimiento> {
     const [padron, asesores] = await Promise.all([
-        prisma.padronEstudiante.findMany({ where: { eventoId }, orderBy: [{ ciclo: 'asc' }, { seccion: 'asc' }, { nombre: 'asc' }] }),
+        prisma.padronEstudiante.findMany({ where: { eventoId }, include: { secciones: true }, orderBy: [{ ciclo: 'asc' }, { seccion: 'asc' }, { nombre: 'asc' }] }),
         prisma.asesor.findMany({ where: { eventoId }, include: { secciones: true }, orderBy: { nombre: 'asc' } }),
     ])
 

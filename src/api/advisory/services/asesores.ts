@@ -47,7 +47,7 @@ const ordenar = (lista: SeccionRef[]) => [...lista].sort((a, b) => compararCiclo
 const normalizarSeccion = ({ ciclo, seccion }: SeccionRef): SeccionRef => ({ ciclo: ciclo.trim().toUpperCase(), seccion: seccion.trim().toUpperCase() })
 
 async function seccionesDelPadron(eventoId: number): Promise<SeccionRef[]> {
-    const grupos = await prisma.padronEstudiante.groupBy({ by: ['ciclo', 'seccion'], where: { eventoId }, _count: { _all: true } })
+    const grupos = await prisma.padronSeccion.groupBy({ by: ['ciclo', 'seccion'], where: { eventoId }, _count: { _all: true } })
     return ordenar(grupos.map(({ ciclo, seccion }) => ({ ciclo, seccion })))
 }
 

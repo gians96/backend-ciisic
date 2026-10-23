@@ -31,6 +31,22 @@ export interface AsesorConSecciones extends AsesorRef {
     secciones: Array<{ ciclo: string, seccion: string }>
 }
 
+/**
+ * Ciclo y sección (grupo de asesoría) en que cursa un estudiante (spec 033). La sección va ligada al curso: un alumno
+ * puede estar en varias (teoría y laboratorio, o un curso repetido de otro ciclo); `cursos` es cuántos lleva en esa.
+ */
+export interface SeccionEstudiante {
+    ciclo: string
+    seccion: string
+    turno: string | null
+    cursos: number
+}
+
+/** Una sección del estudiante con los asesores que la atienden. */
+export interface SeccionDeFila extends SeccionEstudiante {
+    asesores: AsesorRef[]
+}
+
 export interface EstudianteBase {
     id: number
     documento: string
@@ -39,9 +55,12 @@ export interface EstudianteBase {
     nombre: string
     celular: string | null
     carrera: string
+    /** Ciclo, turno y sección **principales**; las demás están en `secciones`. */
     ciclo: string
     turno: string | null
     seccion: string
+    /** Todas las secciones en que cursa. Ausente o vacía = solo la principal (padrones anteriores a la spec 033). */
+    secciones?: readonly SeccionEstudiante[]
 }
 
 /** Lo que el seguimiento necesita de una inscripción del evento. */
@@ -68,9 +87,13 @@ export interface FilaSeguimiento {
     correo: string | null
     celular: string | null
     carrera: string
+    /** Ciclo, turno y sección principales (en un reporte filtrado, la primera sección dentro del alcance). */
     ciclo: string
     turno: string | null
     seccion: string
+    /** Todas sus secciones (la principal primero), cada una con sus asesores; en un reporte filtrado, solo las del alcance. */
+    secciones: SeccionDeFila[]
+    /** Asesores de todas sus secciones, sin repetir. */
     asesores: AsesorRef[]
     situacion: Situacion
     /** Código del estado de la inscripción (`APROBADO`…), `null` si no se inscribió. */
@@ -228,6 +251,25 @@ function fechaIso(fecha: Date | null): string | null {
     return fecha ? fecha.toISOString().slice(0, 10) : null
 }
 
+/** Asesores de varias secciones, sin repetir y por nombre. */
+function unirAsesores(secciones: readonly SeccionDeFila[]): AsesorRef[] {
+    const porId = new Map<number, AsesorRef>()
+    for (const seccion of secciones) for (const asesor of seccion.asesores) porId.set(asesor.id, asesor)
+    return [...porId.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+}
+
+/** Secciones del estudiante con sus asesores: la principal primero y el resto en orden académico. Sin `secciones` solo está la principal. */
+function seccionesDeFila(estudiante: EstudianteBase, asesoresPorSeccion: ReadonlyMap<string, AsesorRef[]>): SeccionDeFila[] {
+    const principal = claveSeccion(estudiante.ciclo, estudiante.seccion)
+    const lista: readonly SeccionEstudiante[] = estudiante.secciones?.length
+        ? estudiante.secciones
+        : [{ ciclo: estudiante.ciclo, seccion: estudiante.seccion, turno: estudiante.turno, cursos: 1 }]
+    const rango = (s: SeccionEstudiante) => (claveSeccion(s.ciclo, s.seccion) === principal ? 0 : 1)
+    return [...lista]
+        .sort((a, b) => rango(a) - rango(b) || compararCiclos(a.ciclo, b.ciclo) || compararSecciones(a.seccion, b.seccion))
+        .map((s) => ({ ciclo: s.ciclo, seccion: s.seccion, turno: s.turno, cursos: s.cursos, asesores: asesoresPorSeccion.get(claveSeccion(s.ciclo, s.seccion)) ?? [] }))
+}
+
 /**
  * Una fila por estudiante del padrón. La inscripción se busca primero por documento, luego por código
  * de estudiante y por último por correo (el institucional lleva el código). Sin `conPago` los montos y
@@ -258,6 +300,7 @@ export function construirFilas(
         .map((estudiante): FilaSeguimiento => {
             const hallada = buscar(estudiante)
             const inscripcion = hallada?.inscripcion
+            const secciones = seccionesDeFila(estudiante, asesoresPorSeccion)
             return {
                 id: estudiante.id,
                 codigo: estudiante.codigo,
@@ -269,7 +312,8 @@ export function construirFilas(
                 ciclo: estudiante.ciclo,
                 turno: estudiante.turno,
                 seccion: estudiante.seccion,
-                asesores: asesoresPorSeccion.get(claveSeccion(estudiante.ciclo, estudiante.seccion)) ?? [],
+                secciones,
+                asesores: unirAsesores(secciones),
                 situacion: situacionDe(inscripcion?.estado),
                 estadoInscripcion: inscripcion?.estado ?? null,
                 inscripcionId: inscripcion?.id ?? null,
@@ -298,15 +342,29 @@ export function asesoresPorSeccion(asesores: readonly AsesorConSecciones[]): Map
 
 const igual = (a: string | null, b: string) => (a ?? '').trim().toUpperCase() === b.trim().toUpperCase()
 
-/** Filtros que delimitan el grupo de estudiantes (no su situación): los usan los resúmenes. */
+/**
+ * Filtros que delimitan el grupo de estudiantes (no su situación): los usan los resúmenes. Ciclo, sección, turno y asesor
+ * deben cumplirse en **la misma sección** del estudiante (spec 033). Si el filtro deja solo algunas de sus secciones, la fila
+ * sale **proyectada** a ellas (su ciclo, turno y sección pasan a ser los de la primera): quien mira solo ve lo que le corresponde.
+ */
 export function filtrarAlcance(filas: readonly FilaSeguimiento[], filtros: FiltrosSeguimiento): FilaSeguimiento[] {
-    return filas.filter((fila) => {
-        if (filtros.asesorId !== undefined && !fila.asesores.some((asesor) => asesor.id === filtros.asesorId)) return false
-        if (filtros.ciclo && !igual(fila.ciclo, filtros.ciclo)) return false
-        if (filtros.seccion && !igual(fila.seccion, filtros.seccion)) return false
-        if (filtros.turno && !igual(fila.turno, filtros.turno)) return false
-        return true
-    })
+    if (filtros.asesorId === undefined && !filtros.ciclo && !filtros.seccion && !filtros.turno) return [...filas]
+    const resultado: FilaSeguimiento[] = []
+    for (const fila of filas) {
+        const enAlcance = fila.secciones.filter((s) =>
+            (filtros.asesorId === undefined || s.asesores.some((asesor) => asesor.id === filtros.asesorId))
+            && (!filtros.ciclo || igual(s.ciclo, filtros.ciclo))
+            && (!filtros.seccion || igual(s.seccion, filtros.seccion))
+            && (!filtros.turno || igual(s.turno, filtros.turno)))
+        if (!enAlcance.length) continue
+        if (enAlcance.length === fila.secciones.length) {
+            resultado.push(fila)
+            continue
+        }
+        const [primera] = enAlcance
+        resultado.push({ ...fila, ciclo: primera.ciclo, turno: primera.turno, seccion: primera.seccion, secciones: enAlcance, asesores: unirAsesores(enAlcance) })
+    }
+    return resultado
 }
 
 /** Alcance más situación y búsqueda libre (nombre, código, documento o correo): el listado de alumnos. */
@@ -330,11 +388,12 @@ export interface OpcionesFiltro {
 }
 
 export function opcionesDeFiltro(filas: readonly FilaSeguimiento[], asesores: readonly AsesorConSecciones[]): OpcionesFiltro {
-    const secciones = new Map(filas.map((fila) => [claveSeccion(fila.ciclo, fila.seccion), { ciclo: fila.ciclo, seccion: fila.seccion }]))
+    const entradas = filas.flatMap((fila) => fila.secciones)
+    const secciones = new Map(entradas.map((s) => [claveSeccion(s.ciclo, s.seccion), { ciclo: s.ciclo, seccion: s.seccion }]))
     return {
-        ciclos: [...new Set(filas.map((fila) => fila.ciclo))].sort(compararCiclos),
+        ciclos: [...new Set(entradas.map((s) => s.ciclo))].sort(compararCiclos),
         secciones: [...secciones.values()].sort((a, b) => compararCiclos(a.ciclo, b.ciclo) || compararSecciones(a.seccion, b.seccion)),
-        turnos: [...new Set(filas.map((fila) => fila.turno).filter((turno): turno is string => Boolean(turno)))].sort(),
+        turnos: [...new Set(entradas.map((s) => s.turno).filter((turno): turno is string => Boolean(turno)))].sort(),
         asesores: asesores.map(({ id, nombre }) => ({ id, nombre })).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')),
     }
 }
@@ -361,32 +420,35 @@ export function contar(filas: readonly FilaSeguimiento[], conPago: boolean): Con
     }
 }
 
-function agrupar<T>(filas: readonly FilaSeguimiento[], clave: (fila: FilaSeguimiento) => string, crear: (grupo: FilaSeguimiento[]) => T): T[] {
-    const grupos = new Map<string, FilaSeguimiento[]>()
-    for (const fila of filas) {
-        const llave = clave(fila)
-        const grupo = grupos.get(llave)
-        if (grupo) grupo.push(fila)
-        else grupos.set(llave, [fila])
-    }
-    return [...grupos.values()].map(crear)
-}
-
 /**
- * Resumen de las filas dadas: totales, por ciclo, por sección y por asesor. Un estudiante cuenta una
- * vez en los totales, en su ciclo y en su sección, y una vez por cada uno de sus asesores.
+ * Resumen de las filas dadas: totales, por ciclo, por sección y por asesor. Un estudiante cuenta una vez en los
+ * totales, una vez en cada ciclo y en cada sección en que cursa (spec 033) y una vez por cada uno de sus asesores.
  */
 export function resumir(filas: readonly FilaSeguimiento[], asesores: readonly AsesorConSecciones[], conPago: boolean): ResumenSeguimiento {
-    const porCiclo = agrupar(filas, (fila) => fila.ciclo.toUpperCase(), (grupo) => ({ ciclo: grupo[0].ciclo, ...contar(grupo, conPago) }))
+    const ciclos = new Map<string, { ciclo: string, filas: Map<number, FilaSeguimiento> }>()
+    const secciones = new Map<string, { ciclo: string, seccion: string, turnos: Set<string>, asesores: AsesorRef[], filas: FilaSeguimiento[] }>()
+    for (const fila of filas) {
+        for (const s of fila.secciones) {
+            const cicloClave = s.ciclo.toUpperCase()
+            const delCiclo = ciclos.get(cicloClave) ?? { ciclo: s.ciclo, filas: new Map<number, FilaSeguimiento>() }
+            delCiclo.filas.set(fila.id, fila)
+            ciclos.set(cicloClave, delCiclo)
+
+            const clave = claveSeccion(s.ciclo, s.seccion)
+            const delGrupo = secciones.get(clave) ?? { ciclo: s.ciclo, seccion: s.seccion, turnos: new Set<string>(), asesores: s.asesores, filas: [] }
+            if (s.turno) delGrupo.turnos.add(s.turno)
+            delGrupo.filas.push(fila)
+            secciones.set(clave, delGrupo)
+        }
+    }
+
+    const porCiclo = [...ciclos.values()]
+        .map((c) => ({ ciclo: c.ciclo, ...contar([...c.filas.values()], conPago) }))
         .sort((a, b) => compararCiclos(a.ciclo, b.ciclo))
 
-    const porSeccion = agrupar(filas, (fila) => claveSeccion(fila.ciclo, fila.seccion), (grupo) => ({
-        ciclo: grupo[0].ciclo,
-        seccion: grupo[0].seccion,
-        turnos: [...new Set(grupo.map((fila) => fila.turno).filter((turno): turno is string => Boolean(turno)))].sort(),
-        asesores: grupo[0].asesores,
-        ...contar(grupo, conPago),
-    })).sort((a, b) => compararCiclos(a.ciclo, b.ciclo) || compararSecciones(a.seccion, b.seccion))
+    const porSeccion = [...secciones.values()]
+        .map((g) => ({ ciclo: g.ciclo, seccion: g.seccion, turnos: [...g.turnos].sort(), asesores: g.asesores, ...contar(g.filas, conPago) }))
+        .sort((a, b) => compararCiclos(a.ciclo, b.ciclo) || compararSecciones(a.seccion, b.seccion))
 
     const porAsesor = asesores
         .map((asesor): ResumenAsesor => ({

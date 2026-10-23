@@ -182,3 +182,74 @@ describe('filtros y resúmenes', () => {
         expect(opciones.asesores.map((a) => a.id)).toEqual([1, 2, 3])
     })
 })
+
+// ─── Alumnos en varias secciones (spec 033) ─────────────────────────────────
+
+describe('alumnos que cursan en más de una sección', () => {
+    // El alumno 1 es de I-A y repite un curso de II-B; el 2 solo de I-A; el 3 solo de II-B
+    const sec = (ciclo: string, seccion: string, cursos = 1, turno: string | null = 'M') => ({ ciclo, seccion, turno, cursos })
+    const alumnos = [
+        estudiante(1, { secciones: [sec('I', 'A', 5), sec('II', 'B', 1, 'T')] }),
+        estudiante(2),
+        estudiante(3, { ciclo: 'II', seccion: 'B', turno: 'T' }),
+    ]
+    const filas = construirFilas(alumnos, SECCIONES, [inscripcion(10, 'APROBADO', { codigoEstudiante: '2621010001' })], true)
+
+    it('la fila lleva todas sus secciones (la principal primero), cada una con sus asesores, y los asesores de todas sin repetir', () => {
+        const uno = filas.find((f) => f.id === 1)
+        expect(uno?.secciones.map((s) => `${s.ciclo}-${s.seccion}`)).toEqual(['I-A', 'II-B'])
+        expect(uno?.secciones[0].asesores.map((a) => a.id)).toEqual([1, 2])
+        expect(uno?.secciones[1].asesores.map((a) => a.id)).toEqual([2])
+        expect(uno?.asesores.map((a) => a.id)).toEqual([1, 2])
+        // Sin `secciones` (padrón anterior) solo está la principal
+        expect(filas.find((f) => f.id === 2)?.secciones).toEqual([{ ciclo: 'I', seccion: 'A', turno: 'M', cursos: 1, asesores: SECCIONES.get('I|A') }])
+    })
+
+    it('un filtro de ciclo o sección encuentra al alumno en cualquiera de sus secciones y lo proyecta a ella', () => {
+        const delSegundo = filtrarAlcance(filas, { ciclo: 'II' })
+        expect(delSegundo.map((f) => f.id).sort()).toEqual([1, 3])
+        const uno = delSegundo.find((f) => f.id === 1)
+        expect(uno).toMatchObject({ ciclo: 'II', seccion: 'B', turno: 'T' })
+        expect(uno?.secciones).toHaveLength(1)
+        // Ciclo y sección deben cumplirse en la misma sección: I con sección B no existe para nadie
+        expect(filtrarAlcance(filas, { ciclo: 'I', seccion: 'B' })).toEqual([])
+    })
+
+    it('el filtro por asesor solo toma las secciones que ese asesor atiende', () => {
+        const de1 = filtrarAlcance(filas, { asesorId: 1 })
+        expect(de1.map((f) => f.id).sort()).toEqual([1, 2])
+        expect(de1.find((f) => f.id === 1)?.secciones.map((s) => `${s.ciclo}-${s.seccion}`)).toEqual(['I-A'])
+        // El 2 también atiende II-B: ve las dos secciones del alumno 1
+        const de2 = filtrarAlcance(filas, { asesorId: 2 })
+        expect(de2.map((f) => f.id).sort()).toEqual([1, 2, 3])
+        expect(de2.find((f) => f.id === 1)?.secciones).toHaveLength(2)
+    })
+
+    it('sin filtros devuelve las filas tal cual', () => {
+        expect(filtrarAlcance(filas, {})).toEqual(filas)
+    })
+
+    it('cuenta al alumno en cada ciclo y sección en que cursa y una sola vez en los totales', () => {
+        const resumen = resumir(filas, ASESORES, true)
+        expect(resumen.totales).toMatchObject({ alumnos: 3, pagaron: 1 })
+        expect(resumen.porCiclo.map((c) => [c.ciclo, c.alumnos, c.pagaron])).toEqual([['I', 2, 1], ['II', 2, 1]])
+        expect(resumen.porSeccion.map((s) => [`${s.ciclo}-${s.seccion}`, s.alumnos])).toEqual([['I-A', 2], ['II-B', 2]])
+        expect(resumen.porAsesor.map((a) => [a.id, a.alumnos])).toEqual([[1, 2], [2, 3], [3, 0]])
+        expect(resumen.alumnosSinAsesor).toBe(0)
+    })
+
+    it('dos secciones del mismo ciclo cuentan una vez en ese ciclo', () => {
+        const dos = construirFilas([estudiante(1, { secciones: [sec('I', 'A', 3), sec('I', 'B', 1)] })], SECCIONES, [], false)
+        const resumen = resumir(dos, ASESORES, false)
+        expect(resumen.porCiclo).toHaveLength(1)
+        expect(resumen.porCiclo[0].alumnos).toBe(1)
+        expect(resumen.porSeccion).toHaveLength(2)
+    })
+
+    it('las opciones de filtro incluyen todas las secciones de todos los alumnos', () => {
+        const opciones = opcionesDeFiltro(filas, ASESORES)
+        expect(opciones.ciclos).toEqual(['I', 'II'])
+        expect(opciones.secciones).toEqual([{ ciclo: 'I', seccion: 'A' }, { ciclo: 'II', seccion: 'B' }])
+        expect(opciones.turnos).toEqual(['M', 'T'])
+    })
+})

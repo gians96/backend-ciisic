@@ -274,6 +274,28 @@ Apagarlo: la casilla del panel, o `@excluye = 0` en el script. Revertir el esque
 tipos_inscripcion DROP COLUMN excluye_estudiantes_undc;` y `./node_modules/.bin/prisma migrate resolve
 --rolled-back 20261021120000_excluye_estudiantes_undc` (volver a la imagen anterior; respaldo previo).
 
+## Secciones por curso desde JP (spec 033)
+
+Reparte a los estudiantes del padrón de seguimiento en las secciones en que cursan según JP y deja a los docentes con su DNI y sus grupos. **No** es parte del despliegue: se corre a mano, con permiso explícito
+y desde una máquina que llegue a la base de JP y a la del congreso.
+
+1. **Desplegar el backend** (aplica la migración `20261025140000_padron_secciones`, que rellena `padron_secciones` con la sección actual de cada alumno: nada cambia aún).
+2. **Respaldo** de solo lectura de las tablas afectadas:
+   ```bash
+   mysqldump --single-transaction --no-tablespaces -h <host> -u <usuario> -p <base> asesores asesores_secciones padron_estudiantes padron_secciones enlaces_ciclo > respaldos/seguimiento_pre033_$(date +%Y%m%d_%H%M%S).sql
+   ```
+3. **Designación** en un JSON fuera del repositorio (lleva DNI): `{ "grupos": [{ "grupo": "II-A", "turno": "M" }], "asesores": [{ "nombre": "…", "dni": "…", "grupos": ["II-A"] }] }`.
+   El nombre debe ser el del docente en el panel (se empareja sin acentos ni mayúsculas); uno que no exista se crea.
+4. **Simulación** (no escribe nada): `DATABASE_URL` apunta a la base del congreso y `JP_DATABASE_URL` a la de JP (usuario de solo lectura):
+   ```bash
+   JP_DATABASE_URL='mysql://usuario:clave@host:3306/jp' npm run padron:desde-jp:dev -- --evento ciisic-viii --asesores ../respaldos/asesores-2026-2.json --csv ../respaldos/padron-jp-fuera.csv
+   ```
+   Revisa alumnos por grupo, quiénes no tienen matrícula en JP, secciones sin grupo y qué cambia en cada docente.
+5. **Aplicar**: el mismo comando con `--aplicar` (una transacción; los enlaces personales de los docentes no cambian). Luego `prisma/preflight/verificar-padron-jp.sql`.
+6. **Revertir**: restaurar el respaldo de esas tablas.
+
+Las credenciales de JP no se guardan en ningún archivo ni variable del API.
+
 ## Primer Owner
 
 ```bash

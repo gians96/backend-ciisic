@@ -71,7 +71,23 @@ describe('página común de los docentes: vista con el DNI', () => {
         expect(d.totales).toEqual({ alumnos: 2, pagaron: 1, enRevision: 1, rechazados: 0, sinInscripcion: 0, noPagaron: 1, avance: 0.5 })
         expect(d.secciones).toEqual([{ ciclo: 'I', seccion: 'A', turnos: ['M'], alumnos: 2, pagaron: 1, enRevision: 1, rechazados: 0, sinInscripcion: 0, noPagaron: 1, avance: 0.5 }])
         expect(d.alumnos.map((a: { codigo: string }) => a.codigo)).toEqual(['2621010001', '2621010002'])
-        expect(d.alumnos[0]).toEqual({ nombre: 'ALUMNO 1', codigo: '2621010001', ciclo: 'I', seccion: 'A', turno: 'M', celular: '920301747', situacion: 'PAGADO' })
+        expect(d.alumnos[0]).toEqual({ nombre: 'ALUMNO 1', codigo: '2621010001', ciclo: 'I', seccion: 'A', turno: 'M', secciones: ['I-A'], celular: '920301747', situacion: 'PAGADO' })
+    })
+
+    it('un alumno que cursa también en la sección de otro docente aparece una vez y solo con las secciones de este docente (spec 033)', async () => {
+        // El alumno 1 cursa en I-A (de esta docente) y en II-B (del docente 8): ella no debe ver II-B ni a quién la atiende
+        m.padronEstudiante.findMany.mockResolvedValue([
+            alumno(1, { secciones: [{ eventoId: 2, codigo: '2621010001', ciclo: 'I', seccion: 'A', turno: 'M', cursos: 5 }, { eventoId: 2, codigo: '2621010001', ciclo: 'II', seccion: 'B', turno: 'T', cursos: 1 }] }),
+            alumno(3, { ciclo: 'II', seccion: 'B', turno: 'T', nombre: 'CÁRDENAS RÍOS DIEGO', celular: null }),
+        ])
+        const r = await request(app).post(RUTA).send({ documento: DNI })
+        const d = r.body.data
+        expect(d.totales.alumnos).toBe(1)
+        expect(d.secciones).toHaveLength(1)
+        expect(d.secciones[0]).toMatchObject({ ciclo: 'I', seccion: 'A', alumnos: 1 })
+        expect(d.alumnos).toHaveLength(1)
+        expect(d.alumnos[0]).toMatchObject({ codigo: '2621010001', ciclo: 'I', seccion: 'A', secciones: ['I-A'] })
+        expect(JSON.stringify(r.body)).not.toMatch(/II-B|CÁRDENAS/)
     })
 
     it('nunca devuelve el DNI del docente, ni DNI, correo o montos de los estudiantes, ni a otros asesores', async () => {

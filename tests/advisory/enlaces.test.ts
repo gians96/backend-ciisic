@@ -10,6 +10,7 @@ jest.mock('../../src/database/prisma', () => {
     const cliente = {
         evento: { findUnique: jest.fn() },
         padronEstudiante: { findMany: jest.fn(), deleteMany: jest.fn(), createMany: jest.fn() },
+        padronSeccion: { createMany: jest.fn() },
         asesor: { findMany: jest.fn(), findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn(), deleteMany: jest.fn(), create: jest.fn() },
         inscripcion: { findMany: jest.fn() },
         $transaction: jest.fn(),
@@ -21,6 +22,7 @@ jest.mock('../../src/database/prisma', () => {
 const m = prisma as unknown as {
     evento: { findUnique: jest.Mock }
     padronEstudiante: { findMany: jest.Mock, deleteMany: jest.Mock, createMany: jest.Mock }
+    padronSeccion: { createMany: jest.Mock }
     asesor: { findMany: jest.Mock, findUnique: jest.Mock, update: jest.Mock, updateMany: jest.Mock, deleteMany: jest.Mock, create: jest.Mock }
     inscripcion: { findMany: jest.Mock }
 }
@@ -168,7 +170,7 @@ describe('enlaces públicos: vista del docente', () => {
         expect(d.secciones).toEqual([{ ciclo: 'I', seccion: 'A', turnos: ['M'], alumnos: 2, pagaron: 1, enRevision: 1, rechazados: 0, sinInscripcion: 0, noPagaron: 1, avance: 0.5 }])
         // Los estudiantes de otro docente (II-B) no salen
         expect(d.alumnos.map((a: { codigo: string }) => a.codigo)).toEqual(['2621010001', '2621010002'])
-        expect(d.alumnos[0]).toEqual({ nombre: 'ALUMNO 1', codigo: '2621010001', ciclo: 'I', seccion: 'A', turno: 'M', celular: '920301747', situacion: 'PAGADO' })
+        expect(d.alumnos[0]).toEqual({ nombre: 'ALUMNO 1', codigo: '2621010001', ciclo: 'I', seccion: 'A', turno: 'M', secciones: ['I-A'], celular: '920301747', situacion: 'PAGADO' })
     })
 
     it('nunca expone DNI, correo, montos, recaudado, inscripciones ni a otros asesores', async () => {

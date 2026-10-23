@@ -1,6 +1,7 @@
 import { fechaLima, horaLima } from '../../../core/fechas'
 import {
     ETIQUETA_SITUACION,
+    etiquetaSeccion,
     type Contadores,
     type FilaSeguimiento,
     type ResumenSeguimiento,
@@ -37,6 +38,11 @@ export function columnasOcultas(publico: DatosReporte['publico']): string[] {
     if (publico === 'DOCENTE') return ['DNI', 'Correo', 'Asesores']
     if (publico === 'CICLO') return ['DNI', 'Correo', 'Celular']
     return []
+}
+
+/** Las demás secciones del alumno dentro del alcance del reporte («II-A, IV-B»), además de la que muestran Ciclo y Sección (spec 033). */
+export function otrasSeccionesDe(fila: FilaSeguimiento): string {
+    return fila.secciones.slice(1).map((s) => etiquetaSeccion(s.ciclo, s.seccion)).join(', ')
 }
 
 export function marcaDeTiempo(fecha: Date): string {

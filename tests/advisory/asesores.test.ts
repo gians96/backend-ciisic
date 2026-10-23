@@ -7,7 +7,7 @@ import { tokenDeRol } from '../helpers/tokens'
 jest.mock('../../src/database/prisma', () => {
     const cliente = {
         evento: { findUnique: jest.fn() },
-        padronEstudiante: { groupBy: jest.fn() },
+        padronSeccion: { groupBy: jest.fn() },
         asesor: { findMany: jest.fn(), findFirst: jest.fn(), create: jest.fn(), update: jest.fn(), deleteMany: jest.fn() },
         asesorSeccion: { deleteMany: jest.fn(), createMany: jest.fn() },
         $transaction: jest.fn(),
@@ -18,7 +18,7 @@ jest.mock('../../src/database/prisma', () => {
 
 const m = prisma as unknown as {
     evento: { findUnique: jest.Mock }
-    padronEstudiante: { groupBy: jest.Mock }
+    padronSeccion: { groupBy: jest.Mock }
     asesor: { findMany: jest.Mock, findFirst: jest.Mock, create: jest.Mock, update: jest.Mock, deleteMany: jest.Mock }
     asesorSeccion: { deleteMany: jest.Mock, createMany: jest.Mock }
 }
@@ -37,7 +37,7 @@ beforeEach(() => {
     jest.clearAllMocks()
     m.evento.findUnique.mockImplementation(({ where }: { where: { id: number } }) =>
         Promise.resolve(where.id === 2 ? { id: 2, codigo: 'ciisic-viii', nombre: 'CIISIC VIII', estado: 'PUBLICADO' } : null))
-    m.padronEstudiante.groupBy.mockResolvedValue([
+    m.padronSeccion.groupBy.mockResolvedValue([
         { ciclo: 'II', seccion: 'B', _count: { _all: 30 } }, { ciclo: 'I', seccion: 'A', _count: { _all: 39 } }, { ciclo: 'II', seccion: 'A', _count: { _all: 37 } },
     ])
     m.asesor.findMany.mockResolvedValue([CARDENAS, ANGOMA])
@@ -148,7 +148,7 @@ describe('docentes: editar', () => {
     })
 
     it('conserva una sección que el padrón nuevo ya no trae si ya era suya, pero no deja agregar otra que no existe', async () => {
-        m.padronEstudiante.groupBy.mockResolvedValue([{ ciclo: 'I', seccion: 'A', _count: { _all: 10 } }])
+        m.padronSeccion.groupBy.mockResolvedValue([{ ciclo: 'I', seccion: 'A', _count: { _all: 10 } }])
         const suya = await request(app).put('/api/v1/events/2/advisory/advisors/7').set(con(admin())).send({ nombre: 'DRA. ANGOMA ASTUCURI MIRIAM', secciones: [{ ciclo: 'II', seccion: 'A' }] })
         expect(suya.status).toBe(200)
         const ajena = await request(app).put('/api/v1/events/2/advisory/advisors/7').set(con(admin())).send({ nombre: 'DRA. ANGOMA ASTUCURI MIRIAM', secciones: [{ ciclo: 'II', seccion: 'B' }] })

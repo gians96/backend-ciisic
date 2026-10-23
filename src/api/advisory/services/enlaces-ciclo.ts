@@ -23,10 +23,15 @@ export interface EnlaceCiclo {
 
 const mismoCiclo = (a: string, b: string) => a.trim().toUpperCase() === b.trim().toUpperCase()
 
-/** Ciclos del padrón cargado con su cantidad de estudiantes, en orden académico. */
+/**
+ * Ciclos del padrón cargado con su cantidad de estudiantes, en orden académico. Un estudiante cuenta en cada ciclo en
+ * que cursa (spec 033), una sola vez por ciclo aunque esté en dos secciones de él.
+ */
 async function ciclosDelPadron(eventoId: number): Promise<Array<{ ciclo: string, alumnos: number }>> {
-    const grupos = await prisma.padronEstudiante.groupBy({ by: ['ciclo'], where: { eventoId }, _count: { _all: true } })
-    return grupos.map((g) => ({ ciclo: g.ciclo, alumnos: g._count._all })).sort((a, b) => compararCiclos(a.ciclo, b.ciclo))
+    const filas = await prisma.padronSeccion.findMany({ where: { eventoId }, select: { codigo: true, ciclo: true }, distinct: ['ciclo', 'codigo'] })
+    const cuenta = new Map<string, number>()
+    for (const { ciclo } of filas) cuenta.set(ciclo, (cuenta.get(ciclo) ?? 0) + 1)
+    return [...cuenta].map(([ciclo, alumnos]) => ({ ciclo, alumnos })).sort((a, b) => compararCiclos(a.ciclo, b.ciclo))
 }
 
 /**

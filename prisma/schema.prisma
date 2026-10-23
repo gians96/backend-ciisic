@@ -454,11 +454,30 @@ model PadronEstudiante {
   departamento String?  @db.VarChar(80)
   creadoEn     DateTime @default(now()) @map("creado_en")
   evento       Evento   @relation(fields: [eventoId], references: [id], onDelete: Cascade, map: "fk_padron_estudiantes_evento")
+  /// Todas las secciones en que cursa (spec 033). `ciclo`, `turno` y `seccion` de arriba son solo la principal.
+  secciones    PadronSeccion[]
 
   @@unique([eventoId, codigo], map: "uq_padron_estudiantes_evento_codigo")
   @@index([eventoId, ciclo, seccion], map: "idx_padron_estudiantes_evento_seccion")
   @@index([eventoId, documento], map: "idx_padron_estudiantes_evento_documento")
   @@map("padron_estudiantes")
+}
+
+/// Ciclo y sección (grupo de asesoría) en que cursa un estudiante del padrón (spec 033). La sección va ligada al curso:
+/// un alumno puede estar en varias (teoría y laboratorio, o un curso repetido de otro ciclo). `cursos` es cuántos lleva ahí.
+/// Se borra en cascada con el estudiante: el padrón se reemplaza entero en cada carga.
+model PadronSeccion {
+  eventoId   Int              @map("evento_id")
+  codigo     String           @db.VarChar(20)
+  ciclo      String           @db.VarChar(10)
+  seccion    String           @db.VarChar(10)
+  turno      String?          @db.VarChar(5)
+  cursos     Int              @default(1)
+  estudiante PadronEstudiante @relation(fields: [eventoId, codigo], references: [eventoId, codigo], onDelete: Cascade, map: "fk_padron_secciones_estudiante")
+
+  @@id([eventoId, codigo, ciclo, seccion])
+  @@index([eventoId, ciclo, seccion], map: "idx_padron_secciones_evento_seccion")
+  @@map("padron_secciones")
 }
 
 /// Enlace público de un ciclo (spec 027): token aleatorio de 43 caracteres (256 bits) con el que quien lo recibe

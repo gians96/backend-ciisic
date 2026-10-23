@@ -9,7 +9,8 @@ import { tokenDeRol } from '../helpers/tokens'
 jest.mock('../../src/database/prisma', () => {
     const cliente = {
         evento: { findUnique: jest.fn() },
-        padronEstudiante: { findMany: jest.fn(), groupBy: jest.fn(), deleteMany: jest.fn(), createMany: jest.fn() },
+        padronEstudiante: { findMany: jest.fn(), deleteMany: jest.fn(), createMany: jest.fn() },
+        padronSeccion: { findMany: jest.fn(), createMany: jest.fn() },
         asesor: { findMany: jest.fn(), findUnique: jest.fn(), deleteMany: jest.fn(), create: jest.fn() },
         enlaceCiclo: { findMany: jest.fn(), findUnique: jest.fn(), upsert: jest.fn(), update: jest.fn(), deleteMany: jest.fn() },
         inscripcion: { findMany: jest.fn() },
@@ -21,7 +22,8 @@ jest.mock('../../src/database/prisma', () => {
 
 const m = prisma as unknown as {
     evento: { findUnique: jest.Mock }
-    padronEstudiante: { findMany: jest.Mock, groupBy: jest.Mock, deleteMany: jest.Mock, createMany: jest.Mock }
+    padronEstudiante: { findMany: jest.Mock, deleteMany: jest.Mock, createMany: jest.Mock }
+    padronSeccion: { findMany: jest.Mock, createMany: jest.Mock }
     asesor: { findMany: jest.Mock, findUnique: jest.Mock, deleteMany: jest.Mock, create: jest.Mock }
     enlaceCiclo: { findMany: jest.Mock, findUnique: jest.Mock, upsert: jest.Mock, update: jest.Mock, deleteMany: jest.Mock }
     inscripcion: { findMany: jest.Mock }
@@ -61,7 +63,8 @@ beforeEach(() => {
     m.padronEstudiante.findMany.mockResolvedValue([
         alumno(1), alumno(2), alumno(3, { ciclo: 'II', seccion: 'B', turno: 'T', nombre: 'CÁRDENAS RÍOS DIEGO' }),
     ])
-    m.padronEstudiante.groupBy.mockResolvedValue([{ ciclo: 'I', _count: { _all: 2 } }, { ciclo: 'II', _count: { _all: 1 } }])
+    // Spec 033: los ciclos y su cantidad de alumnos salen de las secciones (alumno y ciclo distintos)
+    m.padronSeccion.findMany.mockResolvedValue([{ codigo: '2621010001', ciclo: 'I' }, { codigo: '2621010002', ciclo: 'I' }, { codigo: '2621010003', ciclo: 'II' }])
     m.asesor.findMany.mockResolvedValue([
         { id: 7, eventoId: 2, nombre: 'DRA. ANGOMA ASTUCURI MIRIAM', secciones: [{ asesorId: 7, eventoId: 2, ciclo: 'I', seccion: 'A' }] },
         { id: 8, eventoId: 2, nombre: 'MG. CÁRDENAS LINO CÉSAR ANDY', secciones: [{ asesorId: 8, eventoId: 2, ciclo: 'II', seccion: 'B' }] },
@@ -194,7 +197,7 @@ describe('enlaces por ciclo: vista pública', () => {
         }])
         // Los estudiantes de otro ciclo (II) no salen; y sin celular
         expect(d.alumnos.map((a: { codigo: string }) => a.codigo)).toEqual(['2621010001', '2621010002'])
-        expect(d.alumnos[0]).toEqual({ nombre: 'ALUMNO 1', codigo: '2621010001', ciclo: 'I', seccion: 'A', turno: 'M', situacion: 'PAGADO' })
+        expect(d.alumnos[0]).toEqual({ nombre: 'ALUMNO 1', codigo: '2621010001', ciclo: 'I', seccion: 'A', turno: 'M', secciones: ['I-A'], situacion: 'PAGADO' })
     })
 
     it('nunca expone DNI, correo, celular, montos, recaudado, inscripciones ni a otros ciclos', async () => {
