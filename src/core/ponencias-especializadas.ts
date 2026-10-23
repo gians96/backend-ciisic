@@ -58,6 +58,29 @@ export function esFotoValida(foto: string): boolean {
     return /^\/(?!\/)[\w./-]+$/.test(foto) || /^https:\/\/[^\s/]+\/\S*$/i.test(foto) || /^https:\/\/[^\s/]+$/i.test(foto)
 }
 
+// ─── Ponentes que comparten el tema (spec 032) ──────────────────────────────
+
+/** Ponentes que se suman al principal en un mismo tema (misma hora y ambiente). */
+export const MAXIMO_COPONENTES = 3
+
+export interface Ponente {
+    nombre: string
+    bio: string | null
+    foto: string | null
+    externo: boolean
+}
+
+/** Lee la columna JSON `coponentes` con tolerancia: lo que no tenga forma de ponente (nombre de texto) se ignora. */
+export function coponentesDe(valor: unknown): Ponente[] {
+    if (!Array.isArray(valor)) return []
+    return valor.flatMap((item): Ponente[] => {
+        if (!item || typeof item !== 'object') return []
+        const { nombre, bio, foto, externo } = item as Record<string, unknown>
+        if (typeof nombre !== 'string' || !nombre.trim()) return []
+        return [{ nombre, bio: typeof bio === 'string' ? bio : null, foto: typeof foto === 'string' ? foto : null, externo: externo === true }]
+    })
+}
+
 // ─── Resumen por persona (spec 031) ─────────────────────────────────────────
 
 /** Situación actual de una persona inscrita a ponencias frente a su inscripción al congreso. */

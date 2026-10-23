@@ -146,7 +146,7 @@ export function crearBdPonencias() {
     }
 
     const cliente: Fila = {
-        ponenciaEspecializada: delegado('ponencias', { publicada: true, modalidad: 'PRESENCIAL', precio: 0, cupo: null, orden: 0, ponenteBio: null, ponenteFoto: null, ponenteExterno: false }),
+        ponenciaEspecializada: delegado('ponencias', { publicada: true, modalidad: 'PRESENCIAL', precio: 0, cupo: null, orden: 0, ponenteBio: null, ponenteFoto: null, ponenteExterno: false, coponentes: null }),
         asistentePonencia: delegado('asistentes', { correo: null, celular: null, procedencia: null }, [['tipoDocumentoId', 'numeroDocumento']]),
         inscripcionPonencia: delegado('inscripciones', { estado: 'INSCRITO', asistioEn: null, asistenciaPorId: null, registradoPorId: null, esFueraDeHorario: false, canceladoEn: null, motivoCancelacion: null, inscripcionCongresoId: null, modoAsistencia: 'PRESENCIAL' }, [['ponenciaId', 'asistenteId']]),
         $queryRaw: jest.fn(async () => []),

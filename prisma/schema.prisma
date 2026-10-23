@@ -575,7 +575,8 @@ enum MotivoCancelacionPonencia {
 }
 
 /// Ponencia especializada del evento (no es la `Ponencia` del Call for Papers). La duración se deriva de
-/// `horaInicio`/`horaFin`; `precio` 0 = gratuita; `cupo` NULL = sin límite. El ponente va embebido.
+/// `horaInicio`/`horaFin`; `precio` 0 = gratuita; `cupo` NULL = sin límite. El ponente va embebido y, si el tema lo
+/// comparten varios (misma hora y ambiente), los demás van en `coponentes`.
 model PonenciaEspecializada {
   id             Int                   @id @default(autoincrement())
   eventoId       Int                   @map("evento_id")
@@ -592,6 +593,9 @@ model PonenciaEspecializada {
   /// Ruta relativa de la landing (`/images/...`) o URL https
   ponenteFoto    String?               @map("ponente_foto") @db.VarChar(255)
   ponenteExterno Boolean               @default(false) @map("ponente_externo")
+  /// Ponentes que comparten el tema además del principal (spec 032): `[{ nombre, bio, foto, externo }]`, hasta 3.
+  /// NULL = el tema lo dicta una sola persona. Solo se muestran: no se consultan ni se unen a nada.
+  coponentes     Json?
   /// Visible e inscribible desde la landing; el staff puede inscribir igual
   publicada      Boolean               @default(true)
   orden          Int                   @default(0)

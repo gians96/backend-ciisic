@@ -277,6 +277,9 @@ spec 012; la landing la sirve desde su BFF), `POST /inscriptions`, `/student-ver
 - **Spec 031** (`backend-ciisic/specs/031-ponencias-resumen-personas/contracts/api-ponencias-resumen-personas.md`, solo panel): `GET /api/v1/events/:eventId/specialized-talk-attendees`
   (+ `/export` a Excel) da una fila por persona con su situación actual en el congreso y totales; `POST …/cancel` cancela (motivo `SIN_CONGRESO`) a quien hoy no puede asistir y,
   con `notificar`, le envía un comunicado por correo; `POST …/notify` solo avisa. Cambio aditivo (valor nuevo del enum de motivos y una columna nula).
+- **Spec 032** (`backend-ciisic/specs/032-ponencias-coponentes/contracts/api-ponencias-coponentes.md`): una ponencia especializada que dictan varias personas a la misma hora y en el
+  mismo ambiente sigue siendo **una** ponencia: `ponente` es el principal y la respuesta (panel y sitio) agrega `coponentes` (arreglo, `[]` si no hay; hasta 3), que también acepta la
+  entrada al crear y editar. Cambio aditivo (columna JSON nula); un consumidor anterior solo ve al principal.
 
 ### Delegaciones con planes propios (specs 021, 022, 023 y 029)
 

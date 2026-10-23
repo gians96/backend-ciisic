@@ -145,6 +145,9 @@ y Google. Documentación: [`docs/`](docs/README.md).
   la cancelación se guarda primero y un correo que falla no la revierte. `POST …/notify` solo avisa. El mensaje se escapa (nada de HTML) y `{nombre}` es el primer nombre;
   `inscripciones_ponencia.aviso_enviado_en` marca a quien ya se avisó. `especializadas.ver` ve y descarga el Excel; `especializadas.inscribir` cancela y avisa; ambos con
   límite por cuenta. En el log solo ids, nunca correos ni mensajes. Pruebas con el envío simulado: nunca se manda un correo real.
+- Temas con varios ponentes (spec 032): un tema que dictan varias personas a la misma hora y en el mismo ambiente es **una** `PonenciaEspecializada` (un cupo, un ambiente, un horario;
+  nunca una fila por ponente). `ponente*` sigue siendo el principal y los demás van en la columna JSON `coponentes` (`[{ nombre, bio, foto, externo }]`, hasta `MAXIMO_COPONENTES` = 3, `NULL` =
+  ninguno), que `coponentesDe` lee con tolerancia. La respuesta siempre trae `coponentes` (`[]` si no hay); al editar, ausente conserva, un arreglo reemplaza y `[]` quita. Aditivo: lo anterior solo ve al principal.
 - Delegaciones (specs 021–024 y 029): un grupo con delegado (`Delegacion`) cuyos integrantes tienen cada uno su inscripción
   (`delegacion_id`). **Cada delegación tiene sus propios planes** `CON_KIT`, `SIN_KIT` y `VIRTUAL`: tres tipos reales (`delegacion_con_kit`,
   `delegacion_sin_kit`, `delegacion_virtual`; `precio == precioInstitucional`) de su **categoría oculta** `DELEGACION_<id>`
@@ -262,7 +265,7 @@ con ambos sistemas levantados.
 
 Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Cada cambio
 empieza en `specs/NNN-nombre/` (spec → plan → tasks → contracts) y se marcan las tasks al
-implementar. Specs actuales: 001–014, 016–029, 030 y 031 (ver [README](README.md)); la 015 (certificados) tiene
+implementar. Specs actuales: 001–014, 016–029, 030, 031 y 032 (ver [README](README.md)); la 015 (certificados) tiene
 solo su diseño (`research.md`).
 
 ## Antes de dar por terminado

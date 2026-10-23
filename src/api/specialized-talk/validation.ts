@@ -1,6 +1,6 @@
 import * as yup from 'yup'
 import { REGEX_FECHA, REGEX_HORA } from '../../core/fechas'
-import { esFotoValida } from '../../core/ponencias-especializadas'
+import { esFotoValida, MAXIMO_COPONENTES } from '../../core/ponencias-especializadas'
 import { participanteSchema } from '../inscription/validation'
 
 export const MODALIDADES = ['PRESENCIAL', 'VIRTUAL'] as const
@@ -33,6 +33,8 @@ const camposPonente = {
 const nombrePonente = () => yup.string().trim().min(2).max(200)
 const ponenteCrear = yup.object({ nombre: nombrePonente().required(), ...camposPonente })
 const ponenteActualizar = yup.object({ nombre: nombrePonente(), ...camposPonente })
+/** Los demás ponentes de un tema compartido (spec 032): cada uno con su nombre, perfil y foto. En una edición reemplaza la lista; `[]` la vacía. */
+const coponentes = () => yup.array().of(ponenteCrear.required()).max(MAXIMO_COPONENTES, `Máximo ${MAXIMO_COPONENTES} ponentes adicionales`)
 
 const camposPonencia = {
     tema: yup.string().trim().min(3).max(300),
@@ -58,6 +60,7 @@ export const crearPonenciaSchema = yup.object({
     precio: camposPonencia.precio.default(0),
     cupo: camposPonencia.cupo.default(null),
     ponente: ponenteCrear.required(),
+    coponentes: coponentes().default([]),
     publicada: camposPonencia.publicada.default(true),
     orden: camposPonencia.orden.default(0),
 }).test('horas', 'La hora de fin debe ser posterior a la de inicio', horasCoherentes).required()
@@ -65,6 +68,7 @@ export const crearPonenciaSchema = yup.object({
 export const actualizarPonenciaSchema = yup.object({
     ...camposPonencia,
     ponente: ponenteActualizar.default(undefined),
+    coponentes: coponentes().default(undefined),
 }).test('horas', 'La hora de fin debe ser posterior a la de inicio', horasCoherentes).required()
 
 export type CrearPonenciaInput = yup.InferType<typeof crearPonenciaSchema>

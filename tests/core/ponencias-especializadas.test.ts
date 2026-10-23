@@ -1,4 +1,4 @@
-import { duracionMinutos, esFotoValida, esFueraDeHorario, seCruzan } from '../../src/core/ponencias-especializadas'
+import { coponentesDe, duracionMinutos, esFotoValida, esFueraDeHorario, seCruzan } from '../../src/core/ponencias-especializadas'
 
 // 27 de octubre de 2026, hora de Lima (UTC−5): 12:00 → 17:00Z
 const en = (hora: string, dia = '27') => new Date(`2026-10-${dia}T${hora}:00.000-05:00`)
@@ -60,5 +60,23 @@ describe('esFotoValida', () => {
         for (const foto of ['http://sitio.pe/a.png', 'javascript:alert(1)', 'data:image/png;base64,AAA', '//otro.com/a.png', '/images/../secreto.png', '/images/mi foto.png', 'foto.png', 'https://', `/${'a'.repeat(260)}`]) {
             expect({ foto, valida: esFotoValida(foto) }).toEqual({ foto, valida: false })
         }
+    })
+})
+
+describe('coponentesDe', () => {
+    it('lee el arreglo guardado y completa lo que falte', () => {
+        const guardado = [{ nombre: 'Dr. Ángel Almidón Elescano', bio: 'Perfil', foto: '/images/a.webp', externo: true }, { nombre: 'Dr. Javier Poma' }]
+        expect(coponentesDe(guardado)).toEqual([
+            { nombre: 'Dr. Ángel Almidón Elescano', bio: 'Perfil', foto: '/images/a.webp', externo: true },
+            { nombre: 'Dr. Javier Poma', bio: null, foto: null, externo: false },
+        ])
+    })
+
+    it('sin coponentes, o con un valor que no es un arreglo, devuelve una lista vacía', () => {
+        for (const valor of [null, undefined, {}, 'texto', 7]) expect(coponentesDe(valor)).toEqual([])
+    })
+
+    it('ignora los elementos que no tienen nombre de ponente', () => {
+        expect(coponentesDe([null, 3, 'x', {}, { nombre: '  ' }, { nombre: 5 }, { nombre: 'Válido' }])).toEqual([{ nombre: 'Válido', bio: null, foto: null, externo: false }])
     })
 })

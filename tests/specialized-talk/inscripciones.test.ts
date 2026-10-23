@@ -64,6 +64,15 @@ describe('API del sitio: ponencias publicadas', () => {
         expect(JSON.stringify(r.body)).not.toContain('12345678')
     })
 
+    it('un tema compartido sale con su ponente principal y los coponentes; uno sin coponentes, con una lista vacía', async () => {
+        sembrarPonencia(m.__bd, { tema: 'Compartido', ambiente: 'Aula 2', ponenteNombre: 'Dr. Ángel Almidón Elescano', coponentes: [{ nombre: 'Dr. Javier Camilo Poma Palacios', bio: null, foto: '/images/ponentes/2026/especializados/javier-poma.webp', externo: true }] })
+        sembrarPonencia(m.__bd, { tema: 'Individual', ambiente: 'Aula 3' })
+        const r = await request(app).get('/api/v1/site/specialized-talks').set(sitio)
+        const porTema = (tema: string) => r.body.data.find((p: { tema: string }) => p.tema === tema)
+        expect(porTema('Compartido')).toMatchObject({ ponente: { nombre: 'Dr. Ángel Almidón Elescano' }, coponentes: [{ nombre: 'Dr. Javier Camilo Poma Palacios', foto: '/images/ponentes/2026/especializados/javier-poma.webp', externo: true }] })
+        expect(porTema('Individual').coponentes).toEqual([])
+    })
+
     it('exige el token del evento', async () => {
         expect((await request(app).get('/api/v1/site/specialized-talks')).status).toBe(401)
         expect((await request(app).post('/api/v1/site/specialized-talk-registrations').send(inscripcion([1]))).status).toBe(401)

@@ -71,6 +71,64 @@ describe('gestión de ponencias especializadas', () => {
         expect(r.body.data.ponente).toMatchObject({ foto: 'https://cdn.ejemplo.pe/foto.webp', externo: true })
     })
 
+    it('un tema compartido guarda a sus coponentes, completa lo que falte y los devuelve en el listado', async () => {
+        const coponentes = [{ nombre: 'Dr. Javier Camilo Poma Palacios', bio: 'Ingeniero Electrónico.', foto: '/images/ponentes/2026/especializados/javier-poma.webp', externo: true }, { nombre: 'Dra. Karen Michel Alcos Flores' }]
+        const creada = await request(app).post('/api/v1/events/2/specialized-talks').set(con(admin())).send({ ...CUERPO, coponentes })
+        expect(creada.status).toBe(201)
+        expect(creada.body.data.ponente.nombre).toBe('Ph.D. Edwin Roque Tito')
+        expect(creada.body.data.coponentes).toEqual([
+            { nombre: 'Dr. Javier Camilo Poma Palacios', bio: 'Ingeniero Electrónico.', foto: '/images/ponentes/2026/especializados/javier-poma.webp', externo: true },
+            { nombre: 'Dra. Karen Michel Alcos Flores', bio: null, foto: null, externo: false },
+        ])
+        const lista = await request(app).get('/api/v1/events/2/specialized-talks').set(con(admin()))
+        expect(lista.body.data[0].coponentes.map((p: { nombre: string }) => p.nombre)).toEqual(['Dr. Javier Camilo Poma Palacios', 'Dra. Karen Michel Alcos Flores'])
+    })
+
+    it('sin coponentes el tema trae una lista vacía, también en una ponencia anterior sin la columna', async () => {
+        const nueva = await request(app).post('/api/v1/events/2/specialized-talks').set(con(admin())).send(CUERPO)
+        expect(nueva.body.data.coponentes).toEqual([])
+        const antigua = sembrarPonencia(m.__bd, { tema: 'Antigua', ambiente: 'Aula 4', coponentes: undefined })
+        const lista = await request(app).get('/api/v1/events/2/specialized-talks').set(con(admin()))
+        expect(lista.body.data.find((p: { id: number }) => p.id === antigua.id).coponentes).toEqual([])
+    })
+
+    it('valida los coponentes: nombre, foto y un máximo de tres', async () => {
+        const otro = (n: number) => ({ nombre: `Coponente ${n}` })
+        const casos: Array<[unknown[], string]> = [
+            [[{ bio: 'sin nombre' }], 'coponentes[0].nombre'],
+            [[{ nombre: 'Ponente', foto: '../secreto.png' }], 'coponentes[0].foto'],
+            [[otro(1), otro(2), otro(3), otro(4)], 'coponentes'],
+        ]
+        for (const [coponentes, campo] of casos) {
+            const r = await request(app).post('/api/v1/events/2/specialized-talks').set(con(admin())).send({ ...CUERPO, coponentes })
+            expect({ campo, status: r.status }).toEqual({ campo, status: 422 })
+            expect(Object.keys(r.body.fields)).toContain(campo)
+        }
+        expect(m.__bd.ponencias).toHaveLength(0)
+        const tres = await request(app).post('/api/v1/events/2/specialized-talks').set(con(admin())).send({ ...CUERPO, coponentes: [otro(1), otro(2), otro(3)] })
+        expect(tres.status).toBe(201)
+    })
+
+    it('al editar, enviar coponentes los reemplaza, omitirlos los conserva y [] los quita', async () => {
+        const creada = await request(app).post('/api/v1/events/2/specialized-talks').set(con(admin())).send({ ...CUERPO, coponentes: [{ nombre: 'Primero' }] })
+        const id = creada.body.data.id
+        const nombres = (r: { body: { data: { coponentes: Array<{ nombre: string }> } } }) => r.body.data.coponentes.map((p) => p.nombre)
+
+        const soloTema = await request(app).put(`/api/v1/specialized-talks/${id}`).set(con(admin())).send({ tema: 'Tema corregido' })
+        expect(nombres(soloTema)).toEqual(['Primero'])
+
+        const reemplazo = await request(app).put(`/api/v1/specialized-talks/${id}`).set(con(admin())).send({ coponentes: [{ nombre: 'Segundo' }, { nombre: 'Tercero' }] })
+        expect(nombres(reemplazo)).toEqual(['Segundo', 'Tercero'])
+
+        const soloPonente = await request(app).put(`/api/v1/specialized-talks/${id}`).set(con(admin())).send({ ponente: { nombre: 'Principal nuevo' } })
+        expect(soloPonente.body.data.ponente.nombre).toBe('Principal nuevo')
+        expect(nombres(soloPonente)).toEqual(['Segundo', 'Tercero'])
+
+        const vacio = await request(app).put(`/api/v1/specialized-talks/${id}`).set(con(admin())).send({ coponentes: [] })
+        expect(vacio.status).toBe(200)
+        expect(vacio.body.data.coponentes).toEqual([])
+    })
+
     it('dos ponencias presenciales no comparten ambiente a la misma hora, pero una virtual sí', async () => {
         await request(app).post('/api/v1/events/2/specialized-talks').set(con(admin())).send(CUERPO)
         const choque = await request(app).post('/api/v1/events/2/specialized-talks').set(con(admin())).send({ ...CUERPO, tema: 'Otro tema', horaInicio: '12:30', horaFin: '13:15' })

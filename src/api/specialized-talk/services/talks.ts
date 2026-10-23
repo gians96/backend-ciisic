@@ -4,7 +4,7 @@ import { prisma } from '../../../database/prisma'
 import { conflict, notFound } from '../../../core/http-error'
 import { aColumnaFecha, fechaSoloDia, horaLima, instanteLima } from '../../../core/fechas'
 import { aNumero } from '../../../core/catalogos'
-import { duracionMinutos } from '../../../core/ponencias-especializadas'
+import { coponentesDe, duracionMinutos } from '../../../core/ponencias-especializadas'
 import { obtenerEventoPorId } from '../../event/services/public-event'
 import type { ActualizarPonenciaInput, CrearPonenciaInput } from '../validation'
 
@@ -46,8 +46,18 @@ function datosBase(ponencia: PonenciaEspecializada) {
             foto: ponencia.ponenteFoto,
             externo: ponencia.ponenteExterno,
         },
+        /** Los demás ponentes del tema (spec 032); `[]` si lo dicta una sola persona. */
+        coponentes: coponentesDe(ponencia.coponentes),
         orden: ponencia.orden,
     }
+}
+
+type PonenteEntrada = { nombre: string, bio?: string | null, foto?: string | null, externo?: boolean }
+
+/** Lo que se guarda en la columna JSON: sin lista, `NULL` (una sola forma de «sin coponentes») y siempre con las cuatro claves. */
+function aColumnaCoponentes(lista: readonly PonenteEntrada[] | undefined): Prisma.InputJsonValue | typeof Prisma.DbNull {
+    if (!lista?.length) return Prisma.DbNull
+    return lista.map((p) => ({ nombre: p.nombre, bio: p.bio ?? null, foto: p.foto ?? null, externo: p.externo ?? false }))
 }
 
 /** Respuesta del panel: con inscritos, asistentes y si está publicada. */
@@ -163,6 +173,7 @@ export async function crearPonencia(eventoId: number, input: CrearPonenciaInput)
             ponenteBio: input.ponente.bio ?? null,
             ponenteFoto: input.ponente.foto ?? null,
             ponenteExterno: input.ponente.externo ?? false,
+            coponentes: aColumnaCoponentes(input.coponentes),
             publicada: input.publicada,
             orden: input.orden,
         },
@@ -204,6 +215,7 @@ export async function actualizarPonencia(id: number, input: ActualizarPonenciaIn
             ...(ponente?.bio !== undefined ? { ponenteBio: ponente.bio } : {}),
             ...(ponente?.foto !== undefined ? { ponenteFoto: ponente.foto } : {}),
             ...(ponente?.externo !== undefined ? { ponenteExterno: ponente.externo } : {}),
+            ...(input.coponentes !== undefined ? { coponentes: aColumnaCoponentes(input.coponentes) } : {}),
             ...(input.publicada !== undefined ? { publicada: input.publicada } : {}),
             ...(input.orden !== undefined ? { orden: input.orden } : {}),
         },

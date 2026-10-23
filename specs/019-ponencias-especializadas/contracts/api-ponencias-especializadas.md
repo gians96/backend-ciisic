@@ -19,6 +19,7 @@ y horas `HH:mm` en hora de Lima. Rutas bajo `/api`.
 - Panel (`aPonencia`): además `publicada`, `inscritos`, `asistentes`, `cuposDisponibles` (`null` = sin límite).
 - Sitio (`aPonenciaPublica`): además `cuposDisponibles` y `llena`; **sin** `inscritos`, `asistentes` ni `publicada`.
 - `modalidad`: `PRESENCIAL` | `VIRTUAL`. `precio` 0 = gratuita. `foto`: ruta del sitio (`/images/…`) o URL https.
+- Spec 032: además `coponentes` (siempre un arreglo, `[]` si no hay) con los demás ponentes de un tema compartido, y la entrada acepta `coponentes` (máx. 3); ver `../../032-ponencias-coponentes/contracts/api-ponencias-coponentes.md`.
 
 ## Panel (sesión de staff)
 
