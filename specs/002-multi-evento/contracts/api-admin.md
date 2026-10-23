@@ -67,6 +67,7 @@ Contrato completo: `specs/018-modalidad-virtual/contracts/api-modalidad.md`.
 | GET | `/events/:eventId/inscriptions/export` | CSV (`text/csv; charset=utf-8`, separador `;`, con BOM) con los mismos filtros. Columna «Modalidad de asistencia» (spec 018, también sin `pagos.ver`); la columna «Modalidad» es la de pago. |
 | GET | `/inscriptions/:id` | Detalle con participante, tipo, categoría, clasificación, estado, pago, verificación y revisión. |
 | PATCH | `/inscriptions/:id/status` | `{ "estado": "APROBADO"\|"RECHAZADO"\|"EN_REVISION"\|"PENDIENTE"\|"CANCELADO", "motivo"? }`; `RECHAZADO` exige `motivo`. Respuesta: detalle + `credencialEnviada` (boolean\|null). |
+| PATCH | `/inscriptions/:id/type` | Solo Owner (spec 035): `{ "tipoInscripcionId", "motivo"? }` mueve la inscripción a otro tipo (y categoría) del mismo evento; conserva el monto y recalcula el descuento. 409 `TYPE_UNCHANGED`, `INSCRIPTION_IN_DELEGATION`, `INSCRIPTION_CHANGED`, `TALK_FULL_ON_TYPE_CHANGE`; 422 `REGISTRATION_TYPE_INVALID`. El detalle (`GET /inscriptions/:id`) agrega `cambiosTipo`. Ver `specs/035-cambiar-tipo-inscripcion/contracts/`. |
 | POST | `/inscriptions/:id/resend-credential` | Solo `APROBADO`. 409 `NOT_APPROVED`. |
 | GET | `/inscriptions/:id/voucher` | Archivo del voucher (inline). 404 si no tiene. |
 | GET | `/inscriptions/:id/credential` | PDF de la credencial (la genera si no existe; solo `APROBADO`). |

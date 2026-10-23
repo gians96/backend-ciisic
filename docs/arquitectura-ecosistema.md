@@ -280,6 +280,10 @@ spec 012; la landing la sirve desde su BFF), `POST /inscriptions`, `/student-ver
 - **Spec 032** (`backend-ciisic/specs/032-ponencias-coponentes/contracts/api-ponencias-coponentes.md`): una ponencia especializada que dictan varias personas a la misma hora y en el
   mismo ambiente sigue siendo **una** ponencia: `ponente` es el principal y la respuesta (panel y sitio) agrega `coponentes` (arreglo, `[]` si no hay; hasta 3), que también acepta la
   entrada al crear y editar. Cambio aditivo (columna JSON nula); un consumidor anterior solo ve al principal.
+- **Spec 035** (`backend-ciisic/specs/035-cambiar-tipo-inscripcion/contracts/api-cambiar-tipo-inscripcion.md`, solo panel): `PATCH /api/v1/inscriptions/:id/type` con `{ tipoInscripcionId, motivo? }`
+  mueve una inscripción a otro tipo (y categoría) del mismo evento; **solo el Owner** (`inscripciones.cambiar_tipo`, global). El monto pagado no cambia y el descuento se recalcula; las
+  inscripciones de una delegación no se mueven (`INSCRIPTION_IN_DELEGATION`). `GET /api/v1/inscriptions/:id` agrega `cambiosTipo` (historial). Si cambia la modalidad de asistencia, las ponencias
+  especializadas pendientes de la persona toman el modo nuevo. Cambio aditivo (una tabla nueva, un permiso nuevo y una clave nueva en el detalle).
 
 ### Delegaciones con planes propios (specs 021, 022, 023 y 029)
 

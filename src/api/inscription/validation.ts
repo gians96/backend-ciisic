@@ -73,6 +73,15 @@ export const cambiarEstadoSchema = yup.object({
         .when('estado', { is: 'RECHAZADO', then: (schema) => schema.required('Indique el motivo del rechazo').min(3) }),
 }).required()
 
+/** `PATCH /v1/inscriptions/:id/type` (spec 035): el Owner corrige el tipo (y con él la categoría) de una inscripción. */
+export const cambiarTipoSchema = yup.object({
+    tipoInscripcionId: yup.number().integer().positive().required(),
+    /** Por qué se corrige; queda en el historial de la inscripción. */
+    motivo: yup.string().trim().max(500).nullable(),
+}).required()
+
+export type CambiarTipoInput = yup.InferType<typeof cambiarTipoSchema>
+
 export const cambiarEstadoLegacySchema = yup.object({
     estadoId: yup.number().integer().min(1).max(5).required(),
 }).required()

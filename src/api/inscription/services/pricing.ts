@@ -28,12 +28,17 @@ export interface Precio {
 
 const redondear = (valor: number) => Math.round(valor * 100) / 100
 
+/** Cuánto menos paga la persona que el precio de lista del tipo; nunca negativo (pagar de más no es un descuento). */
+export function descuentoSobreLista(precioLista: number, monto: number): number {
+    return Math.max(0, redondear(precioLista - monto))
+}
+
 export function calcularPrecio(entrada: EntradaPrecio): Precio {
     const aplicaInstitucional = entrada.legacy
         ? entrada.correoInstitucional
         : entrada.esEstudiantil ? entrada.estudianteUndcVerificado : entrada.correoInstitucional
     const monto = aplicaInstitucional ? entrada.precioInstitucional : entrada.precio
-    return { monto, descuento: Math.max(0, redondear(entrada.precio - monto)), aplicaInstitucional }
+    return { monto, descuento: descuentoSobreLista(entrada.precio, monto), aplicaInstitucional }
 }
 
 /**

@@ -112,7 +112,7 @@ y Google. Documentación: [`docs/`](docs/README.md).
   QR anterior (id del participante) solo vale con `es_qr_legado` y hasta el `fechaFin` del evento.
 - Staff (spec 013): Owner (`SUPERADMIN`) y Administrador del sistema (`ADMIN`) son globales;
   Tesorero y Comisión solo operan en sus eventos. Solo el Owner configura Sistema, elimina
-  inscripciones (`PERMISOS_SOLO_OWNER`) y gestiona Owners y Administradores. Sin `pagos.ver` no
+  inscripciones, cambia su tipo (`PERMISOS_SOLO_OWNER`) y gestiona Owners y Administradores. Sin `pagos.ver` no
   salen montos ni datos de pago (van en `null`).
 - Una persona tiene una sola inscripción por evento (índice único evento-participante). Si está
   `RECHAZADO` o `CANCELADO` y vuelve a inscribirse, se **reutiliza la fila** (spec 017): vuelve a
@@ -148,6 +148,13 @@ y Google. Documentación: [`docs/`](docs/README.md).
 - Temas con varios ponentes (spec 032): un tema que dictan varias personas a la misma hora y en el mismo ambiente es **una** `PonenciaEspecializada` (un cupo, un ambiente, un horario;
   nunca una fila por ponente). `ponente*` sigue siendo el principal y los demás van en la columna JSON `coponentes` (`[{ nombre, bio, foto, externo }]`, hasta `MAXIMO_COPONENTES` = 3, `NULL` =
   ninguno), que `coponentesDe` lee con tolerancia. La respuesta siempre trae `coponentes` (`[]` si no hay); al editar, ausente conserva, un arreglo reemplaza y `[]` quita. Aditivo: lo anterior solo ve al principal.
+- Cambiar el tipo de una inscripción (spec 035, `inscription/services/cambio-tipo.ts`): `PATCH /v1/inscriptions/:id/type` es **solo del Owner** (`inscripciones.cambiar_tipo`: global y
+  en `PERMISOS_SOLO_OWNER`, nunca elegible para la Comisión). Corrige la **clasificación**, no el pago: el monto no cambia y el `descuento` se recalcula contra el precio de lista
+  del tipo nuevo (`descuentoSobreLista`; una cortesía, 0). No aplica `disponiblePara` ni `excluyeEstudiantesUndc` (frenan altas; esto es una corrección deliberada y admite tipos inactivos), pero exige
+  un tipo del **mismo evento** y de una categoría que no sea de una delegación. Un integrante de una delegación (`delegacion_id`) no se mueve aquí (`409 INSCRIPTION_IN_DELEGATION`): su plan lo cambia
+  y recalcula Delegaciones. Todo va en **una transacción** y condicionado al tipo leído (`409 INSCRIPTION_CHANGED`): el cambio, una fila de `cambios_tipo_inscripcion` (el **texto** de los dos tipos,
+  motivo y autor; sale en `cambiosTipo` del **detalle**, no en listados ni en el CSV) y, si cambia la modalidad de asistencia, el `modo_asistencia` de sus ponencias especializadas pendientes (vigentes, sin
+  asistencia y sin terminar; pasar a presencial exige cupo en cada una: `409 TALK_FULL_ON_TYPE_CHANGE`; las que ya asistieron conservan su modo). Se borran los PDF de credencial guardados (llevan el tipo) y **no se envía ningún correo**.
 - Delegaciones (specs 021–024 y 029): un grupo con delegado (`Delegacion`) cuyos integrantes tienen cada uno su inscripción
   (`delegacion_id`). **Cada delegación tiene sus propios planes** `CON_KIT`, `SIN_KIT` y `VIRTUAL`: tres tipos reales (`delegacion_con_kit`,
   `delegacion_sin_kit`, `delegacion_virtual`; `precio == precioInstitucional`) de su **categoría oculta** `DELEGACION_<id>`
@@ -277,7 +284,7 @@ con ambos sistemas levantados.
 
 Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Cada cambio
 empieza en `specs/NNN-nombre/` (spec → plan → tasks → contracts) y se marcan las tasks al
-implementar. Specs actuales: 001–014, 016–029, 030, 031, 032, 033 y 034 (ver [README](README.md)); la 015 (certificados) tiene
+implementar. Specs actuales: 001–014, 016–029 y 030–035 (ver [README](README.md)); la 015 (certificados) tiene
 solo su diseño (`research.md`).
 
 ## Antes de dar por terminado

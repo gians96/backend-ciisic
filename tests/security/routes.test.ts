@@ -40,6 +40,7 @@ describe('seguridad de rutas administrativas', () => {
         ['get', '/api/v1/events'],
         ['get', '/api/v1/events/1/inscriptions'],
         ['patch', '/api/v1/inscriptions/1/status'],
+        ['patch', '/api/v1/inscriptions/1/type'],
         ['get', '/api/v1/inscriptions/1/voucher'],
         ['get', '/api/v1/lookup-tokens'],
         ['post', '/api/v1/lookup-tokens'],

@@ -23,7 +23,7 @@ Catálogo en `src/core/permisos.ts` (nombres visibles en `ETIQUETAS_PERMISO`).
 - **Globales (G)**, solo Owner y Administrador: `sistema.configurar` (solo Owner),
   `administradores.gestionar`, `eventos.configurar`, `eventos.eliminar`, `catalogos.configurar`,
   `correo.configurar`, `consultas_dni.gestionar`, `participantes.gestionar`,
-  `inscripciones.eliminar` (solo Owner desde la spec 017), `inscripciones.cancelar`, `legacy.usar`; reservados para las specs
+  `inscripciones.eliminar` (solo Owner desde la spec 017), `inscripciones.cambiar_tipo` (solo Owner, spec 035), `inscripciones.cancelar`, `legacy.usar`; reservados para las specs
   014–015: `inscripciones.cortesia`, `certificados.gestionar`.
 - **Por evento (E)**: `resumen.ver`, `inscripciones.ver`, `inscripciones.exportar`,
   `credenciales.reenviar`, `pagos.ver`, `inscripciones.validar`, `asistencia.ver`,
@@ -92,6 +92,7 @@ las rutas con dos permisos basta uno. Las rutas legacy llevan antes `rutaLegacy`
 | inscription | GET `/events/:eventId/inscriptions/export` | `inscripciones.exportar` | P(`eventId`) |
 | inscription | GET `/inscriptions/:id`, GET `/inscriptions/:id/credential` | `inscripciones.ver` | inscripción |
 | inscription | PATCH `/inscriptions/:id/status` | `inscripciones.validar` | inscripción |
+| inscription | PATCH `/inscriptions/:id/type` | `inscripciones.cambiar_tipo` (solo Owner, spec 035) | — |
 | inscription | POST `/inscriptions/:id/resend-credential` | `credenciales.reenviar` + límite 20/15 min por cuenta | inscripción |
 | inscription | GET `/inscriptions/:id/voucher` | `pagos.ver` | inscripción |
 | inscription | DELETE `/inscriptions/:id` | `inscripciones.eliminar` | — |

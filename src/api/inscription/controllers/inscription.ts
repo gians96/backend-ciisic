@@ -8,8 +8,9 @@ import type { Actor } from '../../../core/actor'
 import type { AuthenticatedRequest } from '../../../middlewares/auth'
 import { obtenerEventoPorId, obtenerEventoPrincipal } from '../../event/services/public-event'
 import * as service from '../services/inscription'
+import { cambiarTipo, historialDeTipo } from '../services/cambio-tipo'
 import { aCreada, aDetalle, aLegacy, aLegacyCreada } from '../services/mappers'
-import { cambiarEstadoSchema, crearInscripcionSchema, inscripcionLegacySchema, type CortesiaInput, type CrearInscripcionInput } from '../validation'
+import { cambiarEstadoSchema, crearInscripcionSchema, inscripcionLegacySchema, type CambiarTipoInput, type CortesiaInput, type CrearInscripcionInput } from '../validation'
 import { eventoDelSitio } from '../../../middlewares/sitio'
 
 /** Quita cadenas vacías (multipart) para que yup trate los campos como ausentes. */
@@ -154,7 +155,9 @@ export async function exportCsv(req: AuthenticatedRequest, res: Response) {
 }
 
 export async function find(req: AuthenticatedRequest, res: Response) {
-    res.json({ success: true, data: aDetalle(await service.obtenerInscripcion(idParam(req.params.id)), conPago(req)) })
+    const inscripcion = await service.obtenerInscripcion(idParam(req.params.id))
+    // El historial de cambios de tipo (spec 035) solo va en el detalle: los listados y el CSV no lo necesitan
+    res.json({ success: true, data: { ...aDetalle(inscripcion, conPago(req)), cambiosTipo: await historialDeTipo(inscripcion.id) } })
 }
 
 export async function updateStatus(req: AuthenticatedRequest, res: Response) {
@@ -163,6 +166,12 @@ export async function updateStatus(req: AuthenticatedRequest, res: Response) {
     verificarDestino(req, codigo)
     const { inscripcion, credencialEnviada } = await service.cambiarEstado(idParam(req.params.id), codigo, body.motivo, req.actor?.id)
     res.json({ success: true, data: { ...aDetalle(inscripcion, conPago(req)), credencialEnviada } })
+}
+
+/** Cambia el tipo (y con él la categoría) de una inscripción (spec 035, solo Owner). El cuerpo ya viene validado. */
+export async function changeType(req: AuthenticatedRequest, res: Response) {
+    const { inscripcion, ponenciasActualizadas } = await cambiarTipo(idParam(req.params.id), req.body as CambiarTipoInput, actorDe(req).id)
+    res.json({ success: true, data: { ...aDetalle(inscripcion, conPago(req)), cambiosTipo: await historialDeTipo(inscripcion.id), ponenciasActualizadas } })
 }
 
 export async function resendCredential(req: Request, res: Response) {

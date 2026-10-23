@@ -7,7 +7,7 @@ import { limiteInscripcion, limiteReenvioCredencial, limiteTokenInscripcion } fr
 import { requireTokenEvento } from '../../../middlewares/sitio'
 import { rutaLegacy } from '../../../middlewares/legacy'
 import { eventoDeInscripcion, eventoDelParametro } from '../../../core/resolutores-evento'
-import { cambiarEstadoLegacySchema, cortesiaSchema } from '../validation'
+import { cambiarEstadoLegacySchema, cambiarTipoSchema, cortesiaSchema } from '../validation'
 
 const routes: AppRoute[] = [
     // API del sitio (landing del evento, con su token de acceso). El token se valida antes de
@@ -32,6 +32,8 @@ const routes: AppRoute[] = [
     { method: 'get', path: '/v1/events/:eventId/inscriptions/export', handler: controller.exportCsv, middlewares: [requirePermiso('inscripciones.exportar', { evento: eventoDelParametro('eventId') })] },
     { method: 'get', path: '/v1/inscriptions/:id', handler: controller.find, middlewares: [requirePermiso('inscripciones.ver', { evento: eventoDeInscripcion })] },
     { method: 'patch', path: '/v1/inscriptions/:id/status', handler: controller.updateStatus, middlewares: [requirePermiso('inscripciones.validar', { evento: eventoDeInscripcion })] },
+    // Corregir el tipo de una inscripción (spec 035): solo el Owner, global
+    { method: 'patch', path: '/v1/inscriptions/:id/type', handler: controller.changeType, middlewares: [requirePermiso('inscripciones.cambiar_tipo'), validateBody(cambiarTipoSchema)] },
     {
         method: 'post',
         path: '/v1/inscriptions/:id/resend-credential',

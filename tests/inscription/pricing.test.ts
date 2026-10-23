@@ -1,5 +1,5 @@
 import {
-    calcularPrecio, esCorreoInstitucional, estudianteUndcExcluido, MENSAJE_TIPO_SIN_ESTUDIANTES_UNDC, mensajeTipoNoDisponible, tipoDisponible,
+    calcularPrecio, descuentoSobreLista, esCorreoInstitucional, estudianteUndcExcluido, MENSAJE_TIPO_SIN_ESTUDIANTES_UNDC, mensajeTipoNoDisponible, tipoDisponible,
 } from '../../src/api/inscription/services/pricing'
 import { esCorreoDeEstudiante } from '../../src/core/correo-institucional'
 
@@ -108,5 +108,21 @@ describe('tipos que no admiten estudiantes UNDC (spec 020)', () => {
     it('el mensaje dice que es para estudiantes de la UNDC y manda a un plan presencial', () => {
         expect(MENSAJE_TIPO_SIN_ESTUDIANTES_UNDC).toContain('no está disponible para estudiantes de la UNDC')
         expect(MENSAJE_TIPO_SIN_ESTUDIANTES_UNDC).toContain('plan presencial')
+    })
+})
+
+describe('descuentoSobreLista (spec 035)', () => {
+    it('es lo que la persona paga de menos respecto al precio de lista', () => {
+        expect(descuentoSobreLista(140, 120)).toBe(20)
+        expect(descuentoSobreLista(120, 120)).toBe(0)
+    })
+
+    it('pagar de más no es un descuento negativo', () => {
+        expect(descuentoSobreLista(120, 140)).toBe(0)
+    })
+
+    it('redondea a centavos', () => {
+        expect(descuentoSobreLista(100, 66.67)).toBe(33.33)
+        expect(descuentoSobreLista(0.3, 0.1)).toBe(0.2)
     })
 })

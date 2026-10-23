@@ -22,6 +22,7 @@ export const ALCANCE = {
     'inscripciones.eliminar': 'G',
     'inscripciones.cancelar': 'G',
     'inscripciones.cortesia': 'G',
+    'inscripciones.cambiar_tipo': 'G',
     'legacy.usar': 'G',
     'certificados.gestionar': 'G',
     'especializadas.gestionar': 'G',
@@ -73,6 +74,7 @@ export const ETIQUETAS_PERMISO: Record<Permiso, string> = {
     'inscripciones.eliminar': 'Eliminar inscripciones',
     'inscripciones.cancelar': 'Cancelar inscripciones',
     'inscripciones.cortesia': 'Registrar inscripciones de cortesía',
+    'inscripciones.cambiar_tipo': 'Cambiar el tipo y la categoría de una inscripción',
     'legacy.usar': 'Usar las rutas de la versión anterior',
     'certificados.gestionar': 'Gestionar plantillas y emitir certificados',
     'especializadas.gestionar': 'Crear, editar y eliminar ponencias especializadas',
@@ -172,10 +174,12 @@ export const PERMISOS_ELEGIBLES_COMISION: readonly Permiso[] = [
 export const PERMISOS_COMISION_POR_DEFECTO: readonly Permiso[] = ['asistencia.marcar']
 
 /**
- * Permisos que solo tiene el Owner: configurar el sistema y eliminar inscripciones (spec 017; borra
- * la fila, el voucher y la credencial sin vuelta atrás). El Administrador del sistema tiene el resto.
+ * Permisos que solo tiene el Owner: configurar el sistema, eliminar inscripciones (spec 017; borra
+ * la fila, el voucher y la credencial sin vuelta atrás) y cambiar el tipo de una inscripción (spec 035;
+ * mueve a la persona de categoría y puede cambiar su modalidad de asistencia). El Administrador del
+ * sistema tiene el resto.
  */
-export const PERMISOS_SOLO_OWNER: readonly Permiso[] = ['sistema.configurar', 'inscripciones.eliminar']
+export const PERMISOS_SOLO_OWNER: readonly Permiso[] = ['sistema.configurar', 'inscripciones.eliminar', 'inscripciones.cambiar_tipo']
 
 export const PERMISOS_POR_ROL: Record<CodigoRol, readonly Permiso[]> = {
     [ROL.OWNER]: TODOS,

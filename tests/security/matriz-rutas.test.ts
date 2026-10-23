@@ -232,6 +232,8 @@ const MATRIZ: Record<Clave, Esperada> = {
     'GET /v1/events/:eventId/inscriptions/export': g('inscripciones.exportar', P()),
     'GET /v1/inscriptions/:id': g('inscripciones.ver', eventoDeInscripcion),
     'PATCH /v1/inscriptions/:id/status': g('inscripciones.validar', eventoDeInscripcion),
+    // Corregir el tipo (spec 035): permiso global, solo del Owner
+    'PATCH /v1/inscriptions/:id/type': g('inscripciones.cambiar_tipo'),
     'POST /v1/inscriptions/:id/resend-credential': g('credenciales.reenviar', eventoDeInscripcion),
     'GET /v1/inscriptions/:id/voucher': g('pagos.ver', eventoDeInscripcion),
     'GET /v1/inscriptions/:id/credential': g('inscripciones.ver', eventoDeInscripcion),
@@ -332,7 +334,7 @@ const LIMITES_POR_ACTOR: readonly RequestHandler[] = [
     limiteDescargaResumenPonencias, limiteAvisosPonencias,
 ]
 /** Total de rutas de /api: una ruta nueva obliga a clasificarla aquí. */
-const TOTAL_RUTAS = 186
+const TOTAL_RUTAS = 187
 
 function clasesDe(ruta: Ruta): Clase[] {
     const clases: Clase[] = []

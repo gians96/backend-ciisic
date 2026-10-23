@@ -47,6 +47,7 @@ model Administrador {
   asistenciasAnuladas              Asistencia[]           @relation("AsistenciaAnuladaPor")
   inscripcionesPonenciaRegistradas InscripcionPonencia[]  @relation("InscripcionPonenciaRegistradaPor")
   asistenciasPonenciaRegistradas   InscripcionPonencia[]  @relation("InscripcionPonenciaAsistenciaPor")
+  cambiosTipoRealizados            CambioTipoInscripcion[] @relation("CambioTipoRealizadoPor")
 
   @@index([rolId], map: "idx_administradores_rol")
   @@map("administradores")
@@ -311,6 +312,7 @@ model Inscripcion {
   estado                 EstadoInscripcion @relation(fields: [estadoId], references: [id], map: "fk_inscripciones_estado")
   revisadoPor            Administrador?    @relation("InscripcionRevisor", fields: [revisadoPorId], references: [id], onDelete: SetNull, map: "fk_inscripciones_revisado_por")
   inscripcionesPonencia  InscripcionPonencia[]
+  cambiosTipo            CambioTipoInscripcion[]
 
   @@unique([eventoId, participanteId], map: "uq_inscripciones_evento_participante")
   @@index([participanteId], map: "idx_inscripciones_participante")
@@ -320,6 +322,27 @@ model Inscripcion {
   @@index([estadoId], map: "idx_inscripciones_estado")
   @@index([revisadoPorId], map: "idx_inscripciones_revisado_por")
   @@map("inscripciones")
+}
+
+/// Corrección del tipo de una inscripción hecha por el Owner (spec 035). Guarda el texto de ambos tipos para que el
+/// historial se lea aunque después se renombre o se borre un tipo. Se borra junto con la inscripción.
+model CambioTipoInscripcion {
+  id             Int            @id @default(autoincrement())
+  inscripcionId  Int            @map("inscripcion_id")
+  /// «Tipo · etiqueta» antes del cambio; «Sin tipo» si no tenía (cortesía).
+  anterior       String         @db.VarChar(400)
+  /// «Tipo · etiqueta» después del cambio.
+  nuevo          String         @db.VarChar(400)
+  /// Por qué se corrigió (opcional).
+  motivo         String?        @db.VarChar(500)
+  realizadoPorId Int?           @map("realizado_por_id")
+  creadoEn       DateTime       @default(now()) @map("creado_en")
+  inscripcion    Inscripcion    @relation(fields: [inscripcionId], references: [id], onDelete: Cascade, map: "fk_cambios_tipo_inscripcion")
+  realizadoPor   Administrador? @relation("CambioTipoRealizadoPor", fields: [realizadoPorId], references: [id], onDelete: SetNull, map: "fk_cambios_tipo_realizado_por")
+
+  @@index([inscripcionId, creadoEn], map: "idx_cambios_tipo_inscripcion")
+  @@index([realizadoPorId], map: "idx_cambios_tipo_realizado_por")
+  @@map("cambios_tipo_inscripcion")
 }
 
 /// Delegación o institución que inscribe a su grupo. Tiene sus propios planes (Con kit, Sin kit y Virtual): son

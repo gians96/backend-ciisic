@@ -9,12 +9,14 @@ jest.mock('../../src/database/prisma', () => ({
     prisma: {
         inscripcion: { findUnique: jest.fn(), findMany: jest.fn(), count: jest.fn() },
         evento: { findUnique: jest.fn(), findFirst: jest.fn() },
+        cambioTipoInscripcion: { findMany: jest.fn() },
     },
 }))
 
 const m = prisma as unknown as {
     inscripcion: { findUnique: jest.Mock, findMany: jest.Mock, count: jest.Mock }
     evento: { findUnique: jest.Mock, findFirst: jest.Mock }
+    cambioTipoInscripcion: { findMany: jest.Mock }
 }
 
 const evento = { id: 2, codigo: 'ciisic-viii-2026', nombre: 'VIII Congreso', nombreCorto: 'VIII CIISIC 2026', esPrincipal: true, estado: 'PUBLICADO' }
@@ -55,6 +57,7 @@ beforeEach(() => {
     m.inscripcion.findUnique.mockResolvedValue(inscripcion())
     m.inscripcion.findMany.mockResolvedValue([inscripcion()])
     m.inscripcion.count.mockResolvedValue(1)
+    m.cambioTipoInscripcion.findMany.mockResolvedValue([])
 })
 
 describe('modalidad en la lista, el detalle y la creación (spec 018)', () => {

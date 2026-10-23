@@ -59,10 +59,11 @@ describe('permisosEfectivos por rol', () => {
         expect(ordenados(permisosEfectivos(ROL.OWNER))).toEqual([...PERMISOS].sort())
     })
 
-    it('el Administrador del sistema tiene todo menos sistema.configurar e inscripciones.eliminar', () => {
+    it('el Administrador del sistema tiene todo menos sistema.configurar, inscripciones.eliminar e inscripciones.cambiar_tipo', () => {
         const admin = permisosEfectivos(ROL.ADMINISTRADOR)
         expect(admin.has('sistema.configurar')).toBe(false)
         expect(admin.has('inscripciones.eliminar')).toBe(false)
+        expect(admin.has('inscripciones.cambiar_tipo')).toBe(false)
         expect(ordenados(admin)).toEqual(PERMISOS.filter((p) => !PERMISOS_SOLO_OWNER.includes(p)).sort())
         expect(admin.has('correo.configurar')).toBe(true)
         expect(admin.has('eventos.eliminar')).toBe(true)
@@ -70,8 +71,15 @@ describe('permisosEfectivos por rol', () => {
         expect(admin.has('inscripciones.cancelar')).toBe(true)
     })
 
-    it.each(['sistema.configurar', 'inscripciones.eliminar'] as Permiso[])('solo el Owner tiene %s', (permiso) => {
+    it.each(['sistema.configurar', 'inscripciones.eliminar', 'inscripciones.cambiar_tipo'] as Permiso[])('solo el Owner tiene %s', (permiso) => {
         expect(ROLES.filter((rol) => permisosEfectivos(rol, [...PERMISOS]).has(permiso))).toEqual([ROL.OWNER])
+    })
+
+    it('cambiar el tipo de una inscripción es global y solo del Owner (spec 035)', () => {
+        expect(ALCANCE['inscripciones.cambiar_tipo']).toBe('G')
+        expect(PERMISOS_SOLO_OWNER).toContain('inscripciones.cambiar_tipo')
+        expect(PERMISOS_ELEGIBLES_COMISION).not.toContain('inscripciones.cambiar_tipo')
+        expect(permisosEfectivos(ROL.TESORERO).has('inscripciones.cambiar_tipo')).toBe(false)
     })
 
     it('el Tesorero valida pagos en sus eventos pero no cancela ni configura', () => {

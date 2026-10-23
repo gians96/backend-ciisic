@@ -12,6 +12,7 @@ jest.mock('../../src/database/prisma', () => ({
     prisma: {
         inscripcion: { findUnique: jest.fn(), findMany: jest.fn(), count: jest.fn(), update: jest.fn(), delete: jest.fn() },
         evento: { findUnique: jest.fn(), findFirst: jest.fn() },
+        cambioTipoInscripcion: { findMany: jest.fn() },
     },
 }))
 
@@ -25,6 +26,7 @@ jest.mock('../../src/api/inscription/utils/sendEmail', () => ({ enviarCorreoApro
 const m = prisma as unknown as {
     inscripcion: { findUnique: jest.Mock, findMany: jest.Mock, count: jest.Mock, update: jest.Mock, delete: jest.Mock }
     evento: { findUnique: jest.Mock, findFirst: jest.Mock }
+    cambioTipoInscripcion: { findMany: jest.Mock }
 }
 const generarPdf = generarCredencialPdf as jest.Mock
 const enviarCorreo = enviarCorreoAprobacion as jest.Mock
@@ -66,6 +68,7 @@ beforeEach(() => {
     m.inscripcion.findUnique.mockResolvedValue(inscripcion())
     m.inscripcion.findMany.mockResolvedValue([inscripcion()])
     m.inscripcion.count.mockResolvedValue(1)
+    m.cambioTipoInscripcion.findMany.mockResolvedValue([])
 })
 
 describe('lista, detalle y CSV según «pagos.ver»', () => {
