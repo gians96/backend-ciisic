@@ -6,6 +6,7 @@ import {
     filtrarAlcance,
     resumir,
     type Contadores,
+    type CursoEstudiante,
     type FilaSeguimiento,
     type Situacion,
 } from './seguimiento'
@@ -27,6 +28,16 @@ export interface ContadoresPublicos {
     avance: number
 }
 
+/** Un curso de SIVIRENO tal como lo ve quien consulta (spec 034). */
+export interface CursoPublico {
+    id: number
+    codigo: string
+    nombre: string
+    ciclo: string
+    seccion: string
+    turno: string | null
+}
+
 export interface AlumnoPublico {
     nombre: string
     codigo: string
@@ -35,6 +46,8 @@ export interface AlumnoPublico {
     turno: string | null
     /** Etiquetas («VI-A1») de **todas** sus secciones dentro del alcance del docente; nunca las de otro docente (spec 033). */
     secciones: string[]
+    /** Sus cursos de SIVIRENO dentro del alcance del docente: de dónde sale el alumno en su lista (spec 034). Vacío sin cursos. */
+    cursos: CursoPublico[]
     celular: string | null
     situacion: Situacion
 }
@@ -46,6 +59,8 @@ export interface VistaPublica {
     generadoEn: string
     totales: ContadoresPublicos
     secciones: Array<ContadoresPublicos & { ciclo: string, seccion: string, turnos: string[] }>
+    /** Los cursos del docente con cuántos de sus matriculados pagaron (spec 034). Vacío si el padrón no tiene cursos de SIVIRENO. */
+    cursos: Array<ContadoresPublicos & CursoPublico>
     alumnos: AlumnoPublico[]
 }
 
@@ -62,6 +77,8 @@ function contadoresPublicos(c: Contadores): ContadoresPublicos {
     }
 }
 
+const aCursoPublico = (c: CursoEstudiante): CursoPublico => ({ id: c.id, codigo: c.codigo, nombre: c.nombre, ciclo: c.ciclo, seccion: c.seccion, turno: c.turno })
+
 const aAlumnoPublico = (f: FilaSeguimiento): AlumnoPublico => ({
     nombre: f.nombre,
     codigo: f.codigo,
@@ -69,6 +86,7 @@ const aAlumnoPublico = (f: FilaSeguimiento): AlumnoPublico => ({
     seccion: f.seccion,
     turno: f.turno,
     secciones: f.secciones.map((s) => etiquetaSeccion(s.ciclo, s.seccion)),
+    cursos: f.cursos.map(aCursoPublico),
     celular: f.celular,
     situacion: f.situacion,
 })
@@ -102,6 +120,7 @@ async function seguimientoDelAsesor(asesor: AsesorDelEnlace): Promise<Seguimient
             generadoEn: generadoEn.toISOString(),
             totales: contadoresPublicos(resumen.totales),
             secciones: resumen.porSeccion.map((s) => ({ ciclo: s.ciclo, seccion: s.seccion, turnos: s.turnos, ...contadoresPublicos(s) })),
+            cursos: resumen.porCurso.map((c) => ({ ...aCursoPublico(c), ...contadoresPublicos(c) })),
             alumnos: alcance.map(aAlumnoPublico),
         },
         reporte: {
@@ -131,6 +150,8 @@ export interface AlumnoPublicoCiclo {
     turno: string | null
     /** Etiquetas de sus secciones **dentro de ese ciclo** (spec 033). */
     secciones: string[]
+    /** Sus cursos de SIVIRENO **de ese ciclo**, con el docente de cada uno: es dato institucional (spec 034). */
+    cursos: Array<CursoPublico & { docente: string | null }>
     situacion: Situacion
 }
 
@@ -142,6 +163,8 @@ export interface VistaPublicaCiclo {
     totales: ContadoresPublicos
     /** Cada sección con el nombre de su(s) asesor(es): es dato institucional, no de los estudiantes. */
     secciones: Array<ContadoresPublicos & { ciclo: string, seccion: string, turnos: string[], asesores: string[] }>
+    /** Los cursos del ciclo con su docente y cuántos de sus matriculados pagaron (spec 034). Vacío si el padrón no tiene cursos de SIVIRENO. */
+    cursos: Array<ContadoresPublicos & CursoPublico & { docente: string | null }>
     alumnos: AlumnoPublicoCiclo[]
 }
 
@@ -152,6 +175,7 @@ const aAlumnoPublicoCiclo = (f: FilaSeguimiento): AlumnoPublicoCiclo => ({
     seccion: f.seccion,
     turno: f.turno,
     secciones: f.secciones.map((s) => etiquetaSeccion(s.ciclo, s.seccion)),
+    cursos: f.cursos.map((c) => ({ ...aCursoPublico(c), docente: c.docente?.nombre ?? null })),
     situacion: f.situacion,
 })
 
@@ -186,6 +210,7 @@ export async function seguimientoDelCiclo(token: string): Promise<SeguimientoDel
                 asesores: s.asesores.map((a) => a.nombre),
                 ...contadoresPublicos(s),
             })),
+            cursos: resumen.porCurso.map((c) => ({ ...aCursoPublico(c), docente: c.docente?.nombre ?? null, ...contadoresPublicos(c) })),
             alumnos: alcance.map(aAlumnoPublicoCiclo),
         },
         reporte: {

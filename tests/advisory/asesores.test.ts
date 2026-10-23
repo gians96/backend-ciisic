@@ -54,8 +54,8 @@ describe('docentes: lista', () => {
         expect(r.status).toBe(200)
         expect(r.headers['cache-control']).toBe('no-store')
         expect(r.body.data.asesores).toEqual([
-            { id: 8, nombre: 'MG. CÁRDENAS LINO CÉSAR ANDY', documento: null, secciones: [{ ciclo: 'II', seccion: 'B' }] },
-            { id: 7, nombre: 'DRA. ANGOMA ASTUCURI MIRIAM', documento: '12345678', secciones: [{ ciclo: 'I', seccion: 'A' }, { ciclo: 'II', seccion: 'A' }] },
+            { id: 8, nombre: 'MG. CÁRDENAS LINO CÉSAR ANDY', documento: null, secciones: [{ ciclo: 'II', seccion: 'B' }], desdeSivireno: false, cursos: 0 },
+            { id: 7, nombre: 'DRA. ANGOMA ASTUCURI MIRIAM', documento: '12345678', secciones: [{ ciclo: 'I', seccion: 'A' }, { ciclo: 'II', seccion: 'A' }], desdeSivireno: false, cursos: 0 },
         ])
         expect(r.body.data.secciones).toEqual([{ ciclo: 'I', seccion: 'A' }, { ciclo: 'II', seccion: 'A' }, { ciclo: 'II', seccion: 'B' }])
     })
@@ -136,7 +136,19 @@ describe('docentes: editar', () => {
         expect(Object.keys(m.asesor.update.mock.calls[0][0].data).sort()).toEqual(['documento', 'nombre'])
         expect(m.asesorSeccion.deleteMany).toHaveBeenCalledWith({ where: { asesorId: 7 } })
         expect(m.asesorSeccion.createMany).toHaveBeenCalledWith({ data: [{ asesorId: 7, eventoId: 2, ciclo: 'I', seccion: 'A' }, { asesorId: 7, eventoId: 2, ciclo: 'II', seccion: 'B' }] })
-        expect(r.body.data).toEqual({ id: 7, nombre: 'DRA. ANGOMA ASTUCURI MIRIAM', documento: '87654321', secciones: [{ ciclo: 'I', seccion: 'A' }, { ciclo: 'II', seccion: 'B' }] })
+        expect(r.body.data).toEqual({ id: 7, nombre: 'DRA. ANGOMA ASTUCURI MIRIAM', documento: '87654321', secciones: [{ ciclo: 'I', seccion: 'A' }, { ciclo: 'II', seccion: 'B' }], desdeSivireno: false, cursos: 0 })
+    })
+
+    it('un docente de SIVIRENO (spec 034) solo cambia de nombre y DNI: sus secciones salen de sus cursos y no se reemplazan', async () => {
+        m.asesor.findFirst.mockResolvedValueOnce({ ...ANGOMA, jpDocenteId: 55, _count: { cursos: 3 } })
+        const r = await request(app).put('/api/v1/events/2/advisory/advisors/7').set(con(admin()))
+            .send({ nombre: 'DRA. ANGOMA ASTUCURI MIRIAM', documento: '87654321', secciones: [{ ciclo: 'IX', seccion: 'Z' }] })
+        expect(r.status).toBe(200)
+        expect(m.asesor.update).toHaveBeenCalledWith({ where: { id: 7 }, data: { nombre: 'DRA. ANGOMA ASTUCURI MIRIAM', documento: '87654321' } })
+        expect(m.asesorSeccion.deleteMany).not.toHaveBeenCalled()
+        expect(m.asesorSeccion.createMany).not.toHaveBeenCalled()
+        // Devuelve las secciones que ya tenía (derivadas de sus cursos), no las que se enviaron
+        expect(r.body.data).toMatchObject({ id: 7, documento: '87654321', desdeSivireno: true, cursos: 3, secciones: [{ ciclo: 'I', seccion: 'A' }, { ciclo: 'II', seccion: 'A' }] })
     })
 
     it('quitarle todas las secciones y el DNI es válido', async () => {

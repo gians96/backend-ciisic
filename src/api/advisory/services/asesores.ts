@@ -27,6 +27,13 @@ export interface DocenteAdmin {
     /** DNI de 8 dígitos; `null` si aún no se registró (sin él no puede usar la página común). */
     documento: string | null
     secciones: SeccionRef[]
+    /**
+     * `true` si es un docente de SIVIRENO (spec 034): sus secciones y sus alumnos salen de **sus cursos** y no se editan a mano
+     * (se recalculan al recargar desde SIVIRENO). Solo se le cambian el nombre y el DNI.
+     */
+    desdeSivireno: boolean
+    /** Cursos de SIVIRENO que dicta (0 si no viene de SIVIRENO). */
+    cursos: number
 }
 
 export interface ListaDocentes {
@@ -53,7 +60,7 @@ async function seccionesDelPadron(eventoId: number): Promise<SeccionRef[]> {
 
 export async function listarDocentes(eventoId: number): Promise<ListaDocentes> {
     const [asesores, secciones] = await Promise.all([
-        prisma.asesor.findMany({ where: { eventoId }, include: { secciones: true }, orderBy: { nombre: 'asc' } }),
+        prisma.asesor.findMany({ where: { eventoId }, include: { secciones: true, _count: { select: { cursos: true } } }, orderBy: { nombre: 'asc' } }),
         seccionesDelPadron(eventoId),
     ])
     return {
@@ -62,6 +69,8 @@ export async function listarDocentes(eventoId: number): Promise<ListaDocentes> {
             nombre: a.nombre,
             documento: a.documento,
             secciones: ordenar(a.secciones.map(({ ciclo, seccion }) => ({ ciclo, seccion }))),
+            desdeSivireno: a.jpDocenteId !== null && a.jpDocenteId !== undefined,
+            cursos: a._count?.cursos ?? 0,
         })),
         secciones,
     }
@@ -115,7 +124,7 @@ export async function crearDocente(eventoId: number, datos: DatosDocente): Promi
             data: { eventoId, nombre, documento, secciones: { create: secciones.map((s) => ({ eventoId, ...s })) } },
             include: { secciones: true },
         })
-        return { id: creado.id, nombre: creado.nombre, documento: creado.documento, secciones }
+        return { id: creado.id, nombre: creado.nombre, documento: creado.documento, secciones, desdeSivireno: false, cursos: 0 }
     } catch (error) {
         return traducirDuplicado(error)
     }
@@ -123,12 +132,28 @@ export async function crearDocente(eventoId: number, datos: DatosDocente): Promi
 
 /**
  * Cambia el nombre, el DNI y las secciones del docente (la lista de secciones **reemplaza** a la anterior). Su
- * enlace personal y su último acceso no se tocan.
+ * enlace personal y su último acceso no se tocan. Un docente de SIVIRENO (spec 034) solo cambia de nombre y DNI: sus
+ * secciones salen de sus cursos y se ignoran las que se envíen.
  */
 export async function editarDocente(eventoId: number, asesorId: number, datos: DatosDocente): Promise<DocenteAdmin> {
-    const actual = await prisma.asesor.findFirst({ where: { id: asesorId, eventoId }, include: { secciones: true } })
+    const actual = await prisma.asesor.findFirst({ where: { id: asesorId, eventoId }, include: { secciones: true, _count: { select: { cursos: true } } } })
     if (!actual) throw notFound('ADVISOR_NOT_FOUND', 'El docente no existe en este evento.')
     const { nombre, documento } = datosLimpios(datos)
+    if (actual.jpDocenteId !== null && actual.jpDocenteId !== undefined) {
+        try {
+            await prisma.asesor.update({ where: { id: asesorId }, data: { nombre, documento } })
+        } catch (error) {
+            return traducirDuplicado(error)
+        }
+        return {
+            id: asesorId,
+            nombre,
+            documento,
+            secciones: ordenar(actual.secciones.map(({ ciclo, seccion }) => ({ ciclo, seccion }))),
+            desdeSivireno: true,
+            cursos: actual._count?.cursos ?? 0,
+        }
+    }
     const secciones = await validarSecciones(eventoId, datos.secciones, actual.secciones.map(({ ciclo, seccion }) => ({ ciclo, seccion })))
     try {
         await prisma.$transaction(async (tx) => {
@@ -139,7 +164,7 @@ export async function editarDocente(eventoId: number, asesorId: number, datos: D
     } catch (error) {
         return traducirDuplicado(error)
     }
-    return { id: asesorId, nombre, documento, secciones }
+    return { id: asesorId, nombre, documento, secciones, desdeSivireno: false, cursos: 0 }
 }
 
 export async function eliminarDocente(eventoId: number, asesorId: number): Promise<void> {

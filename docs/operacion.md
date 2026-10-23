@@ -274,27 +274,27 @@ Apagarlo: la casilla del panel, o `@excluye = 0` en el script. Revertir el esque
 tipos_inscripcion DROP COLUMN excluye_estudiantes_undc;` y `./node_modules/.bin/prisma migrate resolve
 --rolled-back 20261021120000_excluye_estudiantes_undc` (volver a la imagen anterior; respaldo previo).
 
-## Secciones por curso desde JP (spec 033)
+## Cursos y docentes desde SIVIRENO (spec 034)
 
-Reparte a los estudiantes del padrón de seguimiento en las secciones en que cursan según JP y deja a los docentes con su DNI y sus grupos. **No** es parte del despliegue: se corre a mano, con permiso explícito
-y desde una máquina que llegue a la base de JP y a la del congreso.
+Carga en el seguimiento los cursos, las matrículas y los docentes de la programación académica de SIVIRENO (sincronizada en JP), para ver quién pagó por curso y por docente. **No** es parte del despliegue: se corre a mano, con permiso explícito
+y desde una máquina que llegue a la base de JP y a la del congreso. Repítelo cuando cambien las matrículas.
 
-1. **Desplegar el backend** (aplica la migración `20261025140000_padron_secciones`, que rellena `padron_secciones` con la sección actual de cada alumno: nada cambia aún).
+1. **Desplegar el backend** (aplica la migración `20261026120000_padron_cursos`, aditiva: hasta cargar los datos el seguimiento sigue como estaba).
 2. **Respaldo** de solo lectura de las tablas afectadas:
    ```bash
-   mysqldump --single-transaction --no-tablespaces -h <host> -u <usuario> -p <base> asesores asesores_secciones padron_estudiantes padron_secciones enlaces_ciclo > respaldos/seguimiento_pre033_$(date +%Y%m%d_%H%M%S).sql
+   mysqldump --single-transaction --no-tablespaces -h <host> -u <usuario> -p <base> asesores asesores_secciones padron_estudiantes padron_secciones padron_cursos padron_matriculas enlaces_ciclo > respaldos/seguimiento_pre034_$(date +%Y%m%d_%H%M%S).sql
    ```
-3. **Designación** en un JSON fuera del repositorio (lleva DNI): `{ "grupos": [{ "grupo": "II-A", "turno": "M" }], "asesores": [{ "nombre": "…", "dni": "…", "grupos": ["II-A"] }] }`.
-   El nombre debe ser el del docente en el panel (se empareja sin acentos ni mayúsculas); uno que no exista se crea.
+3. **DNI de los docentes** en un JSON fuera del repositorio (lleva DNI): `[{ "dni": "04081923", "nombre": "DAGA CHACA MARISOL" }]`, con el nombre tal como lo escribe SIVIRENO («APELLIDOS NOMBRES»). Un docente de SIVIRENO que no esté en la lista se crea
+   sin DNI (se le agrega después desde el panel).
 4. **Simulación** (no escribe nada): `DATABASE_URL` apunta a la base del congreso y `JP_DATABASE_URL` a la de JP (usuario de solo lectura):
    ```bash
-   JP_DATABASE_URL='mysql://usuario:clave@host:3306/jp' npm run padron:desde-jp:dev -- --evento ciisic-viii-2026 --asesores ../respaldos/asesores-2026-2.json --csv ../respaldos/padron-jp-fuera.csv
+   JP_DATABASE_URL='mysql://usuario:clave@host:3306/jp' npm run padron:desde-jp:dev -- --evento ciisic-viii-2026 --docentes ../respaldos/docentes-2026-2.json --csv ../respaldos/padron-jp-fuera.csv
    ```
-   Revisa alumnos por grupo, quiénes no tienen matrícula en JP, secciones sin grupo y qué cambia en cada docente.
-5. **Aplicar**: el mismo comando con `--aplicar` (una transacción; los enlaces personales de los docentes no cambian). Luego `prisma/preflight/verificar-padron-jp.sql`.
-6. **Revertir**: restaurar el respaldo de esas tablas.
+   Revisa cursos, matrículas, alumnos sin curso, docentes con y sin DNI y los alumnos de cada docente.
+5. **Aplicar**: el mismo comando con `--aplicar` (una transacción; los enlaces personales de los docentes no cambian). Luego `prisma/preflight/verificar-padron-cursos.sql`.
+6. **Revertir**: restaurar el respaldo (borrando antes `padron_matriculas` y `padron_cursos`, que dependen de las demás).
 
-Las credenciales de JP no se guardan en ningún archivo ni variable del API.
+Los alumnos son los del padrón (SIVIRENO no trae su DNI) y los matriculados que falten se agregan sin DNI. Cargar después el Excel de la facultad **borra** los cursos. Las credenciales de JP no se guardan en ningún archivo ni variable del API.
 
 ## Primer Owner
 

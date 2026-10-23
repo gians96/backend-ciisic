@@ -187,14 +187,18 @@ y Google. Documentación: [`docs/`](docs/README.md).
   (`reportes.gestionar`; el DNI **solo** sale ahí). La página común usa `POST /v1/public/advisor/lookup` (+ `/export`) con `{ documento }` en el **cuerpo** (nunca en la URL): misma vista que el enlace personal, **sin devolver
   el DNI**, mismo `404 ADVISOR_DOCUMENT_NOT_FOUND` ante cualquier DNI inválido y tope de intentos fallidos por IP (`limiteIntentosDni`, `soloFallos`). El DNI es adivinable: no lo registres en logs ni lo agregues a una URL. Recargar el padrón
   conserva los docentes (`asesores=conservar`, por defecto si ya hay); `reemplazar` los vuelve a leer del Excel conservando enlace y DNI por nombre.
-- Secciones por curso (spec 033): la sección va ligada al **curso**, así que un alumno puede estar en varias. `padron_secciones` guarda una fila por alumno y **grupo de asesoría**
-  (el ciclo y la sección de la designación de docentes: `II-A`, `VI-A1`…) con cuántos cursos lleva; `padron_estudiantes.ciclo/turno/seccion` son solo la **principal**. `FilaSeguimiento.secciones`
-  trae cada una con sus asesores y `asesores` es la unión. El alumno cuenta **una vez** en los totales y una vez en cada ciclo y sección en que cursa; ciclo, sección, turno y asesor de un
-  filtro deben cumplirse en la misma sección. `filtrarAlcance` **proyecta** al alumno a las secciones del alcance: las vistas públicas (docente, DNI y ciclo) y sus descargas solo muestran
-  etiquetas de su alcance, nunca otras secciones ni otros asesores. Los estudiantes son los del padrón (no los de JP); `npm run padron:desde-jp` (simula por defecto, `--aplicar`) lee las
-  matrículas de JP **solo con `SELECT`** (`JP_DATABASE_URL` es de la consola, **no** del API: el API no se conecta a JP) y reparte a cada uno en los grupos de una designación en un JSON **fuera del repo**
-  (`services/designacion.ts`; lleva DNI de docentes). `plegarSeccion` lleva la sección de JP a su grupo (exacta, sin dígitos finales o único grupo del ciclo y turno). JP no trae el DNI de los alumnos:
-  se conserva el del padrón. Ver `specs/033-padron-secciones-jp` y `docs/operacion.md`.
+- Secciones por curso (spec 033): `padron_secciones` guarda una fila por alumno y **sección** (ciclo + sección, con cuántos cursos lleva ahí); `padron_estudiantes.ciclo/turno/seccion` son solo la
+  **principal**. `FilaSeguimiento.secciones` trae cada una con sus asesores y `asesores` es la unión. El alumno cuenta **una vez** en los totales y una vez en cada ciclo y sección en que cursa; ciclo, sección, turno y asesor de un
+  filtro deben cumplirse en la misma sección. `filtrarAlcance` **proyecta** al alumno a lo que queda en el alcance: las vistas públicas (docente, DNI y ciclo) y sus descargas solo muestran etiquetas de su alcance, nunca otras
+  secciones ni otros asesores. Los estudiantes son los del padrón (no los de SIVIRENO). La designación por grupos de la foto de la facultad (spec 033 original) quedó **retirada** por la spec 034.
+- Cursos y docentes de SIVIRENO (spec 034, `services/cursos-jp.ts`, `padron_cursos`, `padron_matriculas`, `asesores.jp_docente_id`): un **curso** es una carga lectiva de la programación académica de SIVIRENO (asignatura +
+  ciclo + sección + turno + docente) y sus alumnos son los matriculados; un alumno puede estar en varios y repetir. **El docente de cada curso es el asesor de sus matriculados**: `FilaSeguimiento.cursos` (con el docente de cada uno)
+  manda; `secciones` y `asesores` salen de los cursos y quien no tiene curso queda **sin docente** (no se le asigna el de su sección). `filtrarAlcance` gana `cursoId` y, con cursos, filtra y **proyecta por curso** (ciclo, sección,
+  turno, docente y curso deben cumplirse en el mismo curso); `resumir` agrega `porCurso`; `GET …/advisory/students|export?cursoId=` (`404 COURSE_NOT_FOUND` al descargar un curso inexistente). El Excel agrega la tabla «Por curso» y la
+  hoja «Listado completo» (una fila por alumno y curso). Las vistas públicas traen `cursos` (los del docente, o los del ciclo con su docente: dato institucional) y **nunca** los cursos ni el docente de otro. Un docente con
+  `jp_docente_id` solo cambia de nombre y DNI (sus secciones salen de sus cursos). Los datos se cargan con `npm run padron:desde-jp` (simula por defecto, `--aplicar`): lee SIVIRENO en JP **solo con `SELECT`** (`JP_DATABASE_URL`
+  es de la consola, **no** del API: el API no se conecta a JP), toma los DNI de los docentes de un JSON **fuera del repo** (`--docentes`), enlaza a cada docente por su id de SIVIRENO, su DNI o su nombre (y crea los que faltan, sin tocar
+  nombre, DNI ni enlace de los que existen) y conserva el DNI del padrón porque SIVIRENO no trae el de los alumnos. Cargar después el Excel **borra** los cursos. Ver `specs/034-padron-cursos-sivireno` y `docs/operacion.md`.
 - Reglas del dominio institucional fijas en `src/core/correo-institucional.ts` (`undc.edu.pe`,
   parte local numérica = estudiante).
 - Las rutas legacy existen para la landing anterior y se apagan desde el panel (Sistema).
@@ -273,7 +277,7 @@ con ambos sistemas levantados.
 
 Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Cada cambio
 empieza en `specs/NNN-nombre/` (spec → plan → tasks → contracts) y se marcan las tasks al
-implementar. Specs actuales: 001–014, 016–029, 030, 031, 032 y 033 (ver [README](README.md)); la 015 (certificados) tiene
+implementar. Specs actuales: 001–014, 016–029, 030, 031, 032, 033 y 034 (ver [README](README.md)); la 015 (certificados) tiene
 solo su diseño (`research.md`).
 
 ## Antes de dar por terminado

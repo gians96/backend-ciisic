@@ -1,6 +1,6 @@
 # Feature Specification: Secciones por curso (JP) en el seguimiento por asesor
 
-**Created**: 2026-10-23 · **Status**: Implementado en el backend (panel en su repo, spec 023; datos en producción pendientes) · **Contrato**: [`contracts/api-secciones-por-curso.md`](contracts/api-secciones-por-curso.md)
+**Created**: 2026-10-23 · **Status**: Implementado y aplicado en producción el 2026-10-23; la designación por grupos de la foto y su script quedaron **reemplazados por la [spec 034](../034-padron-cursos-sivireno/spec.md)** (cursos y docentes de SIVIRENO); la tabla `padron_secciones` y la proyección por alcance siguen vigentes (panel en su repo, spec 024) · **Contrato**: [`contracts/api-secciones-por-curso.md`](contracts/api-secciones-por-curso.md)
 
 **Input**: el padrón de seguimiento (spec 025) traía **una sola sección por alumno**, la del Excel de la facultad. En JP (programación académica,
 sincronizada con SIVIRENO) la sección va **ligada al curso**: un mismo alumno cursa en varias (teoría `A` y laboratorio `A1`, o un curso repetido de otro

@@ -125,6 +125,7 @@ model Evento {
   delegaciones            Delegacion[]
   asesores                Asesor[]
   padronEstudiantes       PadronEstudiante[]
+  padronCursos            PadronCurso[]
   enlacesCiclo            EnlaceCiclo[]
 
   @@index([credencialCorreoId], map: "idx_eventos_credencial_correo")
@@ -408,13 +409,18 @@ model Asesor {
   enlaceCreadoEn     DateTime? @map("enlace_creado_en")
   /// Última vez que el docente abrió su enlace (se actualiza como máximo cada 5 minutos).
   enlaceUltimoAcceso DateTime? @map("enlace_ultimo_acceso")
+  /// `id_docente` de SIVIRENO (spec 034): el docente de los cursos de la programación académica. Con él sus alumnos son los
+  /// matriculados en **sus** cursos; sin él (agregado a mano o del Excel) el docente atiende secciones. `null` = no viene de SIVIRENO.
+  jpDocenteId   Int?            @map("jp_docente_id")
   creadoEn      DateTime        @default(now()) @map("creado_en")
   actualizadoEn DateTime        @updatedAt @map("actualizado_en")
   evento        Evento          @relation(fields: [eventoId], references: [id], onDelete: Cascade, map: "fk_asesores_evento")
   secciones     AsesorSeccion[]
+  cursos        PadronCurso[]
 
   @@unique([eventoId, nombre], map: "uq_asesores_evento_nombre")
   @@unique([eventoId, documento], map: "uq_asesores_evento_documento")
+  @@unique([eventoId, jpDocenteId], map: "uq_asesores_evento_jp_docente")
   @@map("asesores")
 }
 
@@ -456,6 +462,8 @@ model PadronEstudiante {
   evento       Evento   @relation(fields: [eventoId], references: [id], onDelete: Cascade, map: "fk_padron_estudiantes_evento")
   /// Todas las secciones en que cursa (spec 033). `ciclo`, `turno` y `seccion` de arriba son solo la principal.
   secciones    PadronSeccion[]
+  /// Los cursos de SIVIRENO en que está matriculado (spec 034); vacío si el padrón viene solo del Excel.
+  matriculas   PadronMatricula[]
 
   @@unique([eventoId, codigo], map: "uq_padron_estudiantes_evento_codigo")
   @@index([eventoId, ciclo, seccion], map: "idx_padron_estudiantes_evento_seccion")
@@ -478,6 +486,46 @@ model PadronSeccion {
   @@id([eventoId, codigo, ciclo, seccion])
   @@index([eventoId, ciclo, seccion], map: "idx_padron_secciones_evento_seccion")
   @@map("padron_secciones")
+}
+
+/// Curso de la programación académica de SIVIRENO (spec 034): una carga lectiva = asignatura + ciclo + sección + turno + docente.
+/// Lo carga `npm run padron:desde-jp` desde JP y se reemplaza entero en cada carga. Los alumnos de un curso son sus `matriculas`.
+model PadronCurso {
+  id            Int               @id @default(autoincrement())
+  eventoId      Int               @map("evento_id")
+  /// `id_carga_lectiva` de SIVIRENO: es lo que identifica al curso allá.
+  jpCargaId     Int               @map("jp_carga_id")
+  /// Código de la asignatura («ISES240601»).
+  codigo        String            @db.VarChar(30)
+  nombre        String            @db.VarChar(200)
+  ciclo         String            @db.VarChar(10)
+  turno         String?           @db.VarChar(5)
+  seccion       String            @db.VarChar(10)
+  /// Docente del curso (un `Asesor` con su `jp_docente_id`); `null` si se borró.
+  asesorId      Int?              @map("asesor_id")
+  /// Nombre del docente tal como lo escribe SIVIRENO.
+  docenteNombre String?           @map("docente_nombre") @db.VarChar(200)
+  evento        Evento            @relation(fields: [eventoId], references: [id], onDelete: Cascade, map: "fk_padron_cursos_evento")
+  asesor        Asesor?           @relation(fields: [asesorId], references: [id], onDelete: SetNull, map: "fk_padron_cursos_asesor")
+  matriculas    PadronMatricula[]
+
+  @@unique([eventoId, jpCargaId], map: "uq_padron_cursos_evento_carga")
+  @@index([eventoId, ciclo, seccion], map: "idx_padron_cursos_evento_seccion")
+  @@index([asesorId], map: "idx_padron_cursos_asesor")
+  @@map("padron_cursos")
+}
+
+/// Un estudiante del padrón matriculado en un curso de SIVIRENO (spec 034). Se borra en cascada con el estudiante y con el curso.
+model PadronMatricula {
+  eventoId   Int              @map("evento_id")
+  codigo     String           @db.VarChar(20)
+  cursoId    Int              @map("curso_id")
+  estudiante PadronEstudiante @relation(fields: [eventoId, codigo], references: [eventoId, codigo], onDelete: Cascade, map: "fk_padron_matriculas_estudiante")
+  curso      PadronCurso      @relation(fields: [cursoId], references: [id], onDelete: Cascade, map: "fk_padron_matriculas_curso")
+
+  @@id([eventoId, codigo, cursoId])
+  @@index([cursoId], map: "idx_padron_matriculas_curso")
+  @@map("padron_matriculas")
 }
 
 /// Enlace público de un ciclo (spec 027): token aleatorio de 43 caracteres (256 bits) con el que quien lo recibe

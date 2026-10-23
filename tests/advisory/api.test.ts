@@ -9,6 +9,8 @@ jest.mock('../../src/database/prisma', () => {
         evento: { findUnique: jest.fn() },
         padronEstudiante: { findMany: jest.fn(), deleteMany: jest.fn(), createMany: jest.fn() },
         padronSeccion: { createMany: jest.fn() },
+        padronCurso: { deleteMany: jest.fn(), createMany: jest.fn(), findMany: jest.fn() },
+        padronMatricula: { createMany: jest.fn() },
         asesor: { findMany: jest.fn(), deleteMany: jest.fn(), create: jest.fn() },
         inscripcion: { findMany: jest.fn() },
         $transaction: jest.fn(),
@@ -305,5 +307,87 @@ describe('carga del padrón', () => {
         expect((await request(app).post('/api/v1/events/2/advisory/import').set(con(comision(['reportes.exportar']))).attach('file', await libro(), 'padron.xlsx')).status).toBe(403)
         expect(m.padronEstudiante.createMany).not.toHaveBeenCalled()
         expect(m.padronSeccion.createMany).not.toHaveBeenCalled()
+    })
+})
+
+describe('cursos de SIVIRENO (spec 034)', () => {
+    const docente = (id: number, nombre: string) => ({ id, nombre })
+    const matricula = (id: number, nombre: string, ciclo: string, seccion: string, asesor: { id: number, nombre: string } | null) =>
+        ({ curso: { id, codigo: `ISES${id}`, nombre, ciclo, seccion, turno: 'M', asesor } })
+    const PROGRAMACION = matricula(1, 'PROGRAMACIÓN WEB', 'I', 'A', docente(7, 'DRA. ANGOMA ASTUCURI MIRIAM'))
+    const REDES = matricula(2, 'REDES', 'II', 'B', docente(8, 'MG. CÁRDENAS LINO CÉSAR ANDY'))
+
+    beforeEach(() => {
+        // El 1 cursa PROGRAMACIÓN y REDES, el 2 solo PROGRAMACIÓN, el 3 solo REDES
+        m.padronEstudiante.findMany.mockResolvedValue([
+            alumno(1, { matriculas: [REDES, PROGRAMACION] }),
+            alumno(2, { matriculas: [PROGRAMACION] }),
+            alumno(3, { ciclo: 'II', seccion: 'B', turno: 'T', matriculas: [REDES] }),
+        ])
+    })
+
+    it('el resumen trae cada curso con su docente y cuántos de sus matriculados pagaron, y los cursos como opción de filtro', async () => {
+        const r = await request(app).get('/api/v1/events/2/advisory/summary').set(con(tesorero()))
+        expect(r.status).toBe(200)
+        expect(r.body.data.totales).toMatchObject({ alumnos: 3, pagaron: 2, enRevision: 1 })
+        expect(r.body.data.porCurso.map((c: { id: number, nombre: string, alumnos: number, pagaron: number, enRevision: number, docente: { id: number } }) => [c.id, c.nombre, c.alumnos, c.pagaron, c.enRevision, c.docente.id]))
+            .toEqual([[1, 'PROGRAMACIÓN WEB', 2, 1, 1, 7], [2, 'REDES', 2, 2, 0, 8]])
+        expect(r.body.data.opciones.cursos.map((c: { id: number }) => c.id)).toEqual([1, 2])
+    })
+
+    it('con cursos, quien no tiene curso queda sin docente aunque su sección tenga uno: el docente es el de los cursos', async () => {
+        m.padronEstudiante.findMany.mockResolvedValue([
+            alumno(1, { matriculas: [PROGRAMACION] }),
+            // Del Excel o sin matrícula en SIVIRENO: su sección I-A tiene a la docente 7, pero no está en ninguno de sus cursos
+            alumno(4, { matriculas: [] }),
+        ])
+        const r = await request(app).get('/api/v1/events/2/advisory/students?q=ALUMNO').set(con(tesorero()))
+        const sinCurso = r.body.data.find((f: { id: number }) => f.id === 4)
+        expect(sinCurso).toMatchObject({ cursos: [], asesores: [] })
+        const resumen = await request(app).get('/api/v1/events/2/advisory/summary').set(con(tesorero()))
+        expect(resumen.body.data.alumnosSinAsesor).toBe(1)
+        // El docente 7 solo cuenta al alumno de su curso
+        expect(resumen.body.data.porAsesor.find((a: { id: number }) => a.id === 7)).toMatchObject({ alumnos: 1 })
+    })
+
+    it('el listado de alumnos se filtra por curso y cada alumno sale solo con ese curso; un curso inválido es 422', async () => {
+        const r = await request(app).get('/api/v1/events/2/advisory/students?cursoId=2').set(con(tesorero()))
+        expect(r.status).toBe(200)
+        expect(r.body.data.map((f: { id: number }) => f.id).sort()).toEqual([1, 3])
+        expect(r.body.data.every((f: { cursos: Array<{ id: number }> }) => f.cursos.length === 1 && f.cursos[0].id === 2)).toBe(true)
+        const mala = await request(app).get('/api/v1/events/2/advisory/students?cursoId=abc').set(con(tesorero()))
+        expect(mala.status).toBe(422)
+        expect(mala.body.fields.cursoId).toBeDefined()
+    })
+
+    it('el Excel lleva la hoja «Listado completo» (una fila por alumno y curso) y el reporte de un curso es el de sus alumnos', async () => {
+        const todo = await request(app).get('/api/v1/events/2/advisory/export').set(con(tesorero())).buffer(true).parse((res, cb) => {
+            const partes: Buffer[] = []
+            res.on('data', (p: Buffer) => partes.push(p))
+            res.on('end', () => cb(null, Buffer.concat(partes)))
+        })
+        const libro = new ExcelJS.Workbook()
+        await libro.xlsx.load(todo.body as unknown as Parameters<typeof libro.xlsx.load>[0])
+        expect(libro.worksheets.map((h) => h.name)).toEqual(['Resumen', 'Alumnos', 'Pagaron', 'No pagaron', 'Listado completo'])
+        const listado = libro.getWorksheet('Listado completo')
+        expect(listado?.rowCount).toBe(5) // cabecera + 4 matrículas (2 + 1 + 1)
+        const cabecera = listado?.getRow(1).values as unknown[]
+        expect(cabecera).toEqual(expect.arrayContaining(['Curso', 'Docente', 'Alumno', 'Situación']))
+
+        const delCurso = await request(app).get('/api/v1/events/2/advisory/export?cursoId=1').set(con(tesorero())).buffer(true).parse((res, cb) => {
+            const partes: Buffer[] = []
+            res.on('data', (p: Buffer) => partes.push(p))
+            res.on('end', () => cb(null, Buffer.concat(partes)))
+        })
+        const libro2 = new ExcelJS.Workbook()
+        await libro2.xlsx.load(delCurso.body as unknown as Parameters<typeof libro2.xlsx.load>[0])
+        expect(libro2.getWorksheet('Listado completo')?.rowCount).toBe(3) // cabecera + los 2 matriculados de PROGRAMACIÓN WEB
+        expect(libro2.getWorksheet('Resumen')?.getCell('A1').value).toBe('PROGRAMACIÓN WEB · I-A')
+    })
+
+    it('un curso que no existe es 404 al descargar', async () => {
+        const r = await request(app).get('/api/v1/events/2/advisory/export?cursoId=99').set(con(tesorero()))
+        expect(r.status).toBe(404)
+        expect(r.body.code).toBe('COURSE_NOT_FOUND')
     })
 })

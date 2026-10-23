@@ -10,10 +10,12 @@ import { importarPadron, MODOS_ASESORES, type ModoAsesores } from '../services/i
 import {
     ETIQUETA_SITUACION,
     FILTROS_SITUACION,
+    etiquetaSeccion,
     filtrarAlcance,
     filtrarFilas,
     opcionesDeFiltro,
     resumir,
+    type CursoEstudiante,
     type FiltroSituacion,
     type FiltrosSeguimiento,
     type ResumenSeguimiento,
@@ -40,6 +42,12 @@ function filtrosDe(query: Request['query']): FiltrosSeguimiento {
         if (Number.isSafeInteger(numero) && numero > 0) asesorId = numero
         else errores.asesorId = 'Debe ser un número válido'
     }
+    let cursoId: number | undefined
+    if (query.cursoId !== undefined && query.cursoId !== '') {
+        const numero = Number(query.cursoId)
+        if (Number.isSafeInteger(numero) && numero > 0) cursoId = numero
+        else errores.cursoId = 'Debe ser un número válido'
+    }
     let situacion: FiltroSituacion | undefined
     const pedida = texto(query.situacion, 20)?.toUpperCase()
     if (pedida) {
@@ -49,6 +57,7 @@ function filtrosDe(query: Request['query']): FiltrosSeguimiento {
     if (Object.keys(errores).length) throw unprocessable('VALIDATION_ERROR', 'Los filtros no son válidos', errores)
     return {
         asesorId,
+        cursoId,
         ciclo: texto(query.ciclo),
         seccion: texto(query.seccion),
         turno: texto(query.turno),
@@ -58,7 +67,7 @@ function filtrosDe(query: Request['query']): FiltrosSeguimiento {
 }
 
 function hayAlcance(filtros: FiltrosSeguimiento): boolean {
-    return filtros.asesorId !== undefined || Boolean(filtros.ciclo || filtros.seccion || filtros.turno)
+    return filtros.asesorId !== undefined || filtros.cursoId !== undefined || Boolean(filtros.ciclo || filtros.seccion || filtros.turno)
 }
 
 /** Con un alcance elegido, los asesores sin alumnos en él no aportan filas al resumen. */
@@ -98,8 +107,9 @@ export async function students(req: AuthenticatedRequest, res: Response) {
     res.json({ success: true, data: filas.slice(paginacion.skip, paginacion.skip + paginacion.take), meta: pageMeta(paginacion, filas.length) })
 }
 
-function descripcionDeFiltros(filtros: FiltrosSeguimiento): string[] {
+function descripcionDeFiltros(filtros: FiltrosSeguimiento, curso?: CursoEstudiante): string[] {
     return [
+        ...(curso ? [`Curso: ${curso.nombre} (${etiquetaSeccion(curso.ciclo, curso.seccion)})`] : []),
         ...(filtros.ciclo ? [`Ciclo: ${filtros.ciclo.toUpperCase()}`] : []),
         ...(filtros.seccion ? [`Sección: ${filtros.seccion.toUpperCase()}`] : []),
         ...(filtros.turno ? [`Turno: ${filtros.turno.toUpperCase()}`] : []),
@@ -125,6 +135,8 @@ export async function exportFile(req: AuthenticatedRequest, res: Response) {
     if (!seguimiento.filas.length) throw conflict('PADRON_NOT_LOADED', 'Aún no se cargó el padrón de estudiantes de este evento.')
     const asesor = filtros.asesorId === undefined ? undefined : seguimiento.asesores.find((a) => a.id === filtros.asesorId)
     if (filtros.asesorId !== undefined && !asesor) throw notFound('ADVISOR_NOT_FOUND', 'El asesor no existe en este evento.')
+    const curso = filtros.cursoId === undefined ? undefined : seguimiento.filas.flatMap((f) => f.cursos).find((c) => c.id === filtros.cursoId)
+    if (filtros.cursoId !== undefined && !curso) throw notFound('COURSE_NOT_FOUND', 'El curso no existe en este evento.')
 
     const alcance = filtrarAlcance(seguimiento.filas, filtros)
     const generadoEn = new Date()
@@ -132,18 +144,20 @@ export async function exportFile(req: AuthenticatedRequest, res: Response) {
         evento: { nombre: evento.nombre, codigo: evento.codigo },
         semestre: seguimiento.semestre,
         generadoEn,
-        titulo: asesor ? asesor.nombre : 'Seguimiento de estudiantes por asesor',
-        filtros: descripcionDeFiltros(filtros),
+        titulo: asesor ? asesor.nombre : curso ? `${curso.nombre} · ${etiquetaSeccion(curso.ciclo, curso.seccion)}` : 'Seguimiento de estudiantes por asesor',
+        filtros: descripcionDeFiltros(filtros, curso),
         conPago: pago,
         alcance,
         filas: filtrarFilas(seguimiento.filas, filtros),
         resumen: resumenDelAlcance(resumir(alcance, seguimiento.asesores, pago), filtros),
-        conTablaDeAsesores: !asesor,
+        conTablaDeAsesores: !asesor && !curso,
     }
 
     const base = asesor
         ? asesor.nombre
-        : ['Seguimiento', evento.codigo, filtros.ciclo, filtros.seccion, fechaLima(generadoEn)].filter(Boolean).join(' ')
+        : curso
+            ? `${curso.nombre} ${etiquetaSeccion(curso.ciclo, curso.seccion)}`
+            : ['Seguimiento', evento.codigo, filtros.ciclo, filtros.seccion, fechaLima(generadoEn)].filter(Boolean).join(' ')
     const archivo = nombreDeArchivo(base, formato)
     const contenido = formato === 'pdf' ? await generarPdf(datos) : await generarExcel(datos)
     res.setHeader('Content-Type', formato === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')

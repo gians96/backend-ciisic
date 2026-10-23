@@ -11,6 +11,8 @@ jest.mock('../../src/database/prisma', () => {
         evento: { findUnique: jest.fn() },
         padronEstudiante: { findMany: jest.fn(), deleteMany: jest.fn(), createMany: jest.fn() },
         padronSeccion: { findMany: jest.fn(), createMany: jest.fn() },
+        padronCurso: { deleteMany: jest.fn(), createMany: jest.fn(), findMany: jest.fn() },
+        padronMatricula: { createMany: jest.fn() },
         asesor: { findMany: jest.fn(), findUnique: jest.fn(), deleteMany: jest.fn(), create: jest.fn() },
         enlaceCiclo: { findMany: jest.fn(), findUnique: jest.fn(), upsert: jest.fn(), update: jest.fn(), deleteMany: jest.fn() },
         inscripcion: { findMany: jest.fn() },
@@ -197,7 +199,25 @@ describe('enlaces por ciclo: vista pública', () => {
         }])
         // Los estudiantes de otro ciclo (II) no salen; y sin celular
         expect(d.alumnos.map((a: { codigo: string }) => a.codigo)).toEqual(['2621010001', '2621010002'])
-        expect(d.alumnos[0]).toEqual({ nombre: 'ALUMNO 1', codigo: '2621010001', ciclo: 'I', seccion: 'A', turno: 'M', secciones: ['I-A'], situacion: 'PAGADO' })
+        expect(d.alumnos[0]).toEqual({ nombre: 'ALUMNO 1', codigo: '2621010001', ciclo: 'I', seccion: 'A', turno: 'M', secciones: ['I-A'], cursos: [], situacion: 'PAGADO' })
+    })
+
+    it('con cursos de SIVIRENO (spec 034) muestra los cursos del ciclo con su docente y los cursos de cada alumno solo de ese ciclo', async () => {
+        const matricula = (id: number, nombre: string, ciclo: string, seccion: string, asesor: { id: number, nombre: string }) =>
+            ({ curso: { id, codigo: `ISES${id}`, nombre, ciclo, seccion, turno: 'M', asesor } })
+        const delCiclo = matricula(1, 'PROGRAMACIÓN WEB', 'I', 'A', { id: 7, nombre: 'DRA. ANGOMA ASTUCURI MIRIAM' })
+        const deOtro = matricula(2, 'REDES SECRETAS', 'II', 'B', { id: 8, nombre: 'MG. DOCENTE DEL OTRO CICLO' })
+        m.padronEstudiante.findMany.mockResolvedValue([
+            alumno(1, { matriculas: [deOtro, delCiclo] }),
+            alumno(2, { matriculas: [delCiclo] }),
+            alumno(3, { ciclo: 'II', seccion: 'B', turno: 'T', nombre: 'CÁRDENAS RÍOS DIEGO', matriculas: [deOtro] }),
+        ])
+        const r = await request(app).get('/api/v1/public/cycle').set('X-Link-Token', TOKEN)
+        const d = r.body.data
+        expect(d.totales.alumnos).toBe(2)
+        expect(d.cursos).toEqual([{ id: 1, codigo: 'ISES1', nombre: 'PROGRAMACIÓN WEB', ciclo: 'I', seccion: 'A', turno: 'M', docente: 'DRA. ANGOMA ASTUCURI MIRIAM', alumnos: 2, pagaron: 1, enRevision: 1, rechazados: 0, sinInscripcion: 0, noPagaron: 1, avance: 0.5 }])
+        expect(d.alumnos[0].cursos).toEqual([{ id: 1, codigo: 'ISES1', nombre: 'PROGRAMACIÓN WEB', ciclo: 'I', seccion: 'A', turno: 'M', docente: 'DRA. ANGOMA ASTUCURI MIRIAM' }])
+        expect(JSON.stringify(r.body)).not.toMatch(/REDES SECRETAS|DOCENTE DEL OTRO CICLO|CÁRDENAS/)
     })
 
     it('nunca expone DNI, correo, celular, montos, recaudado, inscripciones ni a otros ciclos', async () => {

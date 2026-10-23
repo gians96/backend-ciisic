@@ -44,6 +44,7 @@ virtual, asistencia y perfil con foto).
 | [031](specs/031-ponencias-resumen-personas) | Resumen por persona de las ponencias especializadas con su situación actual en el congreso, filtros y Excel; cancelar a quien no puede estar inscrito y enviarle un comunicado por correo |
 | [032](specs/032-ponencias-coponentes) | Temas de ponencias especializadas que dictan varios ponentes a la misma hora y en el mismo ambiente (`coponentes`, hasta 3 además del principal) |
 | [033](specs/033-padron-secciones-jp) | Seguimiento por asesor con las secciones de cada curso: un alumno puede cursar en varias (se cuenta una vez en el total), el asesor sale de la designación de docentes y el padrón se reparte con `npm run padron:desde-jp` desde las matrículas de JP |
+| [034](specs/034-padron-cursos-sivireno) | Seguimiento por curso y docente según SIVIRENO: cada curso (asignatura, ciclo, sección y docente) con sus matriculados, quién pagó por curso y por docente, listado completo y pestaña «Por curso»; `npm run padron:desde-jp` carga cursos, matrículas y docentes desde JP |
 
 ## Desarrollo local
 

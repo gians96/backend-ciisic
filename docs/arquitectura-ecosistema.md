@@ -507,6 +507,12 @@ Contrato en `specs/033-padron-secciones-jp/contracts/api-secciones-por-curso.md`
 cada fila de `…/advisory/students` agrega `secciones` (cada una con `cursos` y sus `asesores`; la principal primero) y los totales cuentan al alumno una vez. Las vistas públicas agregan `secciones: string[]`
 (etiquetas de su alcance: nunca las de otro docente ni otros asesores). Aditivo: el panel anterior sigue funcionando. Los datos salen de JP con el script `npm run padron:desde-jp` (solo lectura sobre JP; ver `docs/operacion.md`).
 
+#### Cursos y docentes de SIVIRENO (spec 034)
+
+Contrato en `specs/034-padron-cursos-sivireno/contracts/api-cursos-sivireno.md` (panel: spec 025). El seguimiento se arma con la **programación académica de SIVIRENO**: cada curso (asignatura, ciclo, sección, turno y docente) con sus
+matriculados; el docente de un curso es el asesor de sus alumnos. `summary` trae `porCurso` y `opciones.cursos`; `students` y `export` aceptan `cursoId`; cada alumno trae `cursos`; las vistas públicas traen los cursos del docente o del ciclo
+(solo los del alcance de quien consulta). El Excel agrega «Por curso» y la hoja «Listado completo». Aditivo: el panel anterior sigue funcionando. Los datos se cargan con `npm run padron:desde-jp` (solo lectura sobre JP; ver `docs/operacion.md`).
+
 ### Escáner, credencial y operación (spec 014)
 
 Definido en `specs/014-portal-fotocheck-asistencia/contracts/api-asistencia.md` (panel: spec 009).

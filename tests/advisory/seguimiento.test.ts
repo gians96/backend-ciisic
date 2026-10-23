@@ -11,6 +11,7 @@ import {
     resumir,
     situacionDe,
     type AsesorConSecciones,
+    type CursoEstudiante,
     type EstudianteBase,
     type InscripcionBase,
 } from '../../src/api/advisory/services/seguimiento'
@@ -251,5 +252,89 @@ describe('alumnos que cursan en más de una sección', () => {
         expect(opciones.ciclos).toEqual(['I', 'II'])
         expect(opciones.secciones).toEqual([{ ciclo: 'I', seccion: 'A' }, { ciclo: 'II', seccion: 'B' }])
         expect(opciones.turnos).toEqual(['M', 'T'])
+    })
+})
+
+// ─── Cursos de SIVIRENO (spec 034) ──────────────────────────────────────────
+
+describe('alumnos matriculados en cursos de SIVIRENO', () => {
+    const docA = { id: 1, nombre: 'DRA. DOCENTE A' }
+    const docB = { id: 2, nombre: 'MG. DOCENTE B' }
+    const curso = (id: number, nombre: string, ciclo: string, seccion: string, docente: typeof docA | null, turno: string | null = 'M'): CursoEstudiante =>
+        ({ id, codigo: `ISES${id}`, nombre, ciclo, seccion, turno, docente })
+    const C1 = curso(1, 'PROGRAMACIÓN', 'I', 'A', docA)
+    const C2 = curso(2, 'MATEMÁTICA', 'I', 'A', docB)
+    const C3 = curso(3, 'REDES', 'II', 'B', docA, 'T')
+    // El 1 cursa 2 cursos en I-A y repite REDES de II-B; el 2 solo PROGRAMACIÓN; el 3 solo REDES; el 4 viene del Excel (sin cursos)
+    const alumnos = [
+        estudiante(1, { cursos: [C3, C2, C1] }),
+        estudiante(2, { cursos: [C1] }),
+        estudiante(3, { ciclo: 'II', seccion: 'B', turno: 'T', cursos: [C3] }),
+        estudiante(4, { ciclo: 'I', seccion: 'A' }),
+    ]
+    const filas = construirFilas(alumnos, SECCIONES, [inscripcion(10, 'APROBADO', { codigoEstudiante: '2621010001' }), inscripcion(11, 'PENDIENTE', { codigoEstudiante: '2621010003' })], true)
+    const idsDe = (lista: Array<{ id: number }>) => lista.map((f) => f.id).sort()
+
+    it('sus secciones y sus asesores salen de los cursos: el docente de cada curso, no el de la sección', () => {
+        const uno = filas.find((f) => f.id === 1)
+        expect(uno?.cursos.map((c) => c.nombre)).toEqual(['MATEMÁTICA', 'PROGRAMACIÓN', 'REDES'])
+        expect(uno?.secciones.map((s) => [`${s.ciclo}-${s.seccion}`, s.cursos, s.asesores.map((a) => a.id)])).toEqual([['I-A', 2, [1, 2]], ['II-B', 1, [1]]])
+        expect(uno?.asesores.map((a) => a.id)).toEqual([1, 2])
+        // El alumno del Excel no tiene cursos y sigue por secciones (los asesores de ASESORES para I-A)
+        expect(filas.find((f) => f.id === 4)).toMatchObject({ cursos: [] })
+        expect(filas.find((f) => f.id === 4)?.asesores.map((a) => a.id)).toEqual([1, 2])
+    })
+
+    it('el filtro por docente deja solo los cursos de ese docente y proyecta al alumno a ellos', () => {
+        const deB = filtrarAlcance(filas, { asesorId: 2 })
+        // El alumno 4 viene del Excel (sin cursos) y sigue por sección: el docente B también atiende I-A
+        expect(idsDe(deB)).toEqual([1, 4])
+        const proyectado = deB.find((f) => f.id === 1)
+        expect(proyectado?.cursos.map((c) => c.nombre)).toEqual(['MATEMÁTICA'])
+        expect(proyectado).toMatchObject({ ciclo: 'I', seccion: 'A' })
+        expect(proyectado?.secciones.map((s) => [s.cursos, s.asesores.map((a) => a.id)])).toEqual([[1, [2]]])
+
+        const deA = filtrarAlcance(filas, { asesorId: 1 })
+        // El alumno 4 viene del Excel (sin cursos) y sigue por sección: la docente A atiende I-A
+        expect(idsDe(deA)).toEqual([1, 2, 3, 4])
+        expect(deA.find((f) => f.id === 1)?.cursos.map((c) => c.nombre)).toEqual(['PROGRAMACIÓN', 'REDES'])
+        expect(deA.find((f) => f.id === 1)?.secciones.map((s) => `${s.ciclo}-${s.seccion}`)).toEqual(['I-A', 'II-B'])
+    })
+
+    it('el filtro por curso trae a sus matriculados y nadie más; sin cursos no hay coincidencia', () => {
+        const delCurso3 = filtrarAlcance(filas, { cursoId: 3 })
+        expect(idsDe(delCurso3)).toEqual([1, 3])
+        expect(delCurso3.find((f) => f.id === 1)).toMatchObject({ ciclo: 'II', seccion: 'B', turno: 'T' })
+        expect(delCurso3.find((f) => f.id === 1)?.cursos.map((c) => c.id)).toEqual([3])
+        expect(filtrarAlcance(filas, { cursoId: 99 })).toEqual([])
+    })
+
+    it('ciclo, sección y docente deben cumplirse en el mismo curso', () => {
+        expect(idsDe(filtrarAlcance(filas, { asesorId: 2, ciclo: 'II' }))).toEqual([])
+        expect(idsDe(filtrarAlcance(filas, { asesorId: 1, ciclo: 'II', seccion: 'B' }))).toEqual([1, 3])
+        expect(idsDe(filtrarAlcance(filas, { cursoId: 1, seccion: 'B' }))).toEqual([])
+    })
+
+    it('resume por curso: cada alumno cuenta una vez en cada curso suyo y los totales una sola vez', () => {
+        const resumen = resumir(filas, ASESORES, true)
+        expect(resumen.totales.alumnos).toBe(4)
+        expect(resumen.porCurso.map((c) => [c.id, c.nombre, c.alumnos, c.pagaron, c.enRevision, c.docente?.id])).toEqual([
+            [2, 'MATEMÁTICA', 1, 1, 0, 2],
+            [1, 'PROGRAMACIÓN', 2, 1, 0, 1],
+            [3, 'REDES', 2, 1, 1, 1],
+        ])
+        // En el reporte de un docente, solo sus cursos
+        expect(resumir(filtrarAlcance(filas, { asesorId: 2 }), [], false).porCurso.map((c) => c.id)).toEqual([2])
+        // Sin cursos (Excel) no hay porCurso
+        expect(resumir(construirFilas([estudiante(9)], SECCIONES, [], false), [], false).porCurso).toEqual([])
+    })
+
+    it('las opciones de filtro ofrecen todos los cursos del padrón, en orden', () => {
+        expect(opcionesDeFiltro(filas, ASESORES).cursos.map((c) => c.id)).toEqual([2, 1, 3])
+    })
+
+    it('la sección del resumen junta los docentes de todos los cursos de sus alumnos', () => {
+        const iA = resumir(filas, ASESORES, false).porSeccion.find((s) => s.ciclo === 'I' && s.seccion === 'A')
+        expect(iA?.asesores.map((a) => a.id)).toEqual([1, 2])
     })
 })

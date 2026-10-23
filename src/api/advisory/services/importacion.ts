@@ -7,17 +7,39 @@ import { claveDeTexto, claveSeccion, etiquetaSeccion, type SeccionEstudiante } f
 /** Estudiante listo para guardar: sus datos y todas las secciones en que cursa (las columnas `ciclo`, `turno` y `seccion` son la principal). */
 export interface EstudiantePadron extends EstudianteLeido {
     secciones: SeccionEstudiante[]
+    /** `jpCargaId` de los cursos de SIVIRENO en que está matriculado (spec 034); ausente en el padrón del Excel. */
+    matriculas?: number[]
+}
+
+/** Un curso de SIVIRENO listo para guardar (spec 034): su docente ya es un `Asesor` del evento. */
+export interface CursoPadron {
+    jpCargaId: number
+    codigo: string
+    nombre: string
+    ciclo: string
+    turno: string | null
+    seccion: string
+    asesorId: number | null
+    docenteNombre: string | null
 }
 
 /** El Excel de la facultad trae una sola sección por alumno. */
 const conSuSeccion = (e: EstudianteLeido): EstudiantePadron => ({ ...e, secciones: [{ ciclo: e.ciclo, seccion: e.seccion, turno: e.turno, cursos: 1 }] })
 
 /**
- * Reemplaza el padrón del evento por `estudiantes` y sus secciones (spec 033). Va dentro de la transacción de quien
- * llama; las secciones anteriores se borran en cascada con los estudiantes.
+ * Reemplaza el padrón del evento por `estudiantes`, sus secciones y, si vienen, los cursos de SIVIRENO con las matrículas de cada
+ * uno (specs 033 y 034). Va dentro de la transacción de quien llama; las secciones y matrículas anteriores se borran en cascada
+ * con los estudiantes y los cursos anteriores se borran siempre (el padrón del Excel no tiene cursos).
  */
-export async function guardarPadron(tx: Prisma.TransactionClient, eventoId: number, semestre: string, estudiantes: readonly EstudiantePadron[]): Promise<void> {
+export async function guardarPadron(
+    tx: Prisma.TransactionClient,
+    eventoId: number,
+    semestre: string,
+    estudiantes: readonly EstudiantePadron[],
+    cursos: readonly CursoPadron[] = [],
+): Promise<void> {
     await tx.padronEstudiante.deleteMany({ where: { eventoId } })
+    await tx.padronCurso.deleteMany({ where: { eventoId } })
     await tx.padronEstudiante.createMany({
         data: estudiantes.map((e) => ({
             eventoId,
@@ -38,6 +60,17 @@ export async function guardarPadron(tx: Prisma.TransactionClient, eventoId: numb
     })
     await tx.padronSeccion.createMany({
         data: estudiantes.flatMap((e) => e.secciones.map((s) => ({ eventoId, codigo: e.codigo, ciclo: s.ciclo, seccion: s.seccion, turno: s.turno, cursos: s.cursos }))),
+    })
+    if (!cursos.length) return
+
+    await tx.padronCurso.createMany({ data: cursos.map((c) => ({ eventoId, ...c })) })
+    const guardados = await tx.padronCurso.findMany({ where: { eventoId }, select: { id: true, jpCargaId: true } })
+    const idDeCurso = new Map(guardados.map((c) => [c.jpCargaId, c.id]))
+    await tx.padronMatricula.createMany({
+        data: estudiantes.flatMap((e) => (e.matriculas ?? []).flatMap((jpCargaId) => {
+            const cursoId = idDeCurso.get(jpCargaId)
+            return cursoId === undefined ? [] : [{ eventoId, codigo: e.codigo, cursoId }]
+        })),
     })
 }
 

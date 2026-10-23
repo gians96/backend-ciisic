@@ -47,6 +47,20 @@ export interface SeccionDeFila extends SeccionEstudiante {
     asesores: AsesorRef[]
 }
 
+/**
+ * Un curso de SIVIRENO (programación académica) en que está matriculado un estudiante (spec 034): asignatura, ciclo, sección,
+ * turno y el docente que lo dicta. `id` es el del curso en `padron_cursos`.
+ */
+export interface CursoEstudiante {
+    id: number
+    codigo: string
+    nombre: string
+    ciclo: string
+    seccion: string
+    turno: string | null
+    docente: AsesorRef | null
+}
+
 export interface EstudianteBase {
     id: number
     documento: string
@@ -61,6 +75,11 @@ export interface EstudianteBase {
     seccion: string
     /** Todas las secciones en que cursa. Ausente o vacía = solo la principal (padrones anteriores a la spec 033). */
     secciones?: readonly SeccionEstudiante[]
+    /**
+     * Los cursos de SIVIRENO en que está matriculado (spec 034). Con ellos, sus secciones y sus asesores salen de los cursos
+     * (el docente de cada curso) y `secciones` se ignora; ausente o vacío = padrón del Excel, que sigue por secciones.
+     */
+    cursos?: readonly CursoEstudiante[]
 }
 
 /** Lo que el seguimiento necesita de una inscripción del evento. */
@@ -93,7 +112,9 @@ export interface FilaSeguimiento {
     seccion: string
     /** Todas sus secciones (la principal primero), cada una con sus asesores; en un reporte filtrado, solo las del alcance. */
     secciones: SeccionDeFila[]
-    /** Asesores de todas sus secciones, sin repetir. */
+    /** Sus cursos de SIVIRENO con el docente de cada uno (spec 034); en un reporte filtrado, solo los del alcance. Vacío si el padrón viene del Excel. */
+    cursos: CursoEstudiante[]
+    /** Asesores de todas sus secciones (o los docentes de todos sus cursos), sin repetir. */
     asesores: AsesorRef[]
     situacion: Situacion
     /** Código del estado de la inscripción (`APROBADO`…), `null` si no se inscribió. */
@@ -137,17 +158,32 @@ export interface ResumenAsesor extends Contadores {
     secciones: Array<{ ciclo: string, seccion: string }>
 }
 
+/** Un curso de SIVIRENO con cuántos de sus matriculados pagaron (spec 034). */
+export interface ResumenCurso extends Contadores {
+    id: number
+    codigo: string
+    nombre: string
+    ciclo: string
+    seccion: string
+    turno: string | null
+    docente: AsesorRef | null
+}
+
 export interface ResumenSeguimiento {
     totales: Contadores
     porCiclo: ResumenCiclo[]
     porSeccion: ResumenSeccion[]
     porAsesor: ResumenAsesor[]
+    /** Los cursos de SIVIRENO de las filas dadas, cada uno con sus matriculados (vacío si el padrón viene del Excel). */
+    porCurso: ResumenCurso[]
     /** Estudiantes cuyo ciclo y sección no tienen ningún asesor. */
     alumnosSinAsesor: number
 }
 
 export interface FiltrosSeguimiento {
     asesorId?: number
+    /** Un curso de SIVIRENO (`padron_cursos.id`): sus matriculados (spec 034). */
+    cursoId?: number
     ciclo?: string
     seccion?: string
     turno?: string
@@ -258,9 +294,32 @@ function unirAsesores(secciones: readonly SeccionDeFila[]): AsesorRef[] {
     return [...porId.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
 }
 
+/**
+ * Secciones que salen de los cursos (spec 034): una por ciclo y sección, con cuántos cursos lleva el alumno ahí y los docentes de esos cursos.
+ * Van en el orden de `orden` (el de las secciones de la fila antes de filtrar) o, sin él, la principal primero y el resto en orden académico.
+ */
+function seccionesDeCursos(cursos: readonly CursoEstudiante[], principal: string | null, orden?: ReadonlyMap<string, number>): SeccionDeFila[] {
+    const porClave = new Map<string, SeccionDeFila>()
+    for (const curso of cursos) {
+        const clave = claveSeccion(curso.ciclo, curso.seccion)
+        const seccion = porClave.get(clave) ?? { ciclo: curso.ciclo, seccion: curso.seccion, turno: curso.turno, cursos: 0, asesores: [] }
+        seccion.cursos += 1
+        if (curso.docente && !seccion.asesores.some((asesor) => asesor.id === curso.docente?.id)) seccion.asesores.push(curso.docente)
+        porClave.set(clave, seccion)
+    }
+    const rango = (s: SeccionDeFila) => orden?.get(claveSeccion(s.ciclo, s.seccion)) ?? (claveSeccion(s.ciclo, s.seccion) === principal ? -1 : Number.MAX_SAFE_INTEGER)
+    return [...porClave.values()]
+        .map((s) => ({ ...s, asesores: [...s.asesores].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')) }))
+        .sort((a, b) => rango(a) - rango(b) || compararCiclos(a.ciclo, b.ciclo) || compararSecciones(a.seccion, b.seccion))
+}
+
+const compararCursos = (a: CursoEstudiante, b: CursoEstudiante) =>
+    compararCiclos(a.ciclo, b.ciclo) || compararSecciones(a.seccion, b.seccion) || a.nombre.localeCompare(b.nombre, 'es')
+
 /** Secciones del estudiante con sus asesores: la principal primero y el resto en orden académico. Sin `secciones` solo está la principal. */
 function seccionesDeFila(estudiante: EstudianteBase, asesoresPorSeccion: ReadonlyMap<string, AsesorRef[]>): SeccionDeFila[] {
     const principal = claveSeccion(estudiante.ciclo, estudiante.seccion)
+    if (estudiante.cursos?.length) return seccionesDeCursos(estudiante.cursos, principal)
     const lista: readonly SeccionEstudiante[] = estudiante.secciones?.length
         ? estudiante.secciones
         : [{ ciclo: estudiante.ciclo, seccion: estudiante.seccion, turno: estudiante.turno, cursos: 1 }]
@@ -313,6 +372,7 @@ export function construirFilas(
                 turno: estudiante.turno,
                 seccion: estudiante.seccion,
                 secciones,
+                cursos: [...(estudiante.cursos ?? [])].sort(compararCursos),
                 asesores: unirAsesores(secciones),
                 situacion: situacionDe(inscripcion?.estado),
                 estadoInscripcion: inscripcion?.estado ?? null,
@@ -343,14 +403,35 @@ export function asesoresPorSeccion(asesores: readonly AsesorConSecciones[]): Map
 const igual = (a: string | null, b: string) => (a ?? '').trim().toUpperCase() === b.trim().toUpperCase()
 
 /**
- * Filtros que delimitan el grupo de estudiantes (no su situación): los usan los resúmenes. Ciclo, sección, turno y asesor
- * deben cumplirse en **la misma sección** del estudiante (spec 033). Si el filtro deja solo algunas de sus secciones, la fila
- * sale **proyectada** a ellas (su ciclo, turno y sección pasan a ser los de la primera): quien mira solo ve lo que le corresponde.
+ * Filtros que delimitan el grupo de estudiantes (no su situación): los usan los resúmenes. Ciclo, sección, turno, asesor y curso
+ * deben cumplirse en **la misma sección** (o, con cursos de SIVIRENO, **en el mismo curso**) del estudiante (specs 033 y 034). Si el filtro
+ * deja solo algunas de sus secciones o cursos, la fila sale **proyectada** a ellos (su ciclo, turno y sección pasan a ser los de la primera):
+ * quien mira solo ve lo que le corresponde.
  */
 export function filtrarAlcance(filas: readonly FilaSeguimiento[], filtros: FiltrosSeguimiento): FilaSeguimiento[] {
-    if (filtros.asesorId === undefined && !filtros.ciclo && !filtros.seccion && !filtros.turno) return [...filas]
+    if (filtros.asesorId === undefined && filtros.cursoId === undefined && !filtros.ciclo && !filtros.seccion && !filtros.turno) return [...filas]
     const resultado: FilaSeguimiento[] = []
     for (const fila of filas) {
+        if (fila.cursos.length) {
+            const cursosEnAlcance = fila.cursos.filter((c) =>
+                (filtros.cursoId === undefined || c.id === filtros.cursoId)
+                && (filtros.asesorId === undefined || c.docente?.id === filtros.asesorId)
+                && (!filtros.ciclo || igual(c.ciclo, filtros.ciclo))
+                && (!filtros.seccion || igual(c.seccion, filtros.seccion))
+                && (!filtros.turno || igual(c.turno, filtros.turno)))
+            if (!cursosEnAlcance.length) continue
+            if (cursosEnAlcance.length === fila.cursos.length) {
+                resultado.push(fila)
+                continue
+            }
+            const orden = new Map(fila.secciones.map((s, i) => [claveSeccion(s.ciclo, s.seccion), i]))
+            const secciones = seccionesDeCursos(cursosEnAlcance, null, orden)
+            const [primera] = secciones
+            resultado.push({ ...fila, ciclo: primera.ciclo, turno: primera.turno, seccion: primera.seccion, cursos: cursosEnAlcance, secciones, asesores: unirAsesores(secciones) })
+            continue
+        }
+        // Padrón del Excel (sin cursos): no tiene curso que coincida con un filtro de curso
+        if (filtros.cursoId !== undefined) continue
         const enAlcance = fila.secciones.filter((s) =>
             (filtros.asesorId === undefined || s.asesores.some((asesor) => asesor.id === filtros.asesorId))
             && (!filtros.ciclo || igual(s.ciclo, filtros.ciclo))
@@ -385,16 +466,20 @@ export interface OpcionesFiltro {
     secciones: Array<{ ciclo: string, seccion: string }>
     turnos: string[]
     asesores: AsesorRef[]
+    /** Los cursos de SIVIRENO del padrón (spec 034); vacío si viene del Excel. */
+    cursos: CursoEstudiante[]
 }
 
 export function opcionesDeFiltro(filas: readonly FilaSeguimiento[], asesores: readonly AsesorConSecciones[]): OpcionesFiltro {
     const entradas = filas.flatMap((fila) => fila.secciones)
     const secciones = new Map(entradas.map((s) => [claveSeccion(s.ciclo, s.seccion), { ciclo: s.ciclo, seccion: s.seccion }]))
+    const cursos = new Map(filas.flatMap((fila) => fila.cursos).map((c) => [c.id, c]))
     return {
         ciclos: [...new Set(entradas.map((s) => s.ciclo))].sort(compararCiclos),
         secciones: [...secciones.values()].sort((a, b) => compararCiclos(a.ciclo, b.ciclo) || compararSecciones(a.seccion, b.seccion)),
         turnos: [...new Set(entradas.map((s) => s.turno).filter((turno): turno is string => Boolean(turno)))].sort(),
         asesores: asesores.map(({ id, nombre }) => ({ id, nombre })).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')),
+        cursos: [...cursos.values()].sort(compararCursos),
     }
 }
 
@@ -421,12 +506,13 @@ export function contar(filas: readonly FilaSeguimiento[], conPago: boolean): Con
 }
 
 /**
- * Resumen de las filas dadas: totales, por ciclo, por sección y por asesor. Un estudiante cuenta una vez en los
- * totales, una vez en cada ciclo y en cada sección en que cursa (spec 033) y una vez por cada uno de sus asesores.
+ * Resumen de las filas dadas: totales, por ciclo, por sección, por asesor y por curso. Un estudiante cuenta una vez en los
+ * totales, una vez en cada ciclo, sección y curso en que cursa (specs 033 y 034) y una vez por cada uno de sus asesores.
  */
 export function resumir(filas: readonly FilaSeguimiento[], asesores: readonly AsesorConSecciones[], conPago: boolean): ResumenSeguimiento {
     const ciclos = new Map<string, { ciclo: string, filas: Map<number, FilaSeguimiento> }>()
-    const secciones = new Map<string, { ciclo: string, seccion: string, turnos: Set<string>, asesores: AsesorRef[], filas: FilaSeguimiento[] }>()
+    const secciones = new Map<string, { ciclo: string, seccion: string, turnos: Set<string>, asesores: Map<number, AsesorRef>, filas: FilaSeguimiento[] }>()
+    const cursos = new Map<number, { curso: CursoEstudiante, filas: FilaSeguimiento[] }>()
     for (const fila of filas) {
         for (const s of fila.secciones) {
             const cicloClave = s.ciclo.toUpperCase()
@@ -435,10 +521,16 @@ export function resumir(filas: readonly FilaSeguimiento[], asesores: readonly As
             ciclos.set(cicloClave, delCiclo)
 
             const clave = claveSeccion(s.ciclo, s.seccion)
-            const delGrupo = secciones.get(clave) ?? { ciclo: s.ciclo, seccion: s.seccion, turnos: new Set<string>(), asesores: s.asesores, filas: [] }
+            const delGrupo = secciones.get(clave) ?? { ciclo: s.ciclo, seccion: s.seccion, turnos: new Set<string>(), asesores: new Map<number, AsesorRef>(), filas: [] }
             if (s.turno) delGrupo.turnos.add(s.turno)
+            for (const asesor of s.asesores) delGrupo.asesores.set(asesor.id, asesor)
             delGrupo.filas.push(fila)
             secciones.set(clave, delGrupo)
+        }
+        for (const curso of fila.cursos) {
+            const delCurso = cursos.get(curso.id) ?? { curso, filas: [] }
+            delCurso.filas.push(fila)
+            cursos.set(curso.id, delCurso)
         }
     }
 
@@ -447,8 +539,27 @@ export function resumir(filas: readonly FilaSeguimiento[], asesores: readonly As
         .sort((a, b) => compararCiclos(a.ciclo, b.ciclo))
 
     const porSeccion = [...secciones.values()]
-        .map((g) => ({ ciclo: g.ciclo, seccion: g.seccion, turnos: [...g.turnos].sort(), asesores: g.asesores, ...contar(g.filas, conPago) }))
+        .map((g) => ({
+            ciclo: g.ciclo,
+            seccion: g.seccion,
+            turnos: [...g.turnos].sort(),
+            asesores: [...g.asesores.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')),
+            ...contar(g.filas, conPago),
+        }))
         .sort((a, b) => compararCiclos(a.ciclo, b.ciclo) || compararSecciones(a.seccion, b.seccion))
+
+    const porCurso = [...cursos.values()]
+        .map(({ curso, filas: delCurso }): ResumenCurso => ({
+            id: curso.id,
+            codigo: curso.codigo,
+            nombre: curso.nombre,
+            ciclo: curso.ciclo,
+            seccion: curso.seccion,
+            turno: curso.turno,
+            docente: curso.docente,
+            ...contar(delCurso, conPago),
+        }))
+        .sort(compararCursos)
 
     const porAsesor = asesores
         .map((asesor): ResumenAsesor => ({
@@ -464,6 +575,7 @@ export function resumir(filas: readonly FilaSeguimiento[], asesores: readonly As
         porCiclo,
         porSeccion,
         porAsesor,
+        porCurso,
         alumnosSinAsesor: filas.filter((fila) => fila.asesores.length === 0).length,
     }
 }

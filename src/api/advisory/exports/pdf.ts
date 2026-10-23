@@ -176,6 +176,26 @@ export function generarPdf(datos: DatosReporte): Promise<Buffer> {
                 ]),
             )
 
+            // Cursos de SIVIRENO (spec 034): curso, sección, docente y cuántos de sus matriculados pagaron
+            if (datos.resumen.porCurso.length) {
+                dibujante.titulo(`Por curso (${datos.resumen.porCurso.length})`)
+                const anchoNumericoCurso = columnasNumericas.reduce((suma, c) => suma + c.ancho, 0)
+                const anchoDocente = ver('Asesores') ? 170 : 0
+                dibujante.tabla(
+                    [
+                        { titulo: 'Curso', ancho: 782 - 28 - 34 - 28 - anchoNumericoCurso - anchoDocente },
+                        { titulo: 'Ciclo', ancho: 28, centrar: true }, { titulo: 'Sec.', ancho: 34, centrar: true }, { titulo: 'Turno', ancho: 28, centrar: true },
+                        ...columnasNumericas,
+                        ...(ver('Asesores') ? [{ titulo: 'Docente', ancho: anchoDocente }] : []),
+                    ],
+                    datos.resumen.porCurso.map((r) => [
+                        { texto: r.nombre }, { texto: r.ciclo }, { texto: r.seccion }, { texto: r.turno ?? '' },
+                        ...contadores.map((c) => ({ texto: String(c.valor(r)) })),
+                        ...(ver('Asesores') ? [{ texto: r.docente?.nombre ?? '' }] : []),
+                    ]),
+                )
+            }
+
             if (datos.conTablaDeAsesores) {
                 dibujante.titulo('Por asesor')
                 const anchoNumerico = columnasNumericas.reduce((suma, c) => suma + c.ancho, 0)

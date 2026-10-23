@@ -71,7 +71,7 @@ describe('página común de los docentes: vista con el DNI', () => {
         expect(d.totales).toEqual({ alumnos: 2, pagaron: 1, enRevision: 1, rechazados: 0, sinInscripcion: 0, noPagaron: 1, avance: 0.5 })
         expect(d.secciones).toEqual([{ ciclo: 'I', seccion: 'A', turnos: ['M'], alumnos: 2, pagaron: 1, enRevision: 1, rechazados: 0, sinInscripcion: 0, noPagaron: 1, avance: 0.5 }])
         expect(d.alumnos.map((a: { codigo: string }) => a.codigo)).toEqual(['2621010001', '2621010002'])
-        expect(d.alumnos[0]).toEqual({ nombre: 'ALUMNO 1', codigo: '2621010001', ciclo: 'I', seccion: 'A', turno: 'M', secciones: ['I-A'], celular: '920301747', situacion: 'PAGADO' })
+        expect(d.alumnos[0]).toEqual({ nombre: 'ALUMNO 1', codigo: '2621010001', ciclo: 'I', seccion: 'A', turno: 'M', secciones: ['I-A'], cursos: [], celular: '920301747', situacion: 'PAGADO' })
     })
 
     it('un alumno que cursa también en la sección de otro docente aparece una vez y solo con las secciones de este docente (spec 033)', async () => {
@@ -88,6 +88,26 @@ describe('página común de los docentes: vista con el DNI', () => {
         expect(d.alumnos).toHaveLength(1)
         expect(d.alumnos[0]).toMatchObject({ codigo: '2621010001', ciclo: 'I', seccion: 'A', secciones: ['I-A'] })
         expect(JSON.stringify(r.body)).not.toMatch(/II-B|CÁRDENAS/)
+    })
+
+    it('con cursos de SIVIRENO (spec 034) el docente ve sus cursos y los alumnos de ellos, sin los cursos ni el docente de otro curso del alumno', async () => {
+        const matricula = (id: number, nombre: string, ciclo: string, seccion: string, asesor: { id: number, nombre: string }) =>
+            ({ curso: { id, codigo: `ISES${id}`, nombre, ciclo, seccion, turno: 'M', asesor } })
+        const mio = matricula(1, 'PROGRAMACIÓN WEB', 'I', 'A', { id: 7, nombre: 'DRA. ANGOMA ASTUCURI MIRIAM' })
+        const ajeno = matricula(2, 'REDES SECRETAS', 'II', 'B', { id: 8, nombre: 'MG. CÁRDENAS LINO CÉSAR ANDY' })
+        // El alumno 1 cursa un curso de la docente 7 y uno de otro docente; el 2, solo el de ella; el 3, solo el del otro docente
+        m.padronEstudiante.findMany.mockResolvedValue([
+            alumno(1, { matriculas: [ajeno, mio] }),
+            alumno(2, { matriculas: [mio] }),
+            alumno(3, { ciclo: 'II', seccion: 'B', turno: 'T', nombre: 'CÁRDENAS RÍOS DIEGO', celular: null, matriculas: [ajeno] }),
+        ])
+        const r = await request(app).post(RUTA).send({ documento: DNI })
+        const d = r.body.data
+        expect(d.totales.alumnos).toBe(2)
+        expect(d.cursos).toEqual([{ id: 1, codigo: 'ISES1', nombre: 'PROGRAMACIÓN WEB', ciclo: 'I', seccion: 'A', turno: 'M', alumnos: 2, pagaron: 1, enRevision: 1, rechazados: 0, sinInscripcion: 0, noPagaron: 1, avance: 0.5 }])
+        expect(d.alumnos.map((a: { codigo: string }) => a.codigo)).toEqual(['2621010001', '2621010002'])
+        expect(d.alumnos[0].cursos).toEqual([{ id: 1, codigo: 'ISES1', nombre: 'PROGRAMACIÓN WEB', ciclo: 'I', seccion: 'A', turno: 'M' }])
+        expect(JSON.stringify(r.body)).not.toMatch(/REDES SECRETAS|CÁRDENAS|II-B/)
     })
 
     it('nunca devuelve el DNI del docente, ni DNI, correo o montos de los estudiantes, ni a otros asesores', async () => {

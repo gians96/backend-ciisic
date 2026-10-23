@@ -7,6 +7,8 @@ import {
     normalizarCorreo,
     normalizarDocumento,
     type AsesorConSecciones,
+    type AsesorRef,
+    type CursoEstudiante,
     type FilaSeguimiento,
     type InscripcionBase,
 } from './seguimiento'
@@ -47,7 +49,15 @@ const unicos = (valores: readonly string[]) => [...new Set(valores.filter(Boolea
  */
 export async function cargarSeguimiento(eventoId: number, conPago: boolean): Promise<Seguimiento> {
     const [padron, asesores] = await Promise.all([
-        prisma.padronEstudiante.findMany({ where: { eventoId }, include: { secciones: true }, orderBy: [{ ciclo: 'asc' }, { seccion: 'asc' }, { nombre: 'asc' }] }),
+        prisma.padronEstudiante.findMany({
+            where: { eventoId },
+            include: {
+                secciones: true,
+                // Los cursos de SIVIRENO en que está matriculado, con su docente (spec 034)
+                matriculas: { select: { curso: { select: { id: true, codigo: true, nombre: true, ciclo: true, seccion: true, turno: true, asesor: { select: { id: true, nombre: true } } } } } },
+            },
+            orderBy: [{ ciclo: 'asc' }, { seccion: 'asc' }, { nombre: 'asc' }],
+        }),
         prisma.asesor.findMany({ where: { eventoId }, include: { secciones: true }, orderBy: { nombre: 'asc' } }),
     ])
 
@@ -90,10 +100,28 @@ export async function cargarSeguimiento(eventoId: number, conPago: boolean): Pro
         secciones: asesor.secciones.map(({ ciclo, seccion }) => ({ ciclo, seccion })),
     }))
 
+    // Con cursos de SIVIRENO, sus secciones y sus asesores salen de los cursos; sin ellos (Excel), de `padron_secciones`
+    const estudiantes = padron.map(({ matriculas, ...estudiante }) => ({
+        ...estudiante,
+        cursos: (matriculas ?? []).map(({ curso }): CursoEstudiante => ({
+            id: curso.id,
+            codigo: curso.codigo,
+            nombre: curso.nombre,
+            ciclo: curso.ciclo,
+            seccion: curso.seccion,
+            turno: curso.turno,
+            docente: curso.asesor ? { id: curso.asesor.id, nombre: curso.asesor.nombre } : null,
+        })),
+    }))
+
+    // Con cursos de SIVIRENO el docente de un alumno es el de **sus** cursos: quien no tiene curso queda sin docente (no se le asigna el de una sección)
+    const hayCursos = estudiantes.some((e) => e.cursos.length > 0)
+    const docentesPorSeccion = hayCursos ? new Map<string, AsesorRef[]>() : asesoresPorSeccion(asesoresConSecciones)
+
     return {
         semestre: padron[0]?.semestre ?? null,
         importadoEn: padron.reduce<Date | null>((ultimo, e) => (ultimo === null || e.creadoEn > ultimo ? e.creadoEn : ultimo), null),
         asesores: asesoresConSecciones,
-        filas: construirFilas(padron, asesoresPorSeccion(asesoresConSecciones), [...inscripciones.values()], conPago),
+        filas: construirFilas(estudiantes, docentesPorSeccion, [...inscripciones.values()], conPago),
     }
 }
