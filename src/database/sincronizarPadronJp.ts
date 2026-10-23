@@ -21,7 +21,7 @@ import { claveSeccion, etiquetaSeccion } from '../api/advisory/services/seguimie
  *   conservando el enlace de cada docente; los docentes que no están en la designación no se tocan.
  *
  *   JP_DATABASE_URL=mysql://usuario:clave@host:3306/jp \
- *   npm run padron:desde-jp:dev -- --evento ciisic-viii --asesores ruta/asesores.json [--semestre 2026-2] [--carrera IS] [--aplicar] [--csv ruta.csv]
+ *   npm run padron:desde-jp:dev -- --evento ciisic-viii-2026 --asesores ruta/asesores.json [--semestre 2026-2] [--carrera IS] [--aplicar] [--csv ruta.csv]
  *
  * `--csv` guarda quién quedó fuera de JP (dato personal: no lo subas al repositorio). Antes de aplicar en producción, respaldo con `mysqldump`.
  */

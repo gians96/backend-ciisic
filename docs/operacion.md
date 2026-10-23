@@ -288,7 +288,7 @@ y desde una máquina que llegue a la base de JP y a la del congreso.
    El nombre debe ser el del docente en el panel (se empareja sin acentos ni mayúsculas); uno que no exista se crea.
 4. **Simulación** (no escribe nada): `DATABASE_URL` apunta a la base del congreso y `JP_DATABASE_URL` a la de JP (usuario de solo lectura):
    ```bash
-   JP_DATABASE_URL='mysql://usuario:clave@host:3306/jp' npm run padron:desde-jp:dev -- --evento ciisic-viii --asesores ../respaldos/asesores-2026-2.json --csv ../respaldos/padron-jp-fuera.csv
+   JP_DATABASE_URL='mysql://usuario:clave@host:3306/jp' npm run padron:desde-jp:dev -- --evento ciisic-viii-2026 --asesores ../respaldos/asesores-2026-2.json --csv ../respaldos/padron-jp-fuera.csv
    ```
    Revisa alumnos por grupo, quiénes no tienen matrícula en JP, secciones sin grupo y qué cambia en cada docente.
 5. **Aplicar**: el mismo comando con `--aplicar` (una transacción; los enlaces personales de los docentes no cambian). Luego `prisma/preflight/verificar-padron-jp.sql`.
