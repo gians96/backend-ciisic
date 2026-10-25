@@ -8,4 +8,5 @@
 - [x] T006 Pruebas (`tests/specialized-talk/enlace-aforo.test.ts`), permisos, matriz de rutas (191) y rutas protegidas
 - [x] T007 Contrato, AGENTS.md, README, `docs/data-model.md` y `docs/arquitectura-ecosistema.md`
 - [x] T008 Probado contra MySQL real (copia aislada de la BD local): `migrate deploy` sin errores, `migrate diff` vacío, enlace creado desde el panel con un Owner y la página de la landing con cifras sembradas (lleno, casi lleno con virtuales que no cuentan, cancelado que no cuenta), token alterado = enlace no válido
+- [x] T010 Lista de inscritos por ponencia (`personas`: nombre, modo y `asistioEn`, por apellido; sin documento, correo, celular ni procedencia), pedida por el usuario
 - [ ] T009 Producción: desplegar (la migración solo crea una tabla); el Owner crea el enlace desde el panel

@@ -289,7 +289,8 @@ spec 012; la landing la sirve desde su BFF), `POST /inscriptions`, `/student-ver
   (`especializadas.enlace_aforo`, global, solo Owner) lo administra con `GET|POST|DELETE /api/v1/events/:eventId/specialized-talks/occupancy-link` (`{ regenerar? }`).
   La landing lo usa con `GET /api/v1/site/specialized-talk-occupancy`: token del evento en `X-Api-Key` **y** el del enlace en `X-Link-Token` (nunca en la URL;
   en el navegador va tras el `#` de `/aforo-ponencias`). Responde por ponencia publicada el `cupo`, los `inscritos` presenciales, `cuposDisponibles`, `llena` y
-  `asistentes`, sin datos de personas; un token faltante, mal formado, desconocido, desactivado o de otro evento da el mismo `404 LINK_NOT_FOUND`. Cambio aditivo
+  `asistentes`, y en `personas` los inscritos vigentes con **solo** nombre, modo y hora de asistencia (nunca documento, correo ni celular); un token faltante,
+  mal formado, desconocido, desactivado o de otro evento da el mismo `404 LINK_NOT_FOUND`. Cambio aditivo
   (una tabla nueva, un permiso nuevo y rutas nuevas).
 
 ### Delegaciones con planes propios (specs 021, 022, 023 y 029)

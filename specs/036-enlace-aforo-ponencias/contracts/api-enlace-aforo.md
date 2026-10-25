@@ -40,7 +40,12 @@ Encabezados: `X-Api-Key: <token del evento>` y `X-Link-Token: <token del enlace>
         "ambiente": "Laboratorio 6", "modalidad": "PRESENCIAL",
         "ponente": { "nombre": "Mg. Claudio Huancahuire", "foto": "/images/ponentes/2026/especializados/claudio-huancahuire.webp", "externo": false },
         "coponentes": [],
-        "cupo": 20, "inscritos": 14, "cuposDisponibles": 6, "llena": false, "asistentes": 9, "orden": 0
+        "cupo": 20, "inscritos": 14, "cuposDisponibles": 6, "llena": false, "asistentes": 9,
+        "personas": [
+          { "nombre": "Ana María Álvarez Soto", "modo": "PRESENCIAL", "asistioEn": "2026-10-27T17:03:00.000Z" },
+          { "nombre": "Luis Mendoza Paz", "modo": "VIRTUAL", "asistioEn": null }
+        ],
+        "orden": 0
       }
     ]
   }
@@ -51,7 +56,9 @@ Encabezados: `X-Api-Key: <token del evento>` y `X-Link-Token: <token del enlace>
 - `cupo`: aforo presencial (`null` = sin límite, y entonces `cuposDisponibles` es `null` y `llena` es `false`).
 - `inscritos`: inscripciones **vigentes y presenciales** (las que ocupan aforo). Las virtuales no ocupan aforo y no se cuentan aquí.
 - `asistentes`: inscripciones vigentes con la asistencia marcada en puerta.
-- Nunca trae datos de personas, biografías, precios ni `publicada`. Además lleva `X-Robots-Tag: noindex, nofollow`.
+- `personas`: los inscritos **vigentes** (presenciales y virtuales; los cancelados no) ordenados por apellido y nombre, con **solo** `nombre`
+  (nombres y apellidos), `modo` (`PRESENCIAL` | `VIRTUAL`) y `asistioEn` (ISO, o `null` si aún no asistió). `[]` sin inscritos.
+- Nunca trae documento, correo, celular ni procedencia de las personas, ni biografías, precios o `publicada`. Además lleva `X-Robots-Tag: noindex, nofollow`.
 
 Errores: `401 EVENT_TOKEN_REQUIRED` / `INVALID_EVENT_TOKEN` (token del sitio), `404 LINK_NOT_FOUND` (el **mismo** para un token del enlace faltante, mal
 formado, desconocido, desactivado o de otro evento), `429` (límites del sitio por visitante y por token).

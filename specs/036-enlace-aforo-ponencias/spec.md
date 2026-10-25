@@ -22,8 +22,11 @@ no cambia.
 - **Un solo error**: token faltante, mal formado, desconocido, desactivado o de otro evento = el mismo `404 LINK_NOT_FOUND`.
 - **Qué muestra** (por ponencia **publicada**): tema, fecha, horario, duración, ambiente, modalidad, ponente y coponentes (nombre, foto y si es externo),
   `cupo` (aforo presencial; `null` = sin límite), `inscritos` (**solo presenciales vigentes**: los que ocupan aforo), `cuposDisponibles`, `llena` y
-  `asistentes` (inscripciones vigentes con asistencia en puerta). **Nunca** datos de personas (nombres, documentos, correos), ni biografías, precios o
-  si está publicada. Los virtuales no se muestran aparte (decisión del usuario).
+  `asistentes` (inscripciones vigentes con asistencia en puerta). Los virtuales no se cuentan aparte (decisión del usuario). Ni biografías, precios
+  ni si está publicada.
+- **Lista de inscritos** (pedida por el usuario el mismo día, 2026-10-25): cada ponencia trae `personas`, los inscritos **vigentes** (presenciales y
+  virtuales) ordenados por apellido y nombre, con **solo** `nombre`, `modo` (`PRESENCIAL` | `VIRTUAL`) y `asistioEn` (o `null`). **Nunca** documento,
+  correo, celular ni procedencia: el enlace llega a quien lo reciba (como el enlace por ciclo, que tampoco trae celular). Los cancelados no salen.
 - El último acceso se anota como máximo cada 5 minutos (dato de cortesía para el panel: «Se abrió hace …»). Respuestas `no-store` y `noindex`.
 
 ## Requisitos
@@ -31,10 +34,11 @@ no cambia.
 - **FR-001**: `GET|POST|DELETE /v1/events/:eventId/specialized-talks/occupancy-link` con `especializadas.enlace_aforo`, límite por cuenta
   (`limiteEnlacesAsesores`) y `Cache-Control: no-store`. `POST` crea si falta (si ya existe lo devuelve igual) y con `{ regenerar: true }` lo renueva.
 - **FR-002**: `GET /v1/site/specialized-talk-occupancy` con `requireTokenEvento`, `limiteLecturaPublica` y `limiteTokenLectura`; token del enlace en `X-Link-Token`.
-- **FR-003**: la respuesta del sitio no lleva datos de personas (lo comprueba `tests/specialized-talk/enlace-aforo.test.ts`).
+- **FR-003**: de las personas la respuesta del sitio solo lleva nombre, modo y hora de asistencia; nunca documento, correo, celular ni procedencia
+  (lo comprueba `tests/specialized-talk/enlace-aforo.test.ts`).
 - **FR-004**: migración aditiva `20261027120000_enlace_aforo_ponencias` (solo crea la tabla).
 
 ## Fuera de alcance
 
 - Varios enlaces por evento o con vencimiento automático.
-- Listas de personas o descargas desde el enlace.
+- Datos de contacto o documentos de las personas, y descargas desde el enlace.

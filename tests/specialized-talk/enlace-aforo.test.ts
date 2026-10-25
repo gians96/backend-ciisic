@@ -114,17 +114,20 @@ describe('aforo con el enlace (API del sitio)', () => {
         enlaces.push({ id: 1, eventoId: 2, token: TOKEN, creadoEn: new Date('2026-10-25T10:00:00.000Z'), ultimoAcceso: null })
     })
 
-    it('muestra por tema el aforo, los inscritos presenciales, los cupos libres y la asistencia, sin datos de personas', async () => {
+    it('muestra por tema el aforo, los inscritos presenciales, los cupos libres, la asistencia y los nombres, sin otros datos de personas', async () => {
         const lab = sembrarPonencia(m.__bd, { tema: 'Big Data', ambiente: 'Laboratorio 6', cupo: 3, ponenteNombre: 'Mg. Claudio', ponenteBio: 'Biografía privada', ponenteFoto: '/images/ponentes/claudio.webp' })
         const aula = sembrarPonencia(m.__bd, { tema: 'Investigación', ambiente: 'Aula 2', cupo: 40, coponentes: [{ nombre: 'Dr. Javier', bio: 'Otra bio', foto: null, externo: true }] })
-        sembrarPonencia(m.__bd, { tema: 'Borrador', publicada: false })
+        const borrador = sembrarPonencia(m.__bd, { tema: 'Borrador', publicada: false })
         sembrarPonencia(m.__bd, { tema: 'Otro evento', eventoId: 3 })
-        const personas = [1, 2, 3, 4].map((n) => sembrarAsistente(m.__bd, { numeroDocumento: `4000000${n}`, nombres: `Persona${n}`, correo: `p${n}@gmail.com` }))
-        sembrarInscripcion(m.__bd, { ponenciaId: lab.id, asistenteId: personas[0]!.id, asistioEn: new Date() })
+        const apellidos = ['Zapata Ruiz', 'Álvarez Soto', 'Mendoza Paz', 'Cárdenas Ríos']
+        const personas = [1, 2, 3, 4].map((n) => sembrarAsistente(m.__bd, { numeroDocumento: `4000000${n}`, nombres: `Persona${n}`, apellidos: apellidos[n - 1], correo: `p${n}@gmail.com`, celular: `98765432${n}`, procedencia: 'EXTERNO' }))
+        const llegada = new Date('2026-10-27T17:03:00.000Z')
+        sembrarInscripcion(m.__bd, { ponenciaId: lab.id, asistenteId: personas[0]!.id, asistioEn: llegada })
         sembrarInscripcion(m.__bd, { ponenciaId: lab.id, asistenteId: personas[1]!.id })
         sembrarInscripcion(m.__bd, { ponenciaId: lab.id, asistenteId: personas[2]!.id, modoAsistencia: 'VIRTUAL' })
         sembrarInscripcion(m.__bd, { ponenciaId: lab.id, asistenteId: personas[3]!.id, estado: 'CANCELADO' })
         sembrarInscripcion(m.__bd, { ponenciaId: aula.id, asistenteId: personas[3]!.id })
+        sembrarInscripcion(m.__bd, { ponenciaId: borrador.id, asistenteId: personas[0]!.id })
 
         const r = await request(app).get(AFORO).set({ ...sitio, 'X-Link-Token': TOKEN })
         expect(r.status).toBe(200)
@@ -137,8 +140,19 @@ describe('aforo con el enlace (API del sitio)', () => {
         expect(porTema('Big Data')).toMatchObject({ ambiente: 'Laboratorio 6', cupo: 3, inscritos: 2, cuposDisponibles: 1, llena: false, asistentes: 1, ponente: { nombre: 'Mg. Claudio', foto: '/images/ponentes/claudio.webp', externo: false } })
         expect(porTema('Investigación')).toMatchObject({ cupo: 40, inscritos: 1, cuposDisponibles: 39, asistentes: 0, coponentes: [{ nombre: 'Dr. Javier', foto: null, externo: true }] })
 
+        // Los inscritos vigentes (presenciales y virtuales) por apellido, solo con nombre, modo y asistencia; el cancelado no sale
+        expect(porTema('Big Data').personas).toEqual([
+            { nombre: 'Persona2 Álvarez Soto', modo: 'PRESENCIAL', asistioEn: null },
+            { nombre: 'Persona3 Mendoza Paz', modo: 'VIRTUAL', asistioEn: null },
+            { nombre: 'Persona1 Zapata Ruiz', modo: 'PRESENCIAL', asistioEn: llegada.toISOString() },
+        ])
+        expect(porTema('Investigación').personas).toEqual([{ nombre: 'Persona4 Cárdenas Ríos', modo: 'PRESENCIAL', asistioEn: null }])
+
         const texto = JSON.stringify(r.body)
-        for (const privado of ['4000000', 'Persona', '@gmail.com', 'Biografía privada', 'Otra bio']) expect(texto).not.toContain(privado)
+        for (const privado of ['4000000', '98765432', '@gmail.com', 'EXTERNO', 'Biografía privada', 'Otra bio']) expect(texto).not.toContain(privado)
+        for (const p of r.body.data.ponencias) {
+            for (const persona of p.personas) expect(Object.keys(persona).sort()).toEqual(['asistioEn', 'modo', 'nombre'])
+        }
         for (const p of r.body.data.ponencias) {
             for (const campo of ['precio', 'esGratuita', 'inscripciones', 'asistentesLista', 'publicada']) expect(p).not.toHaveProperty(campo)
             expect(p.ponente).not.toHaveProperty('bio')

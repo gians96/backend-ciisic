@@ -189,7 +189,8 @@ y Google. Documentación: [`docs/`](docs/README.md).
   como los de docentes y ciclos). Lo ven, crean, renuevan y desactivan **solo el Owner** (`especializadas.enlace_aforo`, global y en `PERMISOS_SOLO_OWNER`) con
   `GET|POST|DELETE …/specialized-talks/occupancy-link`. La landing lo abre con `GET /v1/site/specialized-talk-occupancy`: token del sitio **y** el del enlace en `X-Link-Token`
   (nunca en una URL); el enlace debe ser del mismo evento que el token del sitio. Da por ponencia publicada `cupo`, `inscritos` (**solo presenciales** vigentes), `cuposDisponibles`,
-  `llena` y `asistentes` (`aPonenciaAforo`): **nunca** nombres, documentos, correos, biografías ni precios (hay una prueba que lo comprueba). Cualquier token inválido o de otro evento =
+  `llena`, `asistentes` y `personas` (`aPonenciaAforo`): de cada inscrito vigente **solo** nombre, modo y `asistioEn`, por apellido; **nunca** documento, correo, celular, procedencia,
+  biografías ni precios (hay una prueba que lo comprueba). Cualquier token inválido o de otro evento =
   el mismo `404 LINK_NOT_FOUND`. Respuestas `no-store` y `noindex`.
 - Enlace público por ciclo (spec 027): igual que el del docente pero por ciclo completo, en su propia tabla `enlaces_ciclo` (el padrón se reemplaza en cada
   carga, así que el enlace no puede vivir en él; recargarlo no lo toca). `GET /v1/public/cycle` (+ `/export`) con `X-Link-Token`: nombre, código, ciclo, sección,

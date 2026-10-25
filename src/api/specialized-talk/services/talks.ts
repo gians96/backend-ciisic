@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client'
-import type { ModalidadPonencia, PonenciaEspecializada } from '@prisma/client'
+import type { ModalidadAsistencia, ModalidadPonencia, PonenciaEspecializada } from '@prisma/client'
 import { prisma } from '../../../database/prisma'
 import { conflict, notFound } from '../../../core/http-error'
 import { aColumnaFecha, fechaSoloDia, horaLima, instanteLima } from '../../../core/fechas'
@@ -80,10 +80,22 @@ export function aPonenciaPublica(ponencia: PonenciaEspecializada, presenciales: 
 }
 
 /**
- * Respuesta del enlace público del aforo (spec 036): el aforo presencial, cuántos lo ocupan (`inscritos`, solo presenciales)
- * y cuántos asistieron. De los ponentes solo nombre, foto y si es externo; nada de inscritos, precio ni biografía.
+ * Inscrito de una ponencia en el enlace del aforo (spec 036): **solo** su nombre, si asiste presencial o virtual y cuándo
+ * marcó asistencia. Nunca documento, correo, celular ni procedencia: el enlace llega a quien lo reciba.
  */
-export function aPonenciaAforo(ponencia: PonenciaEspecializada, conteo: Conteo = SIN_INSCRITOS) {
+export interface PersonaAforo {
+    nombre: string
+    modo: ModalidadAsistencia
+    /** ISO; `null` si aún no asistió. */
+    asistioEn: string | null
+}
+
+/**
+ * Respuesta del enlace público del aforo (spec 036): el aforo presencial, cuántos lo ocupan (`inscritos`, solo presenciales),
+ * cuántos asistieron y la lista de inscritos vigentes (`personas`, presenciales y virtuales, por apellido). De los ponentes solo
+ * nombre, foto y si es externo; nada de precio ni biografía.
+ */
+export function aPonenciaAforo(ponencia: PonenciaEspecializada, conteo: Conteo = SIN_INSCRITOS, personas: PersonaAforo[] = []) {
     const base = datosBase(ponencia)
     const disponibles = cuposDisponibles(ponencia, conteo.presenciales)
     const ponente = ({ nombre, foto, externo }: { nombre: string, foto: string | null, externo: boolean }) => ({ nombre, foto, externo })
@@ -103,6 +115,7 @@ export function aPonenciaAforo(ponencia: PonenciaEspecializada, conteo: Conteo =
         cuposDisponibles: disponibles,
         llena: disponibles === 0,
         asistentes: conteo.asistentes,
+        personas,
         orden: base.orden,
     }
 }
@@ -165,13 +178,38 @@ export async function listarPublicas(eventoId: number) {
     return ponencias.map((ponencia) => aPonenciaPublica(ponencia, conteos.get(ponencia.id)?.presenciales ?? 0))
 }
 
-/** Ponencias publicadas del evento con su aforo, inscritos presenciales y asistencia (enlace público, spec 036). */
+const porApellido = new Intl.Collator('es', { sensitivity: 'base', numeric: true })
+
+/**
+ * Inscritos vigentes de las ponencias publicadas del evento, agrupados por ponencia y ordenados por apellido y nombre. Solo
+ * se leen los nombres y la asistencia: lo demás de la persona no sale de la base.
+ */
+async function personasPorPonencia(eventoId: number): Promise<Map<number, PersonaAforo[]>> {
+    const filas = await prisma.inscripcionPonencia.findMany({
+        where: { estado: 'INSCRITO', ponencia: { eventoId, publicada: true } },
+        select: { ponenciaId: true, modoAsistencia: true, asistioEn: true, asistente: { select: { nombres: true, apellidos: true } } },
+    })
+    filas.sort((a, b) => porApellido.compare(a.asistente.apellidos, b.asistente.apellidos) || porApellido.compare(a.asistente.nombres, b.asistente.nombres))
+    const grupos = new Map<number, PersonaAforo[]>()
+    for (const fila of filas) {
+        const persona: PersonaAforo = {
+            nombre: `${fila.asistente.nombres} ${fila.asistente.apellidos}`.replace(/\s+/g, ' ').trim(),
+            modo: fila.modoAsistencia,
+            asistioEn: fila.asistioEn?.toISOString() ?? null,
+        }
+        grupos.set(fila.ponenciaId, [...(grupos.get(fila.ponenciaId) ?? []), persona])
+    }
+    return grupos
+}
+
+/** Ponencias publicadas del evento con su aforo, inscritos presenciales, asistencia y la lista de inscritos (enlace público, spec 036). */
 export async function listarAforo(eventoId: number) {
-    const [ponencias, conteos] = await Promise.all([
+    const [ponencias, conteos, personas] = await Promise.all([
         prisma.ponenciaEspecializada.findMany({ where: { eventoId, publicada: true }, orderBy: ORDEN }),
         conteosPorPonencia({ eventoId }),
+        personasPorPonencia(eventoId),
     ])
-    return ponencias.map((ponencia) => aPonenciaAforo(ponencia, conteos.get(ponencia.id)))
+    return ponencias.map((ponencia) => aPonenciaAforo(ponencia, conteos.get(ponencia.id), personas.get(ponencia.id)))
 }
 
 /** Dos ponencias presenciales no pueden usar el mismo ambiente a la vez (el nombre se compara sin distinguir mayúsculas). */
