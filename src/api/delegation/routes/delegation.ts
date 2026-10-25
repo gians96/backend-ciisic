@@ -43,7 +43,8 @@ const routes: AppRoute[] = [
 
     // Administración (spec 029). Ver: Tesorero y la Comisión elegida; inscribir (integrantes, datos del grupo, vouchers):
     // la Comisión elegida; gestionar (planes, precios, dominio, links): solo Owner y Administrador. Validar vouchers y
-    // aprobar al grupo es de quien valida inscripciones (Tesorero). Los tres son por evento salvo `gestionar` (global).
+    // aprobar al grupo es de quien valida inscripciones (Tesorero), que también puede borrar un voucher no verificado.
+    // Los tres son por evento salvo `gestionar` (global).
     { method: 'get', path: '/v1/events/:eventId/delegations', handler: controller.list, middlewares: [requirePermiso('delegaciones.ver', delEvento)] },
     {
         method: 'post',
@@ -76,7 +77,13 @@ const routes: AppRoute[] = [
     { method: 'post', path: '/v1/delegations/:id/approve', handler: controller.approve, middlewares: [requirePermiso('inscripciones.validar', delDelegacion)] },
     { method: 'post', path: '/v1/delegations/:id/payments', handler: controller.addPayments, middlewares: [requirePermiso('delegaciones.inscribir', delDelegacion), ...vouchers] },
     { method: 'patch', path: '/v1/delegations/:id/payments/:paymentId', handler: controller.paymentState, middlewares: [requirePermiso('inscripciones.validar', delDelegacion)] },
-    { method: 'delete', path: '/v1/delegations/:id/payments/:paymentId', handler: controller.removePayment, middlewares: [requirePermiso('delegaciones.gestionar', delDelegacion)] },
+    // Borrar un voucher (el servicio rechaza los verificados) lo hace quien configura o quien revisa los pagos (Tesorero)
+    {
+        method: 'delete',
+        path: '/v1/delegations/:id/payments/:paymentId',
+        handler: controller.removePayment,
+        middlewares: [requirePermiso(['delegaciones.gestionar', 'inscripciones.validar'], delDelegacion)],
+    },
     // El voucher lo ve quien revisa pagos
     { method: 'get', path: '/v1/delegations/:id/payments/:paymentId/voucher', handler: controller.paymentVoucher, middlewares: [requirePermiso('pagos.ver', delDelegacion)] },
 ]

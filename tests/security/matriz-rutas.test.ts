@@ -194,7 +194,7 @@ const MATRIZ: Record<Clave, Esperada> = {
     'POST /v1/delegations/:id/approve': g('inscripciones.validar', eventoDeDelegacion),
     'POST /v1/delegations/:id/payments': g('delegaciones.inscribir', eventoDeDelegacion),
     'PATCH /v1/delegations/:id/payments/:paymentId': g('inscripciones.validar', eventoDeDelegacion),
-    'DELETE /v1/delegations/:id/payments/:paymentId': g('delegaciones.gestionar', eventoDeDelegacion),
+    'DELETE /v1/delegations/:id/payments/:paymentId': g(['delegaciones.gestionar', 'inscripciones.validar'], eventoDeDelegacion),
     // El voucher de cada pago lo ve quien revisa pagos
     'GET /v1/delegations/:id/payments/:paymentId/voucher': g('pagos.ver', eventoDeDelegacion),
 

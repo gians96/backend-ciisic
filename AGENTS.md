@@ -170,7 +170,7 @@ y Google. Documentación: [`docs/`](docs/README.md).
   (sin arroba) filtra los correos de los flujos **públicos** (`422 EMAIL_DOMAIN_NOT_ALLOWED`; vale el correo efectivo: el ya registrado si la persona existe): en el individual
   basta el prefijo (`correoPrefijo`) y **no hay Google**; el staff queda exento. **Solo el staff crea delegaciones** (no hay registro público ni `…/tarifa`). Permisos:
   `delegaciones.gestionar` (global: planes, precios, mínimo, dominio, links, borrar voucher), `delegaciones.ver` y `delegaciones.inscribir` (por evento: Tesorero ve; Comisión
-  elegible inscribe) y `inscripciones.validar` (aprobar al grupo y vouchers); una Comisión que crea una delegación la deja con los planes **apagados y a S/ 0** y si manda planes,
+  elegible inscribe) y `inscripciones.validar` (aprobar al grupo y vouchers; también borra un voucher **no verificado**: el verificado primero vuelve a `PENDIENTE`); una Comisión que crea una delegación la deja con los planes **apagados y a S/ 0** y si manda planes,
   mínimo, dominio o link responde `403`. Sin `pagos.ver` los importes, `pago` y los vouchers van en `null`/`[]`; los links solo los ve quien inscribe o gestiona.
   Despliegue: backend primero (su migración convierte las delegaciones existentes y borra `DELEGACIONES`); verificación en `prisma/preflight/verificar-delegaciones-planes.sql`.
 - Seguimiento por asesor (spec 025, `src/api/advisory`): el padrón de estudiantes de la facultad (`padron_estudiantes`) y sus

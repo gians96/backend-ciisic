@@ -459,7 +459,7 @@ del grupo (los `RECHAZADO` y `CANCELADO` no cuentan).
   `DELETE …` (solo integrantes no aprobados), todos `delegaciones.inscribir`.
 - `POST /api/v1/delegations/:id/approve`: aprueba a los integrantes por revisar y envía las credenciales en diferido, una por una (`inscripciones.validar`).
 - Vouchers: `POST /api/v1/delegations/:id/payments` (multipart, `delegaciones.inscribir`), `PATCH …/payments/:paymentId` (`PENDIENTE`, `VERIFICADO` o `RECHAZADO`, `inscripciones.validar`) y
-  `DELETE …` (`delegaciones.gestionar`); el archivo en `GET …/payments/:paymentId/voucher` (`pagos.ver`).
+  `DELETE …` (`delegaciones.gestionar` o `inscripciones.validar`; un voucher verificado responde `409 PAYMENT_VERIFIED`); el archivo en `GET …/payments/:paymentId/voucher` (`pagos.ver`).
 - Se retiran `GET|PUT /api/v1/events/:eventId/delegations/tarifa` (spec 024). Los planes viven en una categoría oculta por delegación: no salen en `registration-categories`.
 - En `GET /api/v1/events/:eventId/inscriptions` y `GET /api/v1/inscriptions/:id` cada fila/detalle incluye `delegacion` (`null` si es individual): `id`, `nombre`, `codigoLink` y
   `totalIntegrantes`; en el detalle también el resumen `pago` (solo con `pagos.ver`).

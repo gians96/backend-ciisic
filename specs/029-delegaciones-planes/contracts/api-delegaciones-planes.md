@@ -31,7 +31,7 @@ delegación (`delegacion_con_kit`, `delegacion_sin_kit`, `delegacion_virtual`).
 ## Staff
 
 Permisos: `delegaciones.ver` (lista y detalle), `delegaciones.inscribir` (datos, integrantes, cambio de plan, subir vouchers; incluye ver),
-`delegaciones.gestionar` (global: configuración, links, borrar voucher), `inscripciones.validar` (aprobar al grupo y verificar/rechazar vouchers) y
+`delegaciones.gestionar` (global: configuración, links, borrar voucher), `inscripciones.validar` (aprobar al grupo, verificar/rechazar y borrar vouchers no verificados) y
 `pagos.ver` (ver el archivo del voucher). Las cuentas por evento solo operan en sus eventos (`403 EVENT_NOT_ASSIGNED`).
 
 ### `GET /api/v1/events/:eventId/delegations` · `GET /api/v1/delegations/:id`
@@ -113,7 +113,7 @@ El código anterior deja de funcionar. Regenerar el individual lo enciende.
 
 ### Vouchers y aprobación
 
-`POST …/payments` (`delegaciones.inscribir`, multipart), `PATCH …/payments/:paymentId` (`inscripciones.validar`), `DELETE …/payments/:paymentId` (`delegaciones.gestionar`),
+`POST …/payments` (`delegaciones.inscribir`, multipart), `PATCH …/payments/:paymentId` (`inscripciones.validar`), `DELETE …/payments/:paymentId` (`delegaciones.gestionar` o `inscripciones.validar`; un voucher `VERIFICADO` responde `409 PAYMENT_VERIFIED`),
 `GET …/payments/:paymentId/voucher` (`pagos.ver`), `POST …/approve` (`inscripciones.validar`).
 
 ## API del sitio (token del evento en `X-Api-Key`, como el resto)

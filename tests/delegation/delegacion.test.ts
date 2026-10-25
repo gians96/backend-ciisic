@@ -1001,18 +1001,27 @@ describe('vouchers de la delegación (panel)', () => {
         expect(m.delegacionPago.update.mock.calls[0][0].data).toEqual({ estado: 'PENDIENTE', motivoRechazo: null, revisadoEn: null, revisadoPorId: null })
     })
 
-    it('un voucher verificado no se elimina; uno pendiente sí, y solo Owner y Administrador', async () => {
+    it('un voucher verificado no se elimina; uno pendiente o rechazado sí, y solo quien configura o valida (no la Comisión)', async () => {
         m.delegacionPago.findFirst.mockResolvedValue({ id: 8, delegacionId: 5, estado: 'VERIFICADO', voucherArchivo: 'voucher-8.pdf' })
-        const verificado = await request(app).delete('/api/v1/delegations/5/payments/8').set('Authorization', administrador())
-        expect(verificado.status).toBe(409)
-        expect(verificado.body.code).toBe('PAYMENT_VERIFIED')
+        for (const autorizacion of [administrador(), tesorero()]) {
+            const verificado = await request(app).delete('/api/v1/delegations/5/payments/8').set('Authorization', autorizacion)
+            expect(verificado.status).toBe(409)
+            expect(verificado.body.code).toBe('PAYMENT_VERIFIED')
+        }
+        expect(m.delegacionPago.delete).not.toHaveBeenCalled()
 
         m.delegacionPago.findFirst.mockResolvedValue({ id: 8, delegacionId: 5, estado: 'PENDIENTE', voucherArchivo: 'voucher-8.pdf' })
-        expect((await request(app).delete('/api/v1/delegations/5/payments/8').set('Authorization', tesorero())).status).toBe(403)
+        expect((await request(app).delete('/api/v1/delegations/5/payments/8').set('Authorization', comision())).status).toBe(403)
         expect(m.delegacionPago.delete).not.toHaveBeenCalled()
-        const ok = await request(app).delete('/api/v1/delegations/5/payments/8').set('Authorization', administrador())
-        expect(ok.status).toBe(200)
-        expect(m.delegacionPago.delete).toHaveBeenCalledWith({ where: { id: 8 } })
+        for (const estado of ['PENDIENTE', 'RECHAZADO']) {
+            m.delegacionPago.findFirst.mockResolvedValue({ id: 8, delegacionId: 5, estado, voucherArchivo: 'voucher-8.pdf' })
+            for (const autorizacion of [administrador(), tesorero()]) {
+                m.delegacionPago.delete.mockClear()
+                const ok = await request(app).delete('/api/v1/delegations/5/payments/8').set('Authorization', autorizacion)
+                expect(ok.status).toBe(200)
+                expect(m.delegacionPago.delete).toHaveBeenCalledWith({ where: { id: 8 } })
+            }
+        }
     })
 
     it('el voucher lo ve quien tiene «pagos.ver»; sin ese permiso, 403', async () => {

@@ -36,7 +36,7 @@ operación interno y la regla de que **el servidor calcula el precio**.
   `GET|PUT /v1/events/:eventId/delegations/tarifa`, y las columnas `eventos.delegaciones_*`.
 - **Permisos**: `delegaciones.gestionar` (global: planes, precios, dominio, links, borrar voucher), `delegaciones.ver` (por evento) y
   `delegaciones.inscribir` (por evento: crear delegación, datos del grupo, integrantes, cambiar plan, subir vouchers). Validar vouchers y
-  aprobar al grupo es `inscripciones.validar`; ver el voucher, `pagos.ver`. Sin `pagos.ver` los importes, `pago` y los vouchers van en
+  aprobar al grupo es `inscripciones.validar` (que también borra un voucher no verificado); ver el voucher, `pagos.ver`. Sin `pagos.ver` los importes, `pago` y los vouchers van en
   `null`/`[]`; los links solo los ve quien inscribe o gestiona. Una Comisión que crea una delegación no fija precios: sus planes nacen
   **apagados y a S/ 0** hasta que un Owner o Administrador los configura (`403 FORBIDDEN` si manda `planes`, `minIntegrantes`, dominio o link).
 
