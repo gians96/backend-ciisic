@@ -7,5 +7,5 @@
 - [x] T005 Rutas `GET|POST|DELETE …/specialized-talks/occupancy-link` y `GET /v1/site/specialized-talk-occupancy`, controlador y validación
 - [x] T006 Pruebas (`tests/specialized-talk/enlace-aforo.test.ts`), permisos, matriz de rutas (191) y rutas protegidas
 - [x] T007 Contrato, AGENTS.md, README, `docs/data-model.md` y `docs/arquitectura-ecosistema.md`
-- [ ] T008 Probado contra MySQL real: `migrate dev`, `migrate diff` vacío y la página de la landing con el enlace del panel
+- [x] T008 Probado contra MySQL real (copia aislada de la BD local): `migrate deploy` sin errores, `migrate diff` vacío, enlace creado desde el panel con un Owner y la página de la landing con cifras sembradas (lleno, casi lleno con virtuales que no cuentan, cancelado que no cuenta), token alterado = enlace no válido
 - [ ] T009 Producción: desplegar (la migración solo crea una tabla); el Owner crea el enlace desde el panel
