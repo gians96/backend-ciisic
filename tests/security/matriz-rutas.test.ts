@@ -113,6 +113,8 @@ const SITIO: readonly Clave[] = [
     'POST /v1/site/specialized-talk-registrations',
     // Verificación previa del congresista (spec 030)
     'POST /v1/site/specialized-talk-eligibility',
+    // Aforo con el enlace público (spec 036): además del token del sitio, el del enlace en X-Link-Token
+    'GET /v1/site/specialized-talk-occupancy',
 ]
 
 const PARTICIPANTE: readonly Clave[] = [
@@ -281,6 +283,10 @@ const MATRIZ: Record<Clave, Esperada> = {
     // Acceso libre del evento (spec 030)
     'GET /v1/events/:eventId/specialized-talks/access': g(['especializadas.ver', 'especializadas.gestionar'], P()),
     'PUT /v1/events/:eventId/specialized-talks/access': g('especializadas.gestionar'),
+    // Enlace público del aforo (spec 036): es una credencial, solo del Owner
+    'GET /v1/events/:eventId/specialized-talks/occupancy-link': g('especializadas.enlace_aforo'),
+    'POST /v1/events/:eventId/specialized-talks/occupancy-link': g('especializadas.enlace_aforo'),
+    'DELETE /v1/events/:eventId/specialized-talks/occupancy-link': g('especializadas.enlace_aforo'),
     'GET /v1/events/:eventId/specialized-talk-registrations': g('especializadas.ver', P()),
     'POST /v1/specialized-talks/:id/registrations': g('especializadas.inscribir', eventoDePonenciaEspecializada),
     'PATCH /v1/specialized-talk-registrations/:id': g('especializadas.inscribir', eventoDeInscripcionPonencia),
@@ -334,7 +340,7 @@ const LIMITES_POR_ACTOR: readonly RequestHandler[] = [
     limiteDescargaResumenPonencias, limiteAvisosPonencias,
 ]
 /** Total de rutas de /api: una ruta nueva obliga a clasificarla aquí. */
-const TOTAL_RUTAS = 187
+const TOTAL_RUTAS = 191
 
 function clasesDe(ruta: Ruta): Clase[] {
     const clases: Clase[] = []
@@ -426,7 +432,10 @@ describe('matriz de rutas (spec 013)', () => {
         expect(con(limiteSwitch)).toEqual(['POST /v1/auth/participant/switch'])
         expect(con(limiteLecturaReportes)).toEqual(['GET /v1/events/:eventId/advisory/summary', 'GET /v1/events/:eventId/advisory/students', 'GET /v1/events/:eventId/advisory/advisors', 'GET /v1/events/:eventId/advisory/links', 'GET /v1/events/:eventId/advisory/cycle-links'])
         expect(con(limiteGestionDocentes)).toEqual(['POST /v1/events/:eventId/advisory/advisors', 'PUT /v1/events/:eventId/advisory/advisors/:asesorId', 'DELETE /v1/events/:eventId/advisory/advisors/:asesorId'])
-        expect(con(limiteEnlacesAsesores)).toEqual(['POST /v1/events/:eventId/advisory/links', 'DELETE /v1/events/:eventId/advisory/links/:asesorId', 'POST /v1/events/:eventId/advisory/cycle-links', 'DELETE /v1/events/:eventId/advisory/cycle-links/:ciclo'])
+        expect(con(limiteEnlacesAsesores).sort()).toEqual([
+            'POST /v1/events/:eventId/advisory/links', 'DELETE /v1/events/:eventId/advisory/links/:asesorId', 'POST /v1/events/:eventId/advisory/cycle-links', 'DELETE /v1/events/:eventId/advisory/cycle-links/:ciclo',
+            'GET /v1/events/:eventId/specialized-talks/occupancy-link', 'POST /v1/events/:eventId/specialized-talks/occupancy-link', 'DELETE /v1/events/:eventId/specialized-talks/occupancy-link',
+        ].sort())
         expect(con(limiteDescargaReportes)).toEqual(['GET /v1/events/:eventId/advisory/export'])
         expect(con(limiteCargaPadron)).toEqual(['POST /v1/events/:eventId/advisory/import'])
         expect(con(limiteDescargaResumenPonencias)).toEqual(['GET /v1/events/:eventId/specialized-talk-attendees/export'])

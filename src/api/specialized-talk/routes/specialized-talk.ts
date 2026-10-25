@@ -2,12 +2,16 @@ import * as controller from '../controllers/specialized-talk'
 import { AppRoute, buildRouter } from '../../../core/routes'
 import { requirePermiso } from '../../../middlewares/auth'
 import { requireTokenEvento } from '../../../middlewares/sitio'
-import { limiteAvisosPonencias, limiteCheckInPonencia, limiteDescargaResumenPonencias, limiteInscripcion, limiteLecturaPublica, limiteTokenInscripcion, limiteTokenLectura, limiteTokenVerificacionCongresista, limiteVerificacionCongresista } from '../../../middlewares/rate-limit'
+import {
+    limiteAvisosPonencias, limiteCheckInPonencia, limiteDescargaResumenPonencias, limiteEnlacesAsesores, limiteInscripcion, limiteLecturaPublica, limiteTokenInscripcion, limiteTokenLectura,
+    limiteTokenVerificacionCongresista, limiteVerificacionCongresista,
+} from '../../../middlewares/rate-limit'
 import { validateBody } from '../../../middlewares/validate'
 import { eventoDeInscripcionPonencia, eventoDelParametro, eventoDePonenciaEspecializada } from '../../../core/resolutores-evento'
-import { accesoPonenciasSchema, actualizarPonenciaSchema, avisarSinCongresoSchema, cancelarSinCongresoSchema, crearPonenciaSchema, editarInscripcionSchema, elegibilidadSchema, inscripcionSitioSchema, personaSchema } from '../validation'
+import { accesoPonenciasSchema, actualizarPonenciaSchema, avisarSinCongresoSchema, cancelarSinCongresoSchema, crearPonenciaSchema, editarInscripcionSchema, elegibilidadSchema, enlaceAforoSchema, inscripcionSitioSchema, personaSchema } from '../validation'
 
 const gestionar = requirePermiso('especializadas.gestionar')
+const enlaceAforo = requirePermiso('especializadas.enlace_aforo')
 
 const routes: AppRoute[] = [
     // Ponencias del evento (quien ve inscritos necesita verlas para elegir una)
@@ -19,6 +23,11 @@ const routes: AppRoute[] = [
     // Acceso libre del evento (spec 030): quien ve el programa lo consulta; solo quien lo gestiona lo cambia
     { method: 'get', path: '/v1/events/:eventId/specialized-talks/access', handler: controller.getAccess, middlewares: [requirePermiso(['especializadas.ver', 'especializadas.gestionar'], { evento: eventoDelParametro('eventId') })] },
     { method: 'put', path: '/v1/events/:eventId/specialized-talks/access', handler: controller.putAccess, middlewares: [gestionar, validateBody(accesoPonenciasSchema)] },
+
+    // Enlace público del aforo (spec 036): es una credencial, así que verlo, crearlo, renovarlo y desactivarlo es solo del Owner
+    { method: 'get', path: '/v1/events/:eventId/specialized-talks/occupancy-link', handler: controller.getOccupancyLink, middlewares: [enlaceAforo, limiteEnlacesAsesores] },
+    { method: 'post', path: '/v1/events/:eventId/specialized-talks/occupancy-link', handler: controller.createOccupancyLink, middlewares: [enlaceAforo, limiteEnlacesAsesores, validateBody(enlaceAforoSchema)] },
+    { method: 'delete', path: '/v1/events/:eventId/specialized-talks/occupancy-link', handler: controller.removeOccupancyLink, middlewares: [enlaceAforo, limiteEnlacesAsesores] },
 
     // Resumen por persona (spec 031): una fila por persona con su situación actual en el congreso; cancelar y avisar a quien no puede estar inscrito
     { method: 'get', path: '/v1/events/:eventId/specialized-talk-attendees', handler: controller.attendees, middlewares: [requirePermiso('especializadas.ver', { evento: eventoDelParametro('eventId') })] },
@@ -37,6 +46,8 @@ const routes: AppRoute[] = [
 
     // API del sitio (el evento sale del token)
     { method: 'get', path: '/v1/site/specialized-talks', handler: controller.publicList, middlewares: [requireTokenEvento, limiteLecturaPublica, limiteTokenLectura] },
+    // Aforo con el enlace público (spec 036): además del token del sitio, el del enlace en `X-Link-Token`
+    { method: 'get', path: '/v1/site/specialized-talk-occupancy', handler: controller.publicOccupancy, middlewares: [requireTokenEvento, limiteLecturaPublica, limiteTokenLectura] },
     { method: 'post', path: '/v1/site/specialized-talk-eligibility', handler: controller.eligibility, middlewares: [requireTokenEvento, limiteVerificacionCongresista, limiteTokenVerificacionCongresista, validateBody(elegibilidadSchema)] },
     { method: 'post', path: '/v1/site/specialized-talk-registrations', handler: controller.publicRegister, middlewares: [requireTokenEvento, limiteInscripcion, limiteTokenInscripcion, validateBody(inscripcionSitioSchema)] },
 ]

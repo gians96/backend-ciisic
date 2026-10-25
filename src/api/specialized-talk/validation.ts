@@ -120,6 +120,13 @@ export const accesoPonenciasSchema = yup.object({
     accesoLibre: yup.boolean().required(),
 }).required()
 
+/** Crear (o, con `regenerar`, renovar) el enlace público del aforo (spec 036). */
+export const enlaceAforoSchema = yup.object({
+    regenerar: yup.boolean(),
+}).default({})
+
+export type EnlaceAforoInput = yup.InferType<typeof enlaceAforoSchema>
+
 export const editarInscripcionSchema = yup.object({
     estado: yup.string().oneOf([...ESTADOS_INSCRIPCION_PONENCIA]),
     asistente: yup.object({

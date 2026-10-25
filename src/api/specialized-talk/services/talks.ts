@@ -79,6 +79,34 @@ export function aPonenciaPublica(ponencia: PonenciaEspecializada, presenciales: 
     return { ...datosBase(ponencia), cuposDisponibles: disponibles, llena: disponibles === 0 }
 }
 
+/**
+ * Respuesta del enlace público del aforo (spec 036): el aforo presencial, cuántos lo ocupan (`inscritos`, solo presenciales)
+ * y cuántos asistieron. De los ponentes solo nombre, foto y si es externo; nada de inscritos, precio ni biografía.
+ */
+export function aPonenciaAforo(ponencia: PonenciaEspecializada, conteo: Conteo = SIN_INSCRITOS) {
+    const base = datosBase(ponencia)
+    const disponibles = cuposDisponibles(ponencia, conteo.presenciales)
+    const ponente = ({ nombre, foto, externo }: { nombre: string, foto: string | null, externo: boolean }) => ({ nombre, foto, externo })
+    return {
+        id: base.id,
+        tema: base.tema,
+        fecha: base.fecha,
+        horaInicio: base.horaInicio,
+        horaFin: base.horaFin,
+        duracionMin: base.duracionMin,
+        ambiente: base.ambiente,
+        modalidad: base.modalidad,
+        ponente: ponente(base.ponente),
+        coponentes: base.coponentes.map(ponente),
+        cupo: base.cupo,
+        inscritos: conteo.presenciales,
+        cuposDisponibles: disponibles,
+        llena: disponibles === 0,
+        asistentes: conteo.asistentes,
+        orden: base.orden,
+    }
+}
+
 export async function obtenerPonencia(id: number): Promise<PonenciaEspecializada> {
     const ponencia = await prisma.ponenciaEspecializada.findUnique({ where: { id } })
     if (!ponencia) throw notFound('TALK_NOT_FOUND', 'La ponencia no existe.')
@@ -135,6 +163,15 @@ export async function listarPublicas(eventoId: number) {
         conteosPorPonencia({ eventoId }),
     ])
     return ponencias.map((ponencia) => aPonenciaPublica(ponencia, conteos.get(ponencia.id)?.presenciales ?? 0))
+}
+
+/** Ponencias publicadas del evento con su aforo, inscritos presenciales y asistencia (enlace público, spec 036). */
+export async function listarAforo(eventoId: number) {
+    const [ponencias, conteos] = await Promise.all([
+        prisma.ponenciaEspecializada.findMany({ where: { eventoId, publicada: true }, orderBy: ORDEN }),
+        conteosPorPonencia({ eventoId }),
+    ])
+    return ponencias.map((ponencia) => aPonenciaAforo(ponencia, conteos.get(ponencia.id)))
 }
 
 /** Dos ponencias presenciales no pueden usar el mismo ambiente a la vez (el nombre se compara sin distinguir mayúsculas). */

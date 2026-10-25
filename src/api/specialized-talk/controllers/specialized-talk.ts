@@ -11,6 +11,7 @@ import * as checkin from '../services/checkin'
 import * as acceso from '../services/acceso'
 import * as resumen from '../services/resumen'
 import * as avisos from '../services/avisos'
+import * as enlaceAforo from '../services/enlace-aforo'
 import { generarExcelResumen } from '../services/exportar-resumen'
 import { contentDisposition, nombreDeArchivo } from '../../advisory/exports/reporte'
 import { obtenerEventoPorId } from '../../event/services/public-event'
@@ -18,7 +19,7 @@ import { SITUACIONES_CONGRESO } from '../../../core/ponencias-especializadas'
 import { verificarCongresista } from '../services/congresista'
 import {
     MODALIDADES, ORIGENES_INSCRIPCION_PONENCIA, ESTADOS_INSCRIPCION_PONENCIA, PROCEDENCIAS,
-    type AsistenteInput, type AvisarSinCongresoInput, type CancelarSinCongresoInput, type EditarInscripcionInput, type ElegibilidadInput, type InscripcionSitioInput,
+    type AsistenteInput, type AvisarSinCongresoInput, type CancelarSinCongresoInput, type EditarInscripcionInput, type ElegibilidadInput, type EnlaceAforoInput, type InscripcionSitioInput,
 } from '../validation'
 
 /** La guarda de permisos deja la cuenta en `req.actor`; sin ella la ruta está mal cableada. */
@@ -155,12 +156,52 @@ export async function putAccess(req: Request, res: Response) {
     res.json({ success: true, data: await acceso.guardarAcceso(idParam(req.params.eventId, 'eventId'), accesoLibre, actorDe(req)) })
 }
 
+// ─── Enlace público del aforo (spec 036) ────────────────────────────────────
+
+/** El enlace es una credencial: ninguna respuesta suya se guarda en cachés. */
+function sinCache(res: Response) {
+    res.setHeader('Cache-Control', 'no-store')
+}
+
+/** `GET …/specialized-talks/occupancy-link` — el enlace del evento (o `token: null`) y su último acceso. */
+export async function getOccupancyLink(req: Request, res: Response) {
+    const evento = await obtenerEventoPorId(idParam(req.params.eventId, 'eventId'))
+    sinCache(res)
+    res.json({ success: true, data: await enlaceAforo.obtenerEnlaceAforo(evento.id) })
+}
+
+/** `POST …/specialized-talks/occupancy-link` — lo crea si falta; con `regenerar`, lo renueva (el anterior deja de valer). */
+export async function createOccupancyLink(req: Request, res: Response) {
+    const evento = await obtenerEventoPorId(idParam(req.params.eventId, 'eventId'))
+    const { regenerar } = req.body as EnlaceAforoInput
+    sinCache(res)
+    res.status(201).json({ success: true, data: await enlaceAforo.crearEnlaceAforo(evento.id, regenerar === true) })
+}
+
+/** `DELETE …/specialized-talks/occupancy-link` — lo desactiva. */
+export async function removeOccupancyLink(req: Request, res: Response) {
+    const evento = await obtenerEventoPorId(idParam(req.params.eventId, 'eventId'))
+    sinCache(res)
+    res.json({ success: true, data: await enlaceAforo.desactivarEnlaceAforo(evento.id) })
+}
+
 // ─── Sitio (token del evento) ───────────────────────────────────────────────
 
 /** `meta.accesoLibre` le dice a la landing qué formulario mostrar; el servidor decide igual al inscribir. */
 export async function publicList(req: Request, res: Response) {
     const evento = eventoDelSitio(req)
     res.json({ success: true, data: await talks.listarPublicas(evento.id), meta: { accesoLibre: evento.ponenciasAccesoLibre === true } })
+}
+
+/**
+ * `GET /site/specialized-talk-occupancy` — el aforo con el enlace público (spec 036). El token del enlace va en `X-Link-Token`,
+ * nunca en la URL; la landing lo lee del `#` de su página y lo reenvía desde su servidor.
+ */
+export async function publicOccupancy(req: Request, res: Response) {
+    const data = await enlaceAforo.aforoDelEnlace(eventoDelSitio(req), req.header('x-link-token')?.trim())
+    sinCache(res)
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow')
+    res.json({ success: true, data })
 }
 
 export async function eligibility(req: Request, res: Response) {

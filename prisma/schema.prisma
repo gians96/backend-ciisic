@@ -128,6 +128,7 @@ model Evento {
   padronEstudiantes       PadronEstudiante[]
   padronCursos            PadronCurso[]
   enlacesCiclo            EnlaceCiclo[]
+  enlaceAforoPonencias    EnlaceAforoPonencias?
 
   @@index([credencialCorreoId], map: "idx_eventos_credencial_correo")
   @@map("eventos")
@@ -567,6 +568,21 @@ model EnlaceCiclo {
 
   @@unique([eventoId, ciclo], map: "uq_enlaces_ciclo_evento_ciclo")
   @@map("enlaces_ciclo")
+}
+
+/// Enlace público del aforo de las ponencias especializadas (spec 036): uno por evento. Con su token (43 caracteres,
+/// 256 bits) la landing del evento muestra, sin iniciar sesión, el aforo, los inscritos presenciales y la asistencia de
+/// cada tema; nunca datos de personas. Solo el Owner lo crea, renueva o desactiva.
+model EnlaceAforoPonencias {
+  id           Int       @id @default(autoincrement())
+  eventoId     Int       @unique(map: "uq_enlaces_aforo_ponencias_evento") @map("evento_id")
+  token        String    @unique(map: "uq_enlaces_aforo_ponencias_token") @db.VarChar(64)
+  creadoEn     DateTime  @default(now()) @map("creado_en")
+  /// Última vez que se abrió el enlace (se actualiza como máximo cada 5 minutos).
+  ultimoAcceso DateTime? @map("ultimo_acceso")
+  evento       Evento    @relation(fields: [eventoId], references: [id], onDelete: Cascade, map: "fk_enlaces_aforo_ponencias_evento")
+
+  @@map("enlaces_aforo_ponencias")
 }
 
 // ─── Actividades y asistencia ────────────────────────────────────────────────

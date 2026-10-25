@@ -112,7 +112,7 @@ y Google. Documentación: [`docs/`](docs/README.md).
   QR anterior (id del participante) solo vale con `es_qr_legado` y hasta el `fechaFin` del evento.
 - Staff (spec 013): Owner (`SUPERADMIN`) y Administrador del sistema (`ADMIN`) son globales;
   Tesorero y Comisión solo operan en sus eventos. Solo el Owner configura Sistema, elimina
-  inscripciones, cambia su tipo (`PERMISOS_SOLO_OWNER`) y gestiona Owners y Administradores. Sin `pagos.ver` no
+  inscripciones, cambia su tipo, administra el enlace del aforo (`PERMISOS_SOLO_OWNER`) y gestiona Owners y Administradores. Sin `pagos.ver` no
   salen montos ni datos de pago (van en `null`).
 - Una persona tiene una sola inscripción por evento (índice único evento-participante). Si está
   `RECHAZADO` o `CANCELADO` y vuelve a inscribirse, se **reutiliza la fila** (spec 017): vuelve a
@@ -185,6 +185,12 @@ y Google. Documentación: [`docs/`](docs/README.md).
   da solo nombre, código, ciclo, sección, turno, celular y situación: **jamás** DNI, correo, montos, fechas de pago ni otros asesores (hay una prueba que lo
   comprueba). Token faltante, mal formado, desconocido o desactivado = el mismo `404 LINK_NOT_FOUND`. Ver, crear, renovar y desactivar enlaces es
   `reportes.gestionar` (global): es una credencial. Recargar el padrón conserva los enlaces por nombre del asesor. Respuestas `no-store` y `noindex`.
+- Enlace público del aforo de las ponencias especializadas (spec 036, `specialized-talk/services/enlace-aforo.ts`): **uno por evento** en `enlaces_aforo_ponencias` (token de 256 bits en claro,
+  como los de docentes y ciclos). Lo ven, crean, renuevan y desactivan **solo el Owner** (`especializadas.enlace_aforo`, global y en `PERMISOS_SOLO_OWNER`) con
+  `GET|POST|DELETE …/specialized-talks/occupancy-link`. La landing lo abre con `GET /v1/site/specialized-talk-occupancy`: token del sitio **y** el del enlace en `X-Link-Token`
+  (nunca en una URL); el enlace debe ser del mismo evento que el token del sitio. Da por ponencia publicada `cupo`, `inscritos` (**solo presenciales** vigentes), `cuposDisponibles`,
+  `llena` y `asistentes` (`aPonenciaAforo`): **nunca** nombres, documentos, correos, biografías ni precios (hay una prueba que lo comprueba). Cualquier token inválido o de otro evento =
+  el mismo `404 LINK_NOT_FOUND`. Respuestas `no-store` y `noindex`.
 - Enlace público por ciclo (spec 027): igual que el del docente pero por ciclo completo, en su propia tabla `enlaces_ciclo` (el padrón se reemplaza en cada
   carga, así que el enlace no puede vivir en él; recargarlo no lo toca). `GET /v1/public/cycle` (+ `/export`) con `X-Link-Token`: nombre, código, ciclo, sección,
   turno y situación de los estudiantes y el asesor de cada sección, pero **sin celular** (llega a más gente que el docente), DNI, correo ni montos (prueba que lo
@@ -284,7 +290,7 @@ con ambos sistemas levantados.
 
 Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Cada cambio
 empieza en `specs/NNN-nombre/` (spec → plan → tasks → contracts) y se marcan las tasks al
-implementar. Specs actuales: 001–014, 016–029 y 030–035 (ver [README](README.md)); la 015 (certificados) tiene
+implementar. Specs actuales: 001–014, 016–029 y 030–036 (ver [README](README.md)); la 015 (certificados) tiene
 solo su diseño (`research.md`).
 
 ## Antes de dar por terminado

@@ -46,6 +46,7 @@ virtual, asistencia y perfil con foto).
 | [033](specs/033-padron-secciones-jp) | Seguimiento por asesor con las secciones de cada curso: un alumno puede cursar en varias (se cuenta una vez en el total), el asesor sale de la designación de docentes y el padrón se reparte con `npm run padron:desde-jp` desde las matrículas de JP |
 | [034](specs/034-padron-cursos-sivireno) | Seguimiento por curso y docente según SIVIRENO: cada curso (asignatura, ciclo, sección y docente) con sus matriculados, quién pagó por curso y por docente, listado completo y pestaña «Por curso»; `npm run padron:desde-jp` carga cursos, matrículas y docentes desde JP |
 | [035](specs/035-cambiar-tipo-inscripcion) | El Owner corrige el tipo (y con él la categoría) de una inscripción: conserva el monto pagado, recalcula el descuento, ajusta las ponencias especializadas si cambia la modalidad y deja un historial |
+| [036](specs/036-enlace-aforo-ponencias) | Enlace público del aforo de las ponencias especializadas: el Owner lo crea, renueva o desactiva; con él la landing muestra por tema el aforo, los inscritos presenciales, los cupos libres y la asistencia, sin datos de personas |
 
 ## Desarrollo local
 

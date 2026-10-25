@@ -23,7 +23,7 @@ Catálogo en `src/core/permisos.ts` (nombres visibles en `ETIQUETAS_PERMISO`).
 - **Globales (G)**, solo Owner y Administrador: `sistema.configurar` (solo Owner),
   `administradores.gestionar`, `eventos.configurar`, `eventos.eliminar`, `catalogos.configurar`,
   `correo.configurar`, `consultas_dni.gestionar`, `participantes.gestionar`,
-  `inscripciones.eliminar` (solo Owner desde la spec 017), `inscripciones.cambiar_tipo` (solo Owner, spec 035), `inscripciones.cancelar`, `legacy.usar`; reservados para las specs
+  `inscripciones.eliminar` (solo Owner desde la spec 017), `inscripciones.cambiar_tipo` (solo Owner, spec 035), `especializadas.enlace_aforo` (solo Owner, spec 036), `inscripciones.cancelar`, `legacy.usar`; reservados para las specs
   014–015: `inscripciones.cortesia`, `certificados.gestionar`.
 - **Por evento (E)**: `resumen.ver`, `inscripciones.ver`, `inscripciones.exportar`,
   `credenciales.reenviar`, `pagos.ver`, `inscripciones.validar`, `asistencia.ver`,
@@ -93,6 +93,7 @@ las rutas con dos permisos basta uno. Las rutas legacy llevan antes `rutaLegacy`
 | inscription | GET `/inscriptions/:id`, GET `/inscriptions/:id/credential` | `inscripciones.ver` | inscripción |
 | inscription | PATCH `/inscriptions/:id/status` | `inscripciones.validar` | inscripción |
 | inscription | PATCH `/inscriptions/:id/type` | `inscripciones.cambiar_tipo` (solo Owner, spec 035) | — |
+| specialized-talk | GET, POST, DELETE `/events/:eventId/specialized-talks/occupancy-link` | `especializadas.enlace_aforo` (solo Owner, spec 036) + límite 60/15 min por cuenta | — |
 | inscription | POST `/inscriptions/:id/resend-credential` | `credenciales.reenviar` + límite 20/15 min por cuenta | inscripción |
 | inscription | GET `/inscriptions/:id/voucher` | `pagos.ver` | inscripción |
 | inscription | DELETE `/inscriptions/:id` | `inscripciones.eliminar` | — |

@@ -256,7 +256,8 @@ CORS está abierto a cualquier origen; la landing lo usa desde su servidor Nitro
 `GET /document-lookup/dni/:numero`, `GET /payment-qr/:archivo` (imagen del QR de una billetera,
 spec 012; la landing la sirve desde su BFF), `POST /inscriptions`, `/student-verification`,
 `/google-verification`, `/papers`, `/contact`, `GET /specialized-talks` y
-`POST /specialized-talk-registrations` (spec 019) y `POST /specialized-talk-eligibility` (spec 030).
+`POST /specialized-talk-registrations` (spec 019), `POST /specialized-talk-eligibility` (spec 030) y
+`GET /specialized-talk-occupancy` (spec 036, con el token del enlace del aforo en `X-Link-Token`).
 
 ### Ponencias especializadas (spec 019)
 
@@ -284,6 +285,12 @@ spec 012; la landing la sirve desde su BFF), `POST /inscriptions`, `/student-ver
   mueve una inscripción a otro tipo (y categoría) del mismo evento; **solo el Owner** (`inscripciones.cambiar_tipo`, global). El monto pagado no cambia y el descuento se recalcula; las
   inscripciones de una delegación no se mueven (`INSCRIPTION_IN_DELEGATION`). `GET /api/v1/inscriptions/:id` agrega `cambiosTipo` (historial). Si cambia la modalidad de asistencia, las ponencias
   especializadas pendientes de la persona toman el modo nuevo. Cambio aditivo (una tabla nueva, un permiso nuevo y una clave nueva en el detalle).
+- **Spec 036** (`backend-ciisic/specs/036-enlace-aforo-ponencias/contracts/api-enlace-aforo.md`): **enlace público del aforo**, uno por evento. El Owner
+  (`especializadas.enlace_aforo`, global, solo Owner) lo administra con `GET|POST|DELETE /api/v1/events/:eventId/specialized-talks/occupancy-link` (`{ regenerar? }`).
+  La landing lo usa con `GET /api/v1/site/specialized-talk-occupancy`: token del evento en `X-Api-Key` **y** el del enlace en `X-Link-Token` (nunca en la URL;
+  en el navegador va tras el `#` de `/aforo-ponencias`). Responde por ponencia publicada el `cupo`, los `inscritos` presenciales, `cuposDisponibles`, `llena` y
+  `asistentes`, sin datos de personas; un token faltante, mal formado, desconocido, desactivado o de otro evento da el mismo `404 LINK_NOT_FOUND`. Cambio aditivo
+  (una tabla nueva, un permiso nuevo y rutas nuevas).
 
 ### Delegaciones con planes propios (specs 021, 022, 023 y 029)
 

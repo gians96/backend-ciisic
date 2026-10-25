@@ -26,6 +26,7 @@ export const ALCANCE = {
     'legacy.usar': 'G',
     'certificados.gestionar': 'G',
     'especializadas.gestionar': 'G',
+    'especializadas.enlace_aforo': 'G',
     'reportes.gestionar': 'G',
     'delegaciones.gestionar': 'G',
 
@@ -78,6 +79,7 @@ export const ETIQUETAS_PERMISO: Record<Permiso, string> = {
     'legacy.usar': 'Usar las rutas de la versión anterior',
     'certificados.gestionar': 'Gestionar plantillas y emitir certificados',
     'especializadas.gestionar': 'Crear, editar y eliminar ponencias especializadas',
+    'especializadas.enlace_aforo': 'Crear, renovar y desactivar el enlace público del aforo de las ponencias especializadas',
     'reportes.gestionar': 'Cargar el padrón de estudiantes y los asesores por sección',
     'delegaciones.gestionar': 'Configurar delegaciones: planes, precios, dominio del correo y links',
 
@@ -176,10 +178,10 @@ export const PERMISOS_COMISION_POR_DEFECTO: readonly Permiso[] = ['asistencia.ma
 /**
  * Permisos que solo tiene el Owner: configurar el sistema, eliminar inscripciones (spec 017; borra
  * la fila, el voucher y la credencial sin vuelta atrás) y cambiar el tipo de una inscripción (spec 035;
- * mueve a la persona de categoría y puede cambiar su modalidad de asistencia). El Administrador del
- * sistema tiene el resto.
+ * mueve a la persona de categoría y puede cambiar su modalidad de asistencia) y el enlace público del aforo
+ * de las ponencias especializadas (spec 036; lo comparte el Owner). El Administrador del sistema tiene el resto.
  */
-export const PERMISOS_SOLO_OWNER: readonly Permiso[] = ['sistema.configurar', 'inscripciones.eliminar', 'inscripciones.cambiar_tipo']
+export const PERMISOS_SOLO_OWNER: readonly Permiso[] = ['sistema.configurar', 'inscripciones.eliminar', 'inscripciones.cambiar_tipo', 'especializadas.enlace_aforo']
 
 export const PERMISOS_POR_ROL: Record<CodigoRol, readonly Permiso[]> = {
     [ROL.OWNER]: TODOS,
