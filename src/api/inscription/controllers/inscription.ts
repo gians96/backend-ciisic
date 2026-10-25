@@ -39,6 +39,17 @@ export async function publicCreate(req: Request, res: Response) {
     res.status(201).json({ success: true, data: aCreada(inscripcion, inscripcion.correoConservado) })
 }
 
+/**
+ * Credencial pública por código (spec 020): la landing la abre desde el enlace del correo de
+ * aprobación. Datos personales mínimos → sin caché (mismo criterio que la consulta DNI).
+ */
+export async function publicCredential(req: Request, res: Response) {
+    const evento = eventoDelSitio(req)
+    const data = await service.credencialPublica(String(req.params.codigo), evento.id)
+    res.setHeader('Cache-Control', 'no-store')
+    res.json({ success: true, data })
+}
+
 // ─── Permisos del actor (spec 013) ──────────────────────────────────────────
 
 /** La guarda de permisos deja la cuenta en `req.actor`; sin ella la ruta está mal cableada. */

@@ -53,6 +53,7 @@ nuevo venga verificado con Google (`correoConservado: true`); solo el staff lo c
 | Asistencia por QR, código y PDF de la credencial, alta de participantes, cortesías y correo conservado | [`specs/014-portal-fotocheck-asistencia/contracts/api-asistencia.md`](../specs/014-portal-fotocheck-asistencia/contracts/api-asistencia.md) |
 | Roles, permisos y alcance por evento (permiso de cada ruta, sesión con `acceso`, equipo) | [`specs/013-roles-permisos/contracts/api-roles-permisos.md`](../specs/013-roles-permisos/contracts/api-roles-permisos.md) |
 | Delegaciones e inscripción manual (staff) | [`specs/018-delegaciones-inscripcion-manual/contracts/api-delegaciones.md`](../specs/018-delegaciones-inscripcion-manual/contracts/api-delegaciones.md) |
+| Credencial por código para la landing (enlace del correo) | [`specs/020-credencial-enlace-correo/contracts/api-credencial.md`](../specs/020-credencial-enlace-correo/contracts/api-credencial.md) |
 | Rutas legacy (landing anterior) | [`specs/002-multi-evento/contracts/api-publica.md`](../specs/002-multi-evento/contracts/api-publica.md) |
 
 ## Límites

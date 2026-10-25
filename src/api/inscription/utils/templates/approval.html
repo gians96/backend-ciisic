@@ -136,11 +136,13 @@
                 <p style="margin: 0; padding: 0">
                   Este mensaje se genera automáticamente para notificar que su
                   pago al {{EVENTO_NOMBRE_CORTO}} se ha validado exitosamente.
+                  Adjuntamos la información general del congreso; tu credencial
+                  digital la abres con el botón de abajo.
                 </p>
               </td>
             </tr>
 
-            <!-- BOTON -->
+            <!-- BOTON: enlace a la credencial 3D (spec 020); vacío si la landing no está configurada -->
             <tr>
               <td
                 align="center"
@@ -158,51 +160,7 @@
                 "
                 class="button"
               >
-                <table
-                  border="0"
-                  cellpadding="0"
-                  cellspacing="0"
-                  align="center"
-                  style="
-                    max-width: 240px;
-                    min-width: 120px;
-                    border-collapse: collapse;
-                    border-spacing: 0;
-                    padding: 0;
-                  "
-                >
-                  <tr>
-                    <td
-                      align="center"
-                      valign="middle"
-                      style="
-                        padding: 12px 24px;
-                        margin: 0;
-                        text-decoration: none;
-                        border-collapse: collapse;
-                        border-spacing: 0;
-                        border-radius: 4px;
-                        -webkit-border-radius: 4px;
-                        -moz-border-radius: 4px;
-                        -khtml-border-radius: 4px;
-                      "
-                      bgcolor="#0071bc"
-                    >
-                      <span
-                        style="
-                          text-decoration: none;
-                          color: #ffffff;
-                          font-family: sans-serif;
-                          font-size: 17px;
-                          font-weight: 600;
-                          line-height: 120%;
-                        "
-                      >
-                        Credencial adjunta
-                      </span>
-                    </td>
-                  </tr>
-                </table>
+                {{ACCION}}
               </td>
             </tr>
 
@@ -281,9 +239,11 @@
                       class="paragraph"
                     >
                       <b style="color: #333333">¿Qué hago ahora?</b><br />
-                      Es todo, solo esperar el día del evento. De igual manera,
-                      si necesitamos datos adicionales, nos estaremos
-                      comunicando con usted por los medios que nos indicó.
+                      Abre tu credencial digital con el botón de arriba,
+                      personalízala con las tecnologías que usas y espera el
+                      día del evento. De igual manera, si necesitamos datos
+                      adicionales, nos estaremos comunicando con usted por los
+                      medios que nos indicó.
                     </td>
                   </tr>
                 </table>

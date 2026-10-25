@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Información del congreso</title>
+    <style>
+      @page {
+        size: A4;
+        margin: 0;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        color: #0b1e36;
+        background: #ffffff;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .hoja {
+        position: relative;
+        min-height: 100vh;
+        padding: 54px 56px 40px;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .hoja::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 8px;
+        background: linear-gradient(90deg, #0b1e36 0%, #00a3b8 60%, #00d9e8 100%);
+      }
+
+      header {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        padding-bottom: 22px;
+        border-bottom: 1px solid #e2e8f0;
+      }
+
+      header .logo {
+        width: 74px;
+        height: 74px;
+        object-fit: contain;
+      }
+
+      header .marca {
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: #00a3b8;
+      }
+
+      header .edicion {
+        margin-top: 4px;
+        font-size: 22px;
+        font-weight: 700;
+        color: #0b1e36;
+      }
+
+      h1 {
+        margin-top: 34px;
+        font-size: 30px;
+        line-height: 1.25;
+        font-weight: 800;
+        letter-spacing: -0.01em;
+        max-width: 15cm;
+      }
+
+      .datos {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 22px;
+      }
+
+      .dato {
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 12px 16px;
+        min-width: 46mm;
+        background: #f8fafc;
+      }
+
+      .dato .rotulo {
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: #64748b;
+      }
+
+      .dato .valor {
+        margin-top: 5px;
+        font-size: 14px;
+        font-weight: 600;
+        color: #0b1e36;
+      }
+
+      .bloque {
+        margin-top: 30px;
+        border-left: 4px solid #00d9e8;
+        padding: 4px 0 4px 18px;
+      }
+
+      .bloque h2 {
+        font-size: 16px;
+        font-weight: 800;
+        color: #0b1e36;
+      }
+
+      .bloque p {
+        margin-top: 8px;
+        font-size: 13.5px;
+        line-height: 1.65;
+        color: #334155;
+      }
+
+      ul {
+        margin: 10px 0 0 20px;
+      }
+
+      li {
+        margin-top: 6px;
+        font-size: 13.5px;
+        line-height: 1.6;
+        color: #334155;
+      }
+
+      .nota {
+        margin-top: 26px;
+        border: 1px dashed #94a3b8;
+        border-radius: 10px;
+        padding: 14px 18px;
+        font-size: 12.5px;
+        line-height: 1.6;
+        color: #475569;
+        background: #f8fafc;
+      }
+
+      footer {
+        margin-top: auto;
+        padding-top: 26px;
+        border-top: 1px solid #e2e8f0;
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        font-size: 11.5px;
+        color: #94a3b8;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="hoja">
+      <header>
+        <img class="logo" src="{{LOGO}}" alt="" />
+        <div>
+          <div class="marca">Congreso internacional</div>
+          <div class="edicion">{{EVENTO_NOMBRE_CORTO}}</div>
+        </div>
+      </header>
+
+      <h1>{{EVENTO_NOMBRE}}</h1>
+
+      <div class="datos">
+        <div class="dato">
+          <div class="rotulo">Fechas</div>
+          <div class="valor">{{FECHAS}}</div>
+        </div>
+        <div class="dato">
+          <div class="rotulo">Sede</div>
+          <div class="valor">{{SEDE}}</div>
+        </div>
+        <div class="dato">
+          <div class="rotulo">Correo de contacto</div>
+          <div class="valor">{{EVENTO_CORREO}}</div>
+        </div>
+        <div class="dato">
+          <div class="rotulo">Teléfono</div>
+          <div class="valor">{{EVENTO_TELEFONO}}</div>
+        </div>
+      </div>
+
+      <div class="bloque">
+        <h2>Tu credencial digital</h2>
+        <p>
+          Tu inscripción fue aprobada. Este documento resume la información
+          general del congreso; tu credencial digital —con tu código y el QR
+          de acceso— la abres desde el enlace que te enviamos en el correo de
+          aprobación, donde también puedes personalizarla con las tecnologías
+          que usas.
+        </p>
+      </div>
+
+      <div class="bloque">
+        <h2>El día del evento</h2>
+        <ul>
+          <li>Presenta el QR de tu credencial en el punto de control de ingreso.</li>
+          <li>Consulta el cronograma completo en la página del congreso.</li>
+          <li>Si tienes dudas sobre tu registro, responde al correo de aprobación o escríbenos.</li>
+        </ul>
+      </div>
+
+      <div class="nota">
+        Este PDF no contiene datos personales ni sustituye tu credencial: la
+        credencial con tu nombre, tu código y tu QR vive en el enlace que
+        recibiste por correo. Guarda ese enlace para el día del congreso.
+      </div>
+
+      <footer>
+        <span>© {{ANIO}} {{EVENTO_NOMBRE_CORTO}} · {{EVENTO_NOMBRE}}</span>
+        <span>Generado el {{FECHA_GENERACION}}</span>
+      </footer>
+    </div>
+  </body>
+</html>

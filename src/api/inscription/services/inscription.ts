@@ -8,7 +8,7 @@ import { aColumnaFecha, fechaLima } from '../../../core/fechas'
 import { monto, type CodigoEstadoInscripcion } from '../../../core/catalogos'
 import { pageMeta, type Pagination } from '../../../core/pagination'
 import {
-    asegurarCodigoCredencial, conReintentoDeCodigo, enmascararCorreo, INDICE_CODIGO_CREDENCIAL, nuevoCodigoCredencial,
+    asegurarCodigoCredencial, conReintentoDeCodigo, enmascararCorreo, INDICE_CODIGO_CREDENCIAL, nuevoCodigoCredencial, REGEX_CODIGO_CREDENCIAL,
 } from '../../../core/codigos'
 import { rutaFoto } from '../../../core/almacenamiento'
 import { uploadedFilePath } from '../../../middlewares/upload'
@@ -353,14 +353,17 @@ async function pdfDeCredencial(inscripcion: InscripcionDetalle): Promise<string>
 }
 
 /**
- * Envía la credencial y registra la fecha de envío. Nunca lanza. Al aprobar se genera de nuevo (la
- * fecha de aprobación cambia); al reenviar se reutiliza el PDF ya generado si sigue al día.
+ * Genera la credencial de la persona (la descarga del panel y del portal la piden) y envía el
+ * correo de aprobación con el informe genérico y el enlace de la credencial (spec 020). Registra
+ * la fecha de envío. Nunca lanza. Al aprobar se genera de nuevo (la fecha de aprobación cambia);
+ * al reenviar se reutiliza el PDF ya generado si sigue al día.
  */
 async function emitirCredencial(registro: InscripcionDetalle, reutilizarPdf = false): Promise<boolean> {
     try {
         const inscripcion = await conCodigo(registro)
-        const pdf = reutilizarPdf ? await pdfDeCredencial(inscripcion) : await generarCredencialPdf(inscripcion)
-        const enviado = await enviarCorreoAprobacion(inscripcion, pdf)
+        if (reutilizarPdf) await pdfDeCredencial(inscripcion)
+        else await generarCredencialPdf(inscripcion)
+        const enviado = await enviarCorreoAprobacion(inscripcion)
         if (enviado) await prisma.inscripcion.update({ where: { id: inscripcion.id }, data: { credencialEnviadaEn: new Date() } })
         return enviado
     } catch {
@@ -400,6 +403,36 @@ export async function archivoCredencial(id: number): Promise<string> {
     const inscripcion = await obtenerInscripcion(id)
     if (inscripcion.estado.codigo !== 'APROBADO') throw conflict('NOT_APPROVED', 'La credencial solo existe para inscripciones aprobadas.')
     return pdfDeCredencial(await conCodigo(inscripcion))
+}
+
+/**
+ * Datos públicos de la credencial para la landing (spec 020): solo inscripciones `APROBADAS`
+ * del evento del token con ese código exacto (el mismo que codifica el QR). Devuelve lo mismo
+ * que se imprime en la credencial (nombre, tipo y clasificación) y nada más: ni documento, ni
+ * correo, ni teléfono, ni montos. Código mal formado → `422 INVALID_CODE`; inexistente, de otro
+ * evento o sin aprobar → `404 CREDENTIAL_NOT_FOUND`.
+ */
+export async function credencialPublica(codigo: string, eventoId: number) {
+    if (!REGEX_CODIGO_CREDENCIAL.test(codigo)) throw unprocessable('INVALID_CODE', 'El código de la credencial no es válido.')
+    const inscripcion = await prisma.inscripcion.findFirst({
+        where: { codigoCredencial: codigo, eventoId, estado: { codigo: 'APROBADO' } },
+        select: {
+            codigoCredencial: true,
+            participante: { select: { nombres: true, apellidos: true } },
+            tipoInscripcion: { select: { nombre: true, etiqueta: true } },
+            clasificacion: { select: { nombre: true } },
+            evento: { select: { nombre: true, nombreCorto: true } },
+        },
+    })
+    if (!inscripcion) throw notFound('CREDENTIAL_NOT_FOUND', 'No se encontró una credencial con ese código.')
+    return {
+        nombres: inscripcion.participante.nombres,
+        apellidos: inscripcion.participante.apellidos,
+        codigo: inscripcion.codigoCredencial,
+        clasificacion: inscripcion.clasificacion?.nombre ?? null,
+        tipo: inscripcion.tipoInscripcion ? { nombre: inscripcion.tipoInscripcion.nombre, etiqueta: inscripcion.tipoInscripcion.etiqueta } : null,
+        evento: { nombre: inscripcion.evento.nombre, nombreCorto: inscripcion.evento.nombreCorto },
+    }
 }
 
 export async function archivoVoucher(id: number): Promise<string> {

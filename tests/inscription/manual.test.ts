@@ -204,7 +204,7 @@ describe('inscripción manual', () => {
         expect(r.status).toBe(201)
         expect(r.body.data.credencialEnviada).toBe(true)
         expect(generarPdf).toHaveBeenCalledTimes(1)
-        expect(enviarCorreo).toHaveBeenCalledWith(expect.objectContaining({ id: 130 }), '/tmp/credencial.pdf')
+        expect(enviarCorreo).toHaveBeenCalledWith(expect.objectContaining({ id: 130 }))
         expect(m.inscripcion.update).toHaveBeenCalledWith({ where: { id: 130 }, data: { credencialEnviadaEn: expect.any(Date) } })
     })
 

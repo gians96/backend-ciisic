@@ -584,8 +584,9 @@ model TokenAcceso {
 // ─── Configuración del sistema (spec 008) ────────────────────────────────────
 
 /// Configuración global de fila única (id = 1). Reemplaza variables de entorno: API_UNDC
-/// (URL, API key cifrada con AES-256-GCM, timeout), Google (client ID), URL del panel y el
-/// interruptor de las rutas de la landing anterior.
+/// (URL, API key cifrada con AES-256-GCM, timeout), Google (client ID), URL del panel, URL de
+/// la landing (para el enlace de la credencial en el correo) y el interruptor de las rutas de
+/// la landing anterior.
 model ConfiguracionSistema {
   id                 Int                @id @default(1)
   undcApiUrl         String?            @map("undc_api_url") @db.VarChar(255)
@@ -597,6 +598,7 @@ model ConfiguracionSistema {
   undcUltimaPruebaEn DateTime?          @map("undc_ultima_prueba_en")
   googleClientId     String?            @map("google_client_id") @db.VarChar(255)
   urlPanel           String?            @map("url_panel") @db.VarChar(255)
+  urlLanding         String?            @map("url_landing") @db.VarChar(255)
   rutasLegacyActivas Boolean            @default(true) @map("rutas_legacy_activas")
   actualizadoPorId   Int?               @map("actualizado_por_id")
   creadoEn           DateTime           @default(now()) @map("creado_en")

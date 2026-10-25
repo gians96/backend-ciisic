@@ -27,6 +27,7 @@ export function aConfiguracion(fila: FilaConEditor) {
         },
         google: { clientId: fila.googleClientId, configurado: Boolean(fila.googleClientId) },
         urlPanel: fila.urlPanel,
+        urlLanding: fila.urlLanding,
         rutasLegacy: { activas: fila.rutasLegacyActivas },
         actualizadoPor: fila.actualizadoPor,
         actualizadoEn: fila.actualizadoEn,
@@ -44,9 +45,9 @@ export async function obtenerConfiguracionAdmin() {
     return aConfiguracion(fila)
 }
 
-/** URL del panel: https (http solo localhost en desarrollo), sin ruta; se guarda solo el origen. */
-function normalizarUrlPanel(valor: string): string {
-    return new URL(validarUrlSaliente(valor, { campo: 'La URL del panel', produccion: false })).origin
+/** URL del panel o de la landing: https (http solo localhost en desarrollo), sin ruta; se guarda solo el origen. */
+function normalizarUrlSitio(valor: string, campo: string): string {
+    return new URL(validarUrlSaliente(valor, { campo, produccion: false })).origin
 }
 
 export async function actualizarConfiguracion(input: ActualizarConfiguracionInput, adminId?: number) {
@@ -69,7 +70,8 @@ export async function actualizarConfiguracion(input: ActualizarConfiguracionInpu
     }
     if (input.undcApiTimeoutMs !== undefined) { data.undcApiTimeoutMs = input.undcApiTimeoutMs; cambios.push('undcApiTimeoutMs') }
     if (input.googleClientId !== undefined) { data.googleClientId = input.googleClientId || null; cambios.push('googleClientId') }
-    if (input.urlPanel !== undefined) { data.urlPanel = input.urlPanel ? normalizarUrlPanel(input.urlPanel) : null; cambios.push('urlPanel') }
+    if (input.urlPanel !== undefined) { data.urlPanel = input.urlPanel ? normalizarUrlSitio(input.urlPanel, 'La URL del panel') : null; cambios.push('urlPanel') }
+    if (input.urlLanding !== undefined) { data.urlLanding = input.urlLanding ? normalizarUrlSitio(input.urlLanding, 'La URL de la landing') : null; cambios.push('urlLanding') }
     if (input.rutasLegacyActivas !== undefined) { data.rutasLegacyActivas = input.rutasLegacyActivas; cambios.push('rutasLegacyActivas') }
     data.actualizadoPorId = adminId ?? null
 

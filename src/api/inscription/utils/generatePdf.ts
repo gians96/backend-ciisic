@@ -3,6 +3,7 @@ import fs from 'fs'
 import path from 'path'
 import QRCode from 'qrcode'
 import puppeteer from 'puppeteer'
+import type { Evento } from '@prisma/client'
 import { renderTemplate } from '../../../core/html'
 import { ZONA_HORARIA } from '../../../core/fechas'
 import { limitarConcurrencia } from '../../../core/concurrencia'
@@ -17,6 +18,8 @@ const instante = (date?: Date | null) => (date ? new Date(date).getTime() : 0)
 
 /** Sube al cambiar la plantilla o lo que se imprime: así los PDF guardados dejan de reutilizarse. */
 export const VERSION_PLANTILLA = 2
+/** Versión de la plantilla del informe genérico (sin datos personales). */
+export const VERSION_PLANTILLA_INFORME = 1
 
 const DIRECTORIO_CREDENCIALES = path.join(uploadsDir, 'credenciales')
 
@@ -122,11 +125,12 @@ let secuenciaGeneraciones = 0
 /** Por inscripción, la generación más reciente (por orden de inicio) que ya escribió su PDF. */
 const ultimaGeneracionEscrita = new Map<number, number>()
 
-async function imprimir(inscripcion: InscripcionDetalle, destino: string): Promise<string> {
-    const generacion = ++secuenciaGeneraciones
-    const codigo = inscripcion.codigoCredencial
-    if (!codigo) throw new Error('La inscripción no tiene código de credencial (usa asegurarCodigoCredencial)')
-    const html = await htmlDeCredencial(inscripcion, codigo)
+/**
+ * Imprime un HTML autocontenido en `destino` con puppeteer y lo escribe de forma atómica
+ * (archivo temporal + rename): quien lea el PDF nunca ve un archivo a medio escribir.
+ * `vertical` cambia la hoja a A4 en retrato (el informe); la credencial va apaisada.
+ */
+async function imprimirHtml(html: string, destino: string, vertical = false): Promise<string> {
     const directorio = path.dirname(destino)
     fs.mkdirSync(directorio, { recursive: true })
 
@@ -144,7 +148,7 @@ async function imprimir(inscripcion: InscripcionDetalle, destino: string): Promi
         await page.setContent(html, { waitUntil: 'load', timeout: ESPERA_PUPPETEER_MS })
         pdf = await page.pdf({
             format: 'A4',
-            landscape: true,
+            landscape: !vertical,
             margin: { top: '10px', right: '10px', bottom: '10px', left: '10px' },
             printBackground: true,
             preferCSSPageSize: true,
@@ -153,11 +157,19 @@ async function imprimir(inscripcion: InscripcionDetalle, destino: string): Promi
     } finally {
         await browser.close()
     }
-    // Se escribe aparte y se renombra: quien lea el PDF nunca ve un archivo a medio escribir
     const temporal = path.join(directorio, `.${path.basename(destino)}.${crypto.randomBytes(4).toString('hex')}.tmp`)
     fs.writeFileSync(temporal, pdf)
     fs.renameSync(temporal, destino)
-    // Si una generación que empezó después (con datos más nuevos) ya escribió el suyo, este no lo
+    return destino
+}
+
+async function imprimir(inscripcion: InscripcionDetalle, destino: string): Promise<string> {
+    const generacion = ++secuenciaGeneraciones
+    const codigo = inscripcion.codigoCredencial
+    if (!codigo) throw new Error('La inscripción no tiene código de credencial (usa asegurarCodigoCredencial)')
+    const html = await htmlDeCredencial(inscripcion, codigo)
+    await imprimirHtml(html, destino)
+    // Si una generación que empezó después (con datos más nuevos) ya escribió la suya, este no la
     // borra: queda como sobrante hasta la próxima generación
     if ((ultimaGeneracionEscrita.get(inscripcion.id) ?? 0) < generacion) {
         ultimaGeneracionEscrita.set(inscripcion.id, generacion)
@@ -181,6 +193,78 @@ export function generarCredencialPdf(inscripcion: InscripcionDetalle): Promise<s
     const pendiente = enCurso.get(destino)
     if (pendiente) return pendiente
     const promesa = enTurno(() => imprimir(inscripcion, destino)).finally(() => enCurso.delete(destino))
+    enCurso.set(destino, promesa)
+    return promesa
+}
+
+// ─── Informe genérico del evento (spec 020) ─────────────────────────────────
+
+/** Lo mínimo del evento que se imprime en el informe (sin datos de personas). */
+export type EventoInforme = Pick<Evento, 'codigo' | 'nombre' | 'nombreCorto' | 'sede' | 'fechaInicio' | 'fechaFin' | 'correoContacto' | 'telefonoContacto' | 'logoArchivo' | 'actualizadoEn'>
+
+const PREFIJO_INFORME = /^informe-[0-9a-f]{12}\.pdf$/
+
+/** Huella (12 hex) de lo que se imprime en el informe: cambia → otro archivo → se regenera. */
+export function huellaInforme(evento: EventoInforme): string {
+    const datos = [
+        VERSION_PLANTILLA_INFORME, evento.codigo, evento.nombre, evento.nombreCorto,
+        evento.sede ?? '', instante(evento.fechaInicio), instante(evento.fechaFin),
+        evento.correoContacto ?? '', evento.telefonoContacto ?? '', evento.logoArchivo ?? '',
+        instante(evento.actualizadoEn),
+    ]
+    return crypto.createHash('sha256').update(JSON.stringify(datos)).digest('hex').slice(0, 12)
+}
+
+/** Ruta del informe: `uploads/credenciales/<evento>/informe-<huella>.pdf` (no lo toca `borrarCredenciales`). */
+export function rutaInforme(evento: EventoInforme): string {
+    return path.join(DIRECTORIO_CREDENCIALES, path.basename(evento.codigo), `informe-${huellaInforme(evento)}.pdf`)
+}
+
+async function htmlDeInforme(evento: EventoInforme): Promise<string> {
+    const plantilla = fs.readFileSync(path.join(__dirname, 'templates', 'informe.html'), 'utf8')
+    const mismoDia = instante(evento.fechaInicio) === instante(evento.fechaFin)
+    return renderTemplate(plantilla, {
+        LOGO: logoEnBase64(evento.logoArchivo),
+        EVENTO_NOMBRE: evento.nombre,
+        EVENTO_NOMBRE_CORTO: evento.nombreCorto,
+        FECHAS: mismoDia ? formatear(evento.fechaInicio) : `${formatear(evento.fechaInicio)} – ${formatear(evento.fechaFin)}`,
+        SEDE: evento.sede ?? '---',
+        EVENTO_CORREO: evento.correoContacto ?? '---',
+        EVENTO_TELEFONO: evento.telefonoContacto ?? '---',
+        ANIO: evento.fechaInicio.getUTCFullYear(),
+        FECHA_GENERACION: formatear(new Date()),
+    }, ['LOGO'])
+}
+
+/** Borra los informes del evento con otra huella; conserva el recién escrito. */
+function borrarInformes(conservar: string): void {
+    try {
+        const directorio = path.dirname(conservar)
+        for (const archivo of fs.readdirSync(directorio)) {
+            const ruta = path.join(directorio, archivo)
+            if (PREFIJO_INFORME.test(archivo) && path.resolve(ruta) !== path.resolve(conservar)) fs.rmSync(ruta, { force: true })
+        }
+    } catch (error) {
+        console.error('No se pudieron borrar informes anteriores:', (error as Error).message)
+    }
+}
+
+/**
+ * Informe PDF genérico del evento (solo datos del evento, sin datos personales) que adjunta el
+ * correo de aprobación junto al enlace de la credencial 3D (spec 020). Se imprime una vez por
+ * evento y se reutiliza mientras la huella no cambie; nunca lanza `PDF_BUSY` dos veces para el
+ * mismo archivo (la cola está compartida con las credenciales).
+ */
+export function generarInformePdf(evento: EventoInforme): Promise<string> {
+    const destino = rutaInforme(evento)
+    if (fs.existsSync(destino)) return Promise.resolve(destino)
+    const pendiente = enCurso.get(destino)
+    if (pendiente) return pendiente
+    const promesa = enTurno(async () => {
+        await imprimirHtml(await htmlDeInforme(evento), destino, true)
+        borrarInformes(destino)
+        return destino
+    }).finally(() => enCurso.delete(destino))
     enCurso.set(destino, promesa)
     return promesa
 }

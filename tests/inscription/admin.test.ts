@@ -232,7 +232,7 @@ describe('reenvío de la credencial', () => {
             expect(r.status).toBe(200)
             expect(r.body.data).toEqual({ credencialEnviada: true })
             expect(generarPdf).not.toHaveBeenCalled()
-            expect(enviarCorreo).toHaveBeenCalledWith(expect.objectContaining({ id: 5 }), ruta)
+            expect(enviarCorreo).toHaveBeenCalledWith(expect.objectContaining({ id: 5 }))
             expect(m.inscripcion.update).toHaveBeenCalledWith({ where: { id: 5 }, data: { credencialEnviadaEn: expect.any(Date) } })
         } finally {
             fs.rmSync(ruta, { force: true })
@@ -258,14 +258,14 @@ describe('reenvío de la credencial', () => {
                 const r = await request(app).post('/api/v1/inscriptions/5/resend-credential').set(con(tesorero()))
                 expect(r.status).toBe(200)
                 expect(generarPdf).toHaveBeenCalledTimes(1)
-                expect(enviarCorreo).toHaveBeenLastCalledWith(expect.anything(), '/tmp/regenerada.pdf')
+                expect(enviarCorreo).toHaveBeenLastCalledWith(expect.anything())
             }
             // Un cambio anterior al PDF no lo regenera
             generarPdf.mockClear()
             m.inscripcion.findUnique.mockResolvedValue({ ...base, participante: { ...base.participante, actualizadoEn: new Date(generadoEn.getTime() - 60_000) } })
             await request(app).post('/api/v1/inscriptions/5/resend-credential').set(con(tesorero()))
             expect(generarPdf).not.toHaveBeenCalled()
-            expect(enviarCorreo).toHaveBeenLastCalledWith(expect.anything(), ruta)
+            expect(enviarCorreo).toHaveBeenLastCalledWith(expect.anything())
         } finally {
             fs.rmSync(ruta, { force: true })
         }
@@ -278,7 +278,7 @@ describe('reenvío de la credencial', () => {
         const r = await request(app).post('/api/v1/inscriptions/5/resend-credential').set(con(comision(['credenciales.reenviar'])))
         expect(r.status).toBe(200)
         expect(generarPdf).toHaveBeenCalledTimes(1)
-        expect(enviarCorreo).toHaveBeenCalledWith(expect.anything(), '/tmp/nueva.pdf')
+        expect(enviarCorreo).toHaveBeenCalledWith(expect.anything())
     })
 
     it('exige «credenciales.reenviar»', async () => {

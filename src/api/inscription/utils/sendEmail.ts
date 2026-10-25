@@ -1,8 +1,10 @@
 import fs from 'fs'
 import path from 'path'
 import { Prisma, type Evento } from '@prisma/client'
-import { renderTemplate } from '../../../core/html'
+import { escapeHtml, renderTemplate } from '../../../core/html'
+import { obtenerConfiguracion } from '../../../core/configuracion-sistema'
 import { credencialParaEvento, enviarConCredencial } from '../../email-credential/services/email-credential'
+import { generarInformePdf } from './generatePdf'
 import type { InscripcionDetalle } from '../services/mappers'
 
 const ASUNTO_POR_DEFECTO = 'Tu inscripción ha sido aprobada'
@@ -14,27 +16,40 @@ function plantilla(nombre: string): string {
 }
 
 /**
- * Envía el correo de aprobación con la credencial adjunta usando la credencial de correo del
- * evento (o la predeterminada, spec 006). Devuelve `false` (sin lanzar) si no hay credencial
- * activa o el envío falla, para no revertir la aprobación.
- *
- * El PDF se lee antes de la primera espera: quien llama lo pasa en cuanto se generó, y así otra
- * petición (una foto nueva borra los PDF guardados) no puede borrarlo antes de adjuntarlo.
+ * Botón (HTML crudo) que abre la credencial 3D en la landing, o vacío si la URL de la landing
+ * no está configurada (spec 020): sin enlace el correo sale igual, con el informe adjunto.
  */
-export async function enviarCorreoAprobacion(inscripcion: InscripcionDetalle, pdfPath: string): Promise<boolean> {
-    let adjunto: string
-    try {
-        adjunto = fs.readFileSync(pdfPath).toString('base64')
-    } catch {
-        console.error(`No se pudo leer la credencial PDF de la inscripción ${inscripcion.id}; no se envió el correo de aprobación`)
-        return false
-    }
+function accionCredencial(link: string | null): string {
+    if (!link) return ''
+    return `<a href="${escapeHtml(link)}" style="display:inline-block;padding:12px 24px;border-radius:4px;background-color:#0071bc;color:#ffffff;font-family:sans-serif;font-size:17px;font-weight:600;line-height:120%;text-decoration:none;">Ver mi credencial</a>`
+}
+
+/**
+ * Envía el correo de aprobación con el informe genérico del evento adjunto y el enlace a la
+ * credencial 3D (`<landing>/credencial/<codigo>`, spec 020) usando la credencial de correo del
+ * evento (o la predeterminada, spec 006). Devuelve `false` (sin lanzar) si no hay credencial
+ * activa o el envío falla, para no revertir la aprobación. Un fallo al generar el informe no
+ * bloquea el correo: se envía solo con el enlace.
+ */
+export async function enviarCorreoAprobacion(inscripcion: InscripcionDetalle): Promise<boolean> {
     const evento = inscripcion.evento
     const credencial = await credencialParaEvento(evento.credencialCorreoId)
     if (!credencial) {
         console.warn('No hay una credencial de correo activa; no se envió el correo de aprobación')
         return false
     }
+    const { urlLanding } = await obtenerConfiguracion()
+    const codigo = inscripcion.codigoCredencial
+    const link = urlLanding && codigo ? `${urlLanding.replace(/\/+$/, '')}/credencial/${codigo}` : null
+
+    let adjuntos: { nombre: string, contenidoBase64: string }[] | undefined
+    try {
+        const informe = await generarInformePdf(evento)
+        adjuntos = [{ nombre: `informacion-${evento.codigo}.pdf`, contenidoBase64: fs.readFileSync(informe).toString('base64') }]
+    } catch (error) {
+        console.error(`No se pudo generar el informe de ${evento.codigo}; el correo de aprobación sale sin adjunto (${causaDe(error)})`)
+    }
+
     let error: string | null
     try {
         const html = renderTemplate(plantilla('approval.html'), {
@@ -43,13 +58,14 @@ export async function enviarCorreoAprobacion(inscripcion: InscripcionDetalle, pd
             EVENTO_NOMBRE_CORTO: evento.nombreCorto,
             EVENTO_CORREO: evento.correoContacto ?? credencial.remitenteCorreo,
             ANIO: evento.fechaInicio.getUTCFullYear(),
-        })
+            ACCION: accionCredencial(link),
+        }, ['ACCION'])
         error = await enviarConCredencial(credencial, {
             remitente: { email: credencial.remitenteCorreo, name: evento.remitenteNombre || credencial.remitenteNombre || evento.nombreCorto },
             para: [{ email: inscripcion.participante.correo }],
             asunto: evento.asuntoAprobacion || ASUNTO_POR_DEFECTO,
             html,
-            adjuntos: [{ nombre: `credencial-${evento.codigo}-${inscripcion.id}.pdf`, contenidoBase64: adjunto }],
+            adjuntos,
         })
     } catch {
         error = 'no se pudo preparar el correo (plantilla)'

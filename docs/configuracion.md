@@ -21,7 +21,7 @@ variable antigua que sobre y **importa una sola vez** las que tienen equivalente
 
 | Pantalla | Qué se configura | Tabla |
 |---|---|---|
-| **Sistema** | API_UNDC (URL, API key, timeout, **Probar**), client ID de Google, URL del panel, interruptor "Landing anterior" (rutas legacy) | `configuracion_sistema` (fila única, caché de 30 s) |
+| **Sistema** | API_UNDC (URL, API key, timeout, **Probar**), client ID de Google, URL del panel, URL de la landing (origen, de aquí sale el enlace de la credencial en el correo, spec 020), interruptor "Landing anterior" (rutas legacy) | `configuracion_sistema` (fila única, caché de 30 s) |
 | **Correo** | Credenciales de Brevo (API key cifrada, remitente, predeterminada, prueba de cuenta, correo de prueba) | `credenciales_correo` |
 | **Consultas DNI** | Tokens de Decolecta/apiperu (límite, renovación, prioridad, prueba) | `tokens_consulta` |
 | **Eventos → Acceso** | Tokens de acceso de la landing del evento (se muestran una vez) | `tokens_acceso` |
@@ -59,5 +59,6 @@ numérica de 8–12 dígitos = estudiante; otra parte local = personal (docente 
 | QR de las billeteras / máximo | `<cwd>/uploads/qr` / 2 MB (PNG, JPG o WebP) | `src/core/almacenamiento.ts` |
 | Fotos del fotocheck / máximo | `<cwd>/uploads/fotos` / 2 MB y 4096 px por lado (PNG o JPG) | `src/core/almacenamiento.ts`, `src/core/imagenes.ts` |
 | Credenciales PDF | `<cwd>/uploads/credenciales/<evento>/<id>-<huella>.pdf`; 2 a la vez, 30 en cola, 30 s por paso de puppeteer | `src/api/inscription/utils/generatePdf.ts` |
+| Informe del evento (adjunto del correo, spec 020) | `<cwd>/uploads/credenciales/<evento>/informe-<huella>.pdf`; misma cola que las credenciales | `src/api/inscription/utils/generatePdf.ts` |
 | Código de acceso por correo | 10 min de vida; topes por correo, IP y globales | `src/api/participant-auth/services/participant-auth.ts` |
 | Límites por visitante y por token | ver `src/middlewares/rate-limit.ts` | |

@@ -33,6 +33,7 @@ virtual, asistencia y perfil con foto).
 | [016](specs/016-disponibilidad-tipos) | Disponibilidad de los tipos de inscripción: para todos, solo la comunidad UNDC o solo externos |
 | [017](specs/017-reinscripcion) | Reinscripción tras un rechazo o una cancelación; eliminar inscripciones solo el Owner |
 | [018](specs/018-delegaciones-inscripcion-manual) | Delegaciones por evento (grupos con delegado) e inscripción manual del staff con pago real |
+| [020](specs/020-credencial-enlace-correo) | Credencial en el correo: informe del evento adjunto y enlace a la credencial 3D en la landing |
 
 ## Desarrollo local
 

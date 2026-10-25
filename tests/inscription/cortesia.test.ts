@@ -124,7 +124,7 @@ describe('inscripción de cortesía', () => {
         expect(r.body.data.credencialEnviada).toBe(true)
         expect(generarPdf).toHaveBeenCalledTimes(1)
         expect(generarPdf.mock.calls[0][0]).toMatchObject({ id: 120, codigoCredencial: datosCreados().codigoCredencial })
-        expect(enviarCorreo).toHaveBeenCalledWith(expect.objectContaining({ id: 120 }), '/tmp/credencial.pdf')
+        expect(enviarCorreo).toHaveBeenCalledWith(expect.objectContaining({ id: 120 }))
         expect(m.inscripcion.update).toHaveBeenCalledWith({ where: { id: 120 }, data: { credencialEnviadaEn: expect.any(Date) } })
     })
 

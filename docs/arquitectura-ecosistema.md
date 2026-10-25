@@ -254,7 +254,8 @@ CORS está abierto a cualquier origen; la landing lo usa desde su servidor Nitro
 `X-Client-Ip` para los límites por visitante. Además hay límites por token. Rutas:
 `GET /api/v1/site/event`, `/registration-types`, `/catalogs`, `/config`,
 `GET /document-lookup/dni/:numero`, `GET /payment-qr/:archivo` (imagen del QR de una billetera,
-spec 012; la landing la sirve desde su BFF), `POST /inscriptions`, `/student-verification`,
+spec 012; la landing la sirve desde su BFF), `GET /credential/:codigo` (datos de la credencial,
+spec 020), `POST /inscriptions`, `/student-verification`,
 `/google-verification`, `/papers`, `/contact`.
 
 ### Correo conservado al reinscribirse (spec 014)
@@ -309,6 +310,23 @@ con kit a su precio institucional.
 - **Cambio compatible**: la respuesta `201` tiene la misma forma; la landing no necesita cambios.
 - Eliminar inscripciones (`DELETE /api/v1/inscriptions/:id`) pasa a ser **solo del Owner**
   (`inscripciones.eliminar` sale del Administrador del sistema).
+
+### Credencial en el correo con enlace (spec 020)
+
+Definido en `backend-ciisic/specs/020-credencial-enlace-correo/contracts/api-credencial.md`.
+
+- El correo de aprobación **ya no adjunta la credencial personalizada**: adjunta el **informe
+  genérico del evento** (A4 retrato, solo datos del evento, generado una vez por evento) y trae un
+  botón con el enlace `<urlLanding>/credencial/<codigoCredencial>`.
+- `urlLanding` es un campo nuevo de `configuracion_sistema` (panel → Sistema; origen, sin ruta),
+  con la misma caché de 30 s; **no** es pública (`GET /api/v1/site/config` sigue
+  `{ google, urlPanel }`).
+- La landing resuelve el enlace con su BFF → `GET /api/v1/site/credential/:codigo`
+  (`200 { nombres, apellidos, codigo, clasificacion, tipo, evento }`, `no-store`): solo
+  inscripciones `APROBADAS` del evento del token; `422 INVALID_CODE`, `404 CREDENTIAL_NOT_FOUND`.
+- **Cambio compatible**: la respuesta de `POST /api/v1/site/inscriptions` no cambia; la landing
+  actualiza su página `/credencial` en su propio repositorio (rama de la landing) para servir el
+  enlace y retirar la demostración.
 
 ## Contrato 4 — API administrativa del congreso (panel)
 

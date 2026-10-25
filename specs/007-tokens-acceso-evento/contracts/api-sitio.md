@@ -184,6 +184,14 @@ Ver spec 004. Body `{ "correo", "tipoDocumento", "numeroDocumento" }` →
 Ver spec 003. `200 { "success": true, "data": { "numero", "nombres", "apellidoPaterno", "apellidoMaterno", "apellidos" } }`;
 `404 DOCUMENT_NOT_FOUND`, `503 LOOKUP_UNAVAILABLE`.
 
+## GET `/credential/:codigo` (spec 020)
+
+Datos públicos de la credencial para la landing (el enlace del correo de aprobación). Ver
+[`specs/020-credencial-enlace-correo/contracts/api-credencial.md`](../../020-credencial-enlace-correo/contracts/api-credencial.md).
+`200 { "success": true, "data": { "nombres", "apellidos", "codigo", "clasificacion", "tipo": { "nombre", "etiqueta" } | null, "evento": { "nombre", "nombreCorto" } } }`
+con `Cache-Control: no-store`; solo inscripciones `APROBADAS` del evento del token;
+`422 INVALID_CODE` (formato), `404 CREDENTIAL_NOT_FOUND`.
+
 ---
 
 ## Administración de tokens (JWT de SuperAdmin)

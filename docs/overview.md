@@ -25,7 +25,7 @@ eventos de la Facultad) con sus inscripciones, credenciales, asistencia, ponenci
 | `integration` | Integraciones por evento (deportes-fi) y resumen Semana Sistémica | 005 |
 | `email-credential` | Credenciales de correo (Brevo) cifradas, por evento | 006 |
 | `access-token` | Tokens de acceso del sitio de cada evento | 007 |
-| `system-settings` | Configuración del sistema (API_UNDC, Google, URL del panel, rutas legacy) | 008 |
+| `system-settings` | Configuración del sistema (API_UNDC, Google, URL del panel, URL de la landing, rutas legacy) | 008 |
 | `google-auth` | Acceso con Google (panel) y verificación de correo (landing) | 010 |
 | `participant-portal` | Portal del inscrito: sus inscripciones y su credencial | 011 |
 | `admin`, `catalog` | Administradores, sesión, catálogos | 001–002 |
@@ -41,8 +41,9 @@ eventos de la Facultad) con sus inscripciones, credenciales, asistencia, ponenci
 2. **Revisión** (panel): un administrador aprueba o rechaza (motivo obligatorio). Al aprobar se
    genera la credencial PDF (`uploads/credenciales/<evento>/<id>-<huella>.pdf`, con el código de
    credencial en el QR; spec 014) y se envía el correo con
-   la credencial de correo del evento (o la predeterminada); si falla, la aprobación se mantiene
-   y el panel permite reenviar.
+   la credencial de correo del evento (o la predeterminada): adjunta el **informe genérico del
+   evento** y el enlace a la credencial 3D de la landing (spec 020); si falla, la aprobación se
+   mantiene y el panel permite reenviar.
 3. **Consulta DNI**: caché de 30 días; si no hay, recorre los tokens por prioridad (Decolecta,
    apiperu), marca agotados/inválidos y pasa al siguiente; sin tokens → 503 y la landing permite
    escribir los nombres.

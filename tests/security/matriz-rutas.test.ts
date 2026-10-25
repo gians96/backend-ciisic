@@ -85,6 +85,7 @@ const PUBLICAS: readonly Clave[] = [
 const SITIO: readonly Clave[] = [
     'GET /v1/site/catalogs',
     'POST /v1/site/contact',
+    'GET /v1/site/credential/:codigo',
     'GET /v1/site/document-lookup/dni/:numero',
     'GET /v1/site/event',
     'POST /v1/site/google-verification',
@@ -263,7 +264,7 @@ const esValidacion = (h: Handle) => h.validaCuerpo === true
 /** Limitadores con clave por cuenta: necesitan `req.actor`, que deja la guarda. */
 const LIMITES_POR_ACTOR: readonly RequestHandler[] = [limiteMarcarAsistencia, limiteReenvioCredencial, limiteRenovacionSesion, limiteSwitch]
 /** Total de rutas de /api: una ruta nueva obliga a clasificarla aquí. */
-const TOTAL_RUTAS = 135
+const TOTAL_RUTAS = 136
 
 function clasesDe(ruta: Ruta): Clase[] {
     const clases: Clase[] = []

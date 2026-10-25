@@ -2,7 +2,7 @@ import request from 'supertest'
 import app from '../../src/app'
 import { prisma } from '../../src/database/prisma'
 import { descifrar } from '../../src/core/crypto'
-import { configuracionPublica, configuracionUndc, reiniciarCacheConfiguracion } from '../../src/core/configuracion-sistema'
+import { configuracionPublica, configuracionUndc, obtenerConfiguracion, reiniciarCacheConfiguracion } from '../../src/core/configuracion-sistema'
 import { PERMISOS_ELEGIBLES_COMISION } from '../../src/core/permisos'
 import { tokenDeRol } from '../helpers/tokens'
 import { registroDeToken, TOKEN_SITIO } from '../helpers/sitio'
@@ -22,7 +22,7 @@ const fetchMock = jest.fn()
 let fila: Record<string, unknown>
 const nuevaFila = (cambios: Record<string, unknown> = {}) => ({
     id: 1, undcApiUrl: null, undcApiKeyCifrada: null, undcApiKeySufijo: null, undcApiTimeoutMs: 8000, undcUltimoEstado: null,
-    undcUltimoError: null, undcUltimaPruebaEn: null, googleClientId: null, urlPanel: null, rutasLegacyActivas: true,
+    undcUltimoError: null, undcUltimaPruebaEn: null, googleClientId: null, urlPanel: null, urlLanding: null, rutasLegacyActivas: true,
     actualizadoPorId: null, creadoEn: new Date(), actualizadoEn: new Date(), actualizadoPor: null, ...cambios,
 })
 
@@ -110,6 +110,24 @@ describe('configuración del sistema (Owner)', () => {
         expect(Object.keys(invalida.body.fields)).toEqual(expect.arrayContaining(['googleClientId', 'undcApiTimeoutMs']))
         const http = await request(app).put('/api/v1/settings').set('Authorization', superAdmin()).send({ undcApiUrl: 'http://api.example.com' })
         expect(http.body.code).toBe('INVALID_URL')
+    })
+
+    it('la URL de la landing se guarda como origen, se lee al instante y no sale en lo público (spec 020)', async () => {
+        const r = await request(app).put('/api/v1/settings').set('Authorization', superAdmin()).send({ urlLanding: 'https://congreso.undc.edu.pe/credencial/', undcApiTimeoutMs: 5000 })
+        expect(r.status).toBe(200)
+        expect(r.body.data.urlLanding).toBe('https://congreso.undc.edu.pe')
+        expect(fila.urlLanding).toBe('https://congreso.undc.edu.pe')
+        // La caché de la que lee el correo se actualiza sin volver a consultar la BD
+        m.configuracionSistema.findUnique.mockRejectedValue(new Error('no debería consultarse'))
+        expect((await obtenerConfiguracion()).urlLanding).toBe('https://congreso.undc.edu.pe')
+        // No es pública: ni el panel ni la landing (la lectura pública no la incluye)
+        expect(await configuracionPublica()).toEqual({ google: { clientId: null }, urlPanel: null })
+
+        const quitar = await request(app).put('/api/v1/settings').set('Authorization', superAdmin()).send({ urlLanding: null, undcApiTimeoutMs: 5000 })
+        expect(quitar.body.data.urlLanding).toBe(null)
+        const invalida = await request(app).put('/api/v1/settings').set('Authorization', superAdmin()).send({ urlLanding: 'congreso.undc.edu.pe', undcApiTimeoutMs: 5000 })
+        expect(invalida.status).toBe(422)
+        expect(invalida.body.code).toBe('INVALID_URL')
     })
 
     it('prueba la conexión con API_UNDC y registra el resultado', async () => {

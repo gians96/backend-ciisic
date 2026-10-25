@@ -5,8 +5,10 @@ import request from 'supertest'
 import app from '../../src/app'
 import { prisma } from '../../src/database/prisma'
 import { descifrar } from '../../src/core/crypto'
+import { reiniciarCacheConfiguracion } from '../../src/core/configuracion-sistema'
 import { credencialParaEvento } from '../../src/api/email-credential/services/email-credential'
 import { enviarCorreoAprobacion } from '../../src/api/inscription/utils/sendEmail'
+import { generarInformePdf } from '../../src/api/inscription/utils/generatePdf'
 import type { InscripcionDetalle } from '../../src/api/inscription/services/mappers'
 import { PERMISOS_ELEGIBLES_COMISION } from '../../src/core/permisos'
 import { tokenDeRol } from '../helpers/tokens'
@@ -16,10 +18,20 @@ jest.mock('../../src/database/prisma', () => {
         count: jest.fn(), create: jest.fn(), findUnique: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(),
         update: jest.fn(), updateMany: jest.fn(), delete: jest.fn(),
     }
-    return { prisma: { credencialCorreo, $transaction: jest.fn((fn: (tx: unknown) => unknown) => fn({ credencialCorreo })) } }
+    const configuracionSistema = { findUnique: jest.fn() }
+    return { prisma: { credencialCorreo, configuracionSistema, $transaction: jest.fn((fn: (tx: unknown) => unknown) => fn({ credencialCorreo })) } }
 })
+jest.mock('../../src/api/inscription/utils/generatePdf', () => ({
+    ...jest.requireActual('../../src/api/inscription/utils/generatePdf'),
+    generarInformePdf: jest.fn(),
+}))
 
-const m = (prisma as unknown as { credencialCorreo: Record<string, jest.Mock> }).credencialCorreo
+const m = (prisma as unknown as {
+    credencialCorreo: Record<string, jest.Mock>
+    configuracionSistema: { findUnique: jest.Mock }
+}).credencialCorreo
+const mConfig = (prisma as unknown as { configuracionSistema: { findUnique: jest.Mock } }).configuracionSistema
+const informe = generarInformePdf as jest.Mock
 const superAdmin = () => `Bearer ${tokenDeRol('SUPERADMIN')}`
 const fetchMock = jest.fn()
 const fetchOriginal = global.fetch
@@ -41,6 +53,9 @@ afterAll(() => { global.fetch = fetchOriginal })
 beforeEach(() => {
     jest.clearAllMocks()
     m.update.mockResolvedValue({})
+    reiniciarCacheConfiguracion()
+    mConfig.findUnique.mockResolvedValue(null)
+    informe.mockResolvedValue('/tmp/informe-ciisic.pdf')
 })
 
 describe('acceso a las credenciales de correo (spec 013)', () => {
@@ -146,44 +161,71 @@ describe('elección de la credencial al enviar', () => {
     })
 })
 
-describe('correo de aprobación', () => {
-    const pdf = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ciisic-correo-')), 'credencial.pdf')
-    fs.writeFileSync(pdf, '%PDF-1.4 prueba')
+describe('correo de aprobación (spec 020)', () => {
+    const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'ciisic-correo-'))
+    const rutaInforme = path.join(carpeta, 'informe.pdf')
+    fs.writeFileSync(rutaInforme, '%PDF-1.4 informe del evento')
     const inscripcion = {
         id: 44,
+        codigoCredencial: 'K7Q2M9X4TB',
         participante: { nombres: 'Ana', correo: 'ana@example.com' },
         evento: {
             codigo: 'ciisic-viii-2026', nombre: 'VIII Congreso', nombreCorto: 'VIII CIISIC 2026', correoContacto: 'congreso@undc.edu.pe',
             fechaInicio: new Date('2026-10-26T00:00:00Z'), remitenteNombre: null, asuntoAprobacion: '✅ Tu inscripción ha sido aprobada', credencialCorreoId: null,
         },
     } as unknown as InscripcionDetalle
-
-    it('envía con la credencial predeterminada, el asunto del evento y la credencial PDF adjunta', async () => {
+    const conBrevo = async () => {
         const { cifrar } = await import('../../src/core/crypto')
         m.findFirst.mockResolvedValue(credencial({ apiKeyCifrada: cifrar('xkeysib-envio') }))
         fetchMock.mockReturnValueOnce(respuesta(201, { messageId: '<id@brevo>' }))
-        expect(await enviarCorreoAprobacion(inscripcion, pdf)).toBe(true)
-        const [url, init] = fetchMock.mock.calls[0]
-        expect(url).toBe('https://api.brevo.com/v3/smtp/email')
-        const cuerpo = JSON.parse(init.body)
-        expect(cuerpo).toMatchObject({
+    }
+    const cuerpo = () => JSON.parse(fetchMock.mock.calls[0][1].body as string)
+    const html = () => cuerpo().htmlContent as string
+
+    beforeEach(() => { informe.mockResolvedValue(rutaInforme) })
+
+    it('adjunta el informe del evento y abre la credencial con el enlace de la landing', async () => {
+        mConfig.findUnique.mockResolvedValue({ id: 1, urlPanel: null, urlLanding: 'https://congreso.undc.edu.pe/', rutasLegacyActivas: false })
+        await conBrevo()
+        expect(await enviarCorreoAprobacion(inscripcion)).toBe(true)
+        expect(fetchMock.mock.calls[0][0]).toBe('https://api.brevo.com/v3/smtp/email')
+        expect(informe).toHaveBeenCalledWith(expect.objectContaining({ codigo: 'ciisic-viii-2026' }))
+        expect(cuerpo()).toMatchObject({
             sender: { email: 'no-reply@undc.edu.pe', name: 'Inscripción al congreso' },
             to: [{ email: 'ana@example.com' }],
             subject: '✅ Tu inscripción ha sido aprobada',
-            attachment: [{ name: 'credencial-ciisic-viii-2026-44.pdf', content: Buffer.from('%PDF-1.4 prueba').toString('base64') }],
+            attachment: [{ name: 'informacion-ciisic-viii-2026.pdf', content: fs.readFileSync(rutaInforme).toString('base64') }],
         })
-        expect(cuerpo.htmlContent).toContain('Ana')
+        expect(html()).toContain('Ana')
+        expect(html()).toContain('href="https://congreso.undc.edu.pe/credencial/K7Q2M9X4TB"')
+        expect(html()).not.toContain('{{')
+    })
+
+    it('sin urlLanding configurada sale igual, pero sin enlace', async () => {
+        await conBrevo()
+        expect(await enviarCorreoAprobacion(inscripcion)).toBe(true)
+        expect(html()).not.toContain('/credencial/')
+        expect(html()).toContain('Ana')
+    })
+
+    it('si el informe no se genera, el correo sale sin adjunto (no bloquea el enlace)', async () => {
+        mConfig.findUnique.mockResolvedValue({ id: 1, urlPanel: null, urlLanding: 'https://congreso.undc.edu.pe', rutasLegacyActivas: false })
+        informe.mockRejectedValueOnce(new Error('puppeteer cayó'))
+        await conBrevo()
+        expect(await enviarCorreoAprobacion(inscripcion)).toBe(true)
+        expect(cuerpo().attachment).toBeUndefined()
+        expect(html()).toContain('/credencial/K7Q2M9X4TB')
     })
 
     it('no lanza y devuelve false si no hay credencial o Brevo falla', async () => {
         m.findFirst.mockResolvedValue(null)
-        expect(await enviarCorreoAprobacion(inscripcion, pdf)).toBe(false)
+        expect(await enviarCorreoAprobacion(inscripcion)).toBe(false)
         expect(fetchMock).not.toHaveBeenCalled()
 
         const { cifrar } = await import('../../src/core/crypto')
         m.findFirst.mockResolvedValue(credencial({ apiKeyCifrada: cifrar('xkeysib-envio') }))
         fetchMock.mockReturnValueOnce(respuesta(402, { message: 'not enough credits' }))
-        expect(await enviarCorreoAprobacion(inscripcion, pdf)).toBe(false)
+        expect(await enviarCorreoAprobacion(inscripcion)).toBe(false)
         expect(m.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ ultimoEstado: 'ERROR' }) }))
     })
 })

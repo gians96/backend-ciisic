@@ -7,7 +7,7 @@ import QRCode from 'qrcode'
 import { prisma } from '../../src/database/prisma'
 import { DIRECTORIO_FOTOS, DIRECTORIO_UPLOADS, nuevoNombreFoto } from '../../src/core/almacenamiento'
 import { REGEX_CODIGO_CREDENCIAL } from '../../src/core/codigos'
-import { borrarCredenciales, generarCredencialPdf, huellaCredencial, rutaCredencial } from '../../src/api/inscription/utils/generatePdf'
+import { borrarCredenciales, generarCredencialPdf, generarInformePdf, huellaCredencial, huellaInforme, rutaCredencial, rutaInforme } from '../../src/api/inscription/utils/generatePdf'
 import { archivoCredencial, cambiarEstado, crearInscripcion, eliminarInscripcion, reenviarCredencial } from '../../src/api/inscription/services/inscription'
 import { enviarCorreoAprobacion } from '../../src/api/inscription/utils/sendEmail'
 import type { InscripcionDetalle } from '../../src/api/inscription/services/mappers'
@@ -43,6 +43,7 @@ const enviarCorreo = enviarCorreoAprobacion as Mock
 // ─── Navegador simulado ────────────────────────────────────────────────────
 
 let htmlImpresos: string[] = []
+let pdfOpciones: Record<string, unknown>[] = []
 let activos = 0
 let maximoActivos = 0
 /** Si está definido, `page.pdf` espera a que la prueba lo libere. */
@@ -57,7 +58,8 @@ function navegadorSimulado() {
         setContent: jest.fn(async (html: string) => {
             htmlImpresos.push(html)
         }),
-        pdf: jest.fn(async () => {
+        pdf: jest.fn(async (opciones: Record<string, unknown>) => {
+            pdfOpciones.push(opciones)
             if (bloqueo) await bloqueo
             return Buffer.from('%PDF-1.4 simulado')
         }),
@@ -93,6 +95,7 @@ beforeEach(() => {
     jest.clearAllMocks()
     lanzar.mockImplementation(async () => navegadorSimulado())
     htmlImpresos = []
+    pdfOpciones = []
     activos = 0
     maximoActivos = 0
     bloqueo = null
@@ -220,6 +223,65 @@ describe('PDF de la credencial (spec 014)', () => {
     })
 })
 
+describe('informe genérico del evento (spec 020)', () => {
+    const eventoInforme = {
+        codigo: 'ciisic-viii-2026', nombre: 'VIII Congreso', nombreCorto: 'VIII CIISIC 2026',
+        sede: 'Auditorio Mayor UNDC', fechaInicio: new Date('2026-10-26T00:00:00Z'), fechaFin: new Date('2026-10-30T00:00:00Z'),
+        correoContacto: 'congreso@undc.edu.pe', telefonoContacto: '999888777', logoArchivo: null,
+        actualizadoEn: new Date('2026-09-01T00:00:00Z'),
+    }
+
+    it('la huella cambia con lo que se imprime; la ruta lleva esa huella', () => {
+        const base = huellaInforme(eventoInforme)
+        expect(base).toMatch(/^[0-9a-f]{12}$/)
+        expect(rutaInforme(eventoInforme)).toBe(path.join(carpetaEvento, `informe-${base}.pdf`))
+        for (const distinto of [
+            { ...eventoInforme, sede: 'Otra sala' },
+            { ...eventoInforme, fechaFin: new Date('2026-10-31T00:00:00Z') },
+            { ...eventoInforme, telefonoContacto: null },
+            { ...eventoInforme, logoArchivo: 'logo-nuevo.png' },
+            { ...eventoInforme, actualizadoEn: new Date('2026-09-02T00:00:00Z') },
+        ]) {
+            expect(huellaInforme(distinto)).not.toBe(base)
+        }
+    })
+
+    it('imprime solo datos del evento, en A4 vertical (la credencial va apaisada)', async () => {
+        const ruta = await generarInformePdf(eventoInforme)
+        expect(path.basename(ruta)).toMatch(/^informe-[0-9a-f]{12}\.pdf$/)
+        expect(fs.readFileSync(ruta, 'utf8')).toBe('%PDF-1.4 simulado')
+        expect(pdfOpciones[0]).toMatchObject({ format: 'A4', landscape: false })
+        const html = htmlImpresos[0]
+        expect(html).toContain('VIII Congreso')
+        expect(html).toContain('Auditorio Mayor UNDC')
+        expect(html).toContain('congreso@undc.edu.pe')
+        expect(html).toContain('999888777')
+        expect(html).not.toContain('{{')
+        expect(html).not.toContain('Pérez')
+        expect(html).not.toContain('K7Q2M9X4TB')
+    })
+
+    it('lo reutiliza mientras la huella no cambie y al cambiar borra solo los informes viejos', async () => {
+        fs.mkdirSync(carpetaEvento, { recursive: true })
+        fs.writeFileSync(path.join(carpetaEvento, 'informe-aaaaaaaaaaaa.pdf'), 'viejo')
+        const primera = await generarInformePdf(eventoInforme)
+        expect(lanzar).toHaveBeenCalledTimes(1)
+        expect(await generarInformePdf(eventoInforme)).toBe(primera)
+        expect(lanzar).toHaveBeenCalledTimes(1)
+        fs.writeFileSync(path.join(carpetaEvento, '5-bbbbbbbbbbbb.pdf'), 'credencial')
+        fs.writeFileSync(path.join(carpetaEvento, 'notas.txt'), 'x')
+        const nueva = await generarInformePdf({ ...eventoInforme, sede: 'Otra sala' })
+        expect(nueva).not.toBe(primera)
+        expect(archivosDe(carpetaEvento)).toEqual(['5-bbbbbbbbbbbb.pdf', path.basename(nueva), 'notas.txt'])
+    })
+
+    it('dos informes del mismo evento a la vez abren un solo navegador', async () => {
+        const [a, b] = await Promise.all([generarInformePdf(eventoInforme), generarInformePdf(eventoInforme)])
+        expect(a).toBe(b)
+        expect(lanzar).toHaveBeenCalledTimes(1)
+    })
+})
+
 describe('credencial en el servicio de inscripciones', () => {
     /** Fila simulada: `findUnique` la devuelve y `updateMany` solo escribe si el código sigue en NULL. */
     function filaEnBd(inicial: InscripcionDetalle) {
@@ -268,7 +330,7 @@ describe('credencial en el servicio de inscripciones', () => {
         expect(fila.esQrLegado).toBe(false)
         expect(m.inscripcion.updateMany.mock.invocationCallOrder[0]).toBeLessThan(m.inscripcion.update.mock.invocationCallOrder[0])
         expect(aQr).toHaveBeenCalledWith(fila.codigoCredencial)
-        expect(enviarCorreo).toHaveBeenCalledWith(expect.objectContaining({ codigoCredencial: fila.codigoCredencial }), expect.stringMatching(/5-[0-9a-f]{12}\.pdf$/))
+        expect(enviarCorreo).toHaveBeenCalledWith(expect.objectContaining({ codigoCredencial: fila.codigoCredencial }))
     })
 
     it('el reenvío de una credencial sin código también lo asigna', async () => {

@@ -3,7 +3,7 @@ import { AppRoute, buildRouter } from '../../../core/routes'
 import { upload, validateUploadedFileContent } from '../../../middlewares/upload'
 import { requirePermiso } from '../../../middlewares/auth'
 import { validateBody } from '../../../middlewares/validate'
-import { limiteInscripcion, limiteReenvioCredencial, limiteTokenInscripcion } from '../../../middlewares/rate-limit'
+import { limiteInscripcion, limiteLecturaPublica, limiteReenvioCredencial, limiteTokenInscripcion, limiteTokenLectura } from '../../../middlewares/rate-limit'
 import { requireTokenEvento } from '../../../middlewares/sitio'
 import { rutaLegacy } from '../../../middlewares/legacy'
 import { eventoDeInscripcion, eventoDelParametro } from '../../../core/resolutores-evento'
@@ -17,6 +17,13 @@ const routes: AppRoute[] = [
         path: '/v1/site/inscriptions',
         handler: controller.publicCreate,
         middlewares: [requireTokenEvento, limiteInscripcion, limiteTokenInscripcion, upload.single('voucher'), validateUploadedFileContent],
+    },
+    // Credencial 3D por código (spec 020): la landing la abre desde el enlace del correo
+    {
+        method: 'get',
+        path: '/v1/site/credential/:codigo',
+        handler: controller.publicCredential,
+        middlewares: [requireTokenEvento, limiteLecturaPublica, limiteTokenLectura],
     },
 
     // Legacy (landing anterior y herramientas previas; evento principal)
