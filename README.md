@@ -32,6 +32,7 @@ virtual, asistencia y perfil con foto).
 | [014](specs/014-portal-fotocheck-asistencia) | Portal del participante (código por correo, perfil con foto, asistencia), fotocheck virtual con código de credencial y asistencia por QR |
 | [016](specs/016-disponibilidad-tipos) | Disponibilidad de los tipos de inscripción: para todos, solo la comunidad UNDC o solo externos |
 | [017](specs/017-reinscripcion) | Reinscripción tras un rechazo o una cancelación; eliminar inscripciones solo el Owner |
+| [018](specs/018-delegaciones-inscripcion-manual) | Delegaciones por evento (grupos con delegado) e inscripción manual del staff con pago real |
 
 ## Desarrollo local
 

@@ -7,7 +7,7 @@ import { limiteInscripcion, limiteReenvioCredencial, limiteTokenInscripcion } fr
 import { requireTokenEvento } from '../../../middlewares/sitio'
 import { rutaLegacy } from '../../../middlewares/legacy'
 import { eventoDeInscripcion, eventoDelParametro } from '../../../core/resolutores-evento'
-import { cambiarEstadoLegacySchema, cortesiaSchema } from '../validation'
+import { cambiarEstadoLegacySchema, cortesiaSchema, inscripcionManualSchema } from '../validation'
 
 const routes: AppRoute[] = [
     // API del sitio (landing del evento, con su token de acceso). El token se valida antes de
@@ -53,6 +53,13 @@ const routes: AppRoute[] = [
         path: '/v1/events/:eventId/courtesy-inscriptions',
         handler: controller.createCourtesy,
         middlewares: [requirePermiso('inscripciones.cortesia'), validateBody(cortesiaSchema)],
+    },
+    // Inscripción manual con pago real (spec 018): el staff registra el pago y la delegación; solo cuentas globales
+    {
+        method: 'post',
+        path: '/v1/events/:eventId/manual-inscriptions',
+        handler: controller.createManual,
+        middlewares: [requirePermiso('inscripciones.manual'), validateBody(inscripcionManualSchema)],
     },
     { method: 'delete', path: '/v1/inscriptions/:id', handler: controller.remove, middlewares: [requirePermiso('inscripciones.eliminar')] },
 ]

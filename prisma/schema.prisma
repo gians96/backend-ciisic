@@ -108,6 +108,7 @@ model Evento {
   actualizadoEn         DateTime               @updatedAt @map("actualizado_en")
   credencialCorreo      CredencialCorreo?      @relation(fields: [credencialCorreoId], references: [id], onDelete: SetNull, map: "fk_eventos_credencial_correo")
   categorias            CategoriaInscripcion[]
+  delegaciones          Delegacion[]
   inscripciones         Inscripcion[]
   actividades           Actividad[]
   ponencias             Ponencia[]
@@ -150,6 +151,7 @@ model Participante {
   inscripciones     Inscripcion[]
   asistencias       Asistencia[]
   codigosAcceso     CodigoAcceso[]
+  delegaciones      Delegacion[]
 
   @@unique([tipoDocumentoId, numeroDocumento], map: "uq_participantes_documento")
   @@map("participantes")
@@ -239,12 +241,42 @@ model EstadoInscripcion {
   @@map("estados_inscripcion")
 }
 
+/// Tipo de grupo que describe una delegación (spec 018).
+enum TipoDelegacion {
+  SALON
+  CICLO
+  OTRO
+}
+
+/// Delegación de un evento (spec 018): grupo de participantes (salón, ciclo u otro) con su
+/// delegado. Las inscripciones manuales se vinculan a ella (`inscripciones.delegacion_id`).
+model Delegacion {
+  id            Int            @id @default(autoincrement())
+  eventoId      Int            @map("evento_id")
+  nombre        String         @db.VarChar(120)
+  tipo          TipoDelegacion @default(OTRO)
+  abreviatura   String?        @db.VarChar(20)
+  delegadoId    Int?           @map("delegado_id")
+  activo        Boolean        @default(true)
+  creadoEn      DateTime       @default(now()) @map("creado_en")
+  actualizadoEn DateTime       @updatedAt @map("actualizado_en")
+  evento        Evento         @relation(fields: [eventoId], references: [id], onDelete: Cascade, map: "fk_delegaciones_evento")
+  delegado      Participante?  @relation(fields: [delegadoId], references: [id], onDelete: SetNull, map: "fk_delegaciones_delegado")
+  inscripciones Inscripcion[]
+
+  @@unique([eventoId, nombre], map: "uq_delegaciones_evento_nombre")
+  @@index([eventoId], map: "idx_delegaciones_evento")
+  @@index([delegadoId], map: "idx_delegaciones_delegado")
+  @@map("delegaciones")
+}
+
 model Inscripcion {
   id                     Int               @id @default(autoincrement())
   eventoId               Int               @map("evento_id")
   participanteId         Int               @map("participante_id")
   tipoInscripcionId      Int?              @map("tipo_inscripcion_id")
   clasificacionId        Int?              @map("clasificacion_id")
+  delegacionId           Int?              @map("delegacion_id")
   estadoId               Int               @map("estado_id")
   creadoEn               DateTime          @default(now()) @map("creado_en")
   actualizadoEn          DateTime          @updatedAt @map("actualizado_en")
@@ -277,6 +309,7 @@ model Inscripcion {
   participante           Participante      @relation(fields: [participanteId], references: [id], map: "fk_inscripciones_participante")
   tipoInscripcion        TipoInscripcion?  @relation(fields: [tipoInscripcionId], references: [id], onDelete: SetNull, map: "fk_inscripciones_tipo_inscripcion")
   clasificacion          Clasificacion?    @relation(fields: [clasificacionId], references: [id], onDelete: SetNull, map: "fk_inscripciones_clasificacion")
+  delegacion             Delegacion?       @relation(fields: [delegacionId], references: [id], onDelete: SetNull, map: "fk_inscripciones_delegacion")
   estado                 EstadoInscripcion @relation(fields: [estadoId], references: [id], map: "fk_inscripciones_estado")
   revisadoPor            Administrador?    @relation("InscripcionRevisor", fields: [revisadoPorId], references: [id], onDelete: SetNull, map: "fk_inscripciones_revisado_por")
 
@@ -284,6 +317,7 @@ model Inscripcion {
   @@index([participanteId], map: "idx_inscripciones_participante")
   @@index([tipoInscripcionId], map: "idx_inscripciones_tipo_inscripcion")
   @@index([clasificacionId], map: "idx_inscripciones_clasificacion")
+  @@index([delegacionId], map: "idx_inscripciones_delegacion")
   @@index([estadoId], map: "idx_inscripciones_estado")
   @@index([revisadoPorId], map: "idx_inscripciones_revisado_por")
   @@map("inscripciones")

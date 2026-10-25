@@ -9,6 +9,7 @@ export const detalleInclude = {
     participante: true,
     tipoInscripcion: { include: { categoria: true } },
     clasificacion: true,
+    delegacion: { select: { id: true, nombre: true, tipo: true, abreviatura: true, activo: true } },
     estado: true,
     evento: true,
     revisadoPor: { select: { id: true, nombres: true, apellidos: true } },
@@ -93,6 +94,9 @@ export function aDetalle(i: InscripcionDetalle, conPago = true) {
             }
             : null,
         clasificacion: i.clasificacion ? { id: i.clasificacion.id, nombre: i.clasificacion.nombre } : null,
+        delegacion: i.delegacion
+            ? { id: i.delegacion.id, nombre: i.delegacion.nombre, tipo: i.delegacion.tipo, abreviatura: i.delegacion.abreviatura }
+            : null,
         estado: { id: i.estado.id, codigo: i.estado.codigo, nombre: i.estado.nombre },
         pago: conPago ? pagoDe(i) : pagoOculto(),
         verificacion: {
@@ -120,6 +124,7 @@ export function aFilaLista(i: InscripcionDetalle, conPago = true) {
         participante: d.participante,
         tipoInscripcion: d.tipoInscripcion ? { id: d.tipoInscripcion.id, nombre: d.tipoInscripcion.nombre, etiqueta: d.tipoInscripcion.etiqueta, categoria: d.tipoInscripcion.categoria.codigo } : null,
         clasificacion: d.clasificacion,
+        delegacion: d.delegacion ? { id: d.delegacion.id, nombre: d.delegacion.nombre } : null,
         estado: d.estado,
         monto: d.pago.monto,
         modalidadPago: d.pago.modalidad ?? null,

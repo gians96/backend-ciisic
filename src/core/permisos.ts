@@ -19,9 +19,11 @@ export const ALCANCE = {
     'correo.configurar': 'G',
     'consultas_dni.gestionar': 'G',
     'participantes.gestionar': 'G',
+    'delegaciones.gestionar': 'G',
     'inscripciones.eliminar': 'G',
     'inscripciones.cancelar': 'G',
     'inscripciones.cortesia': 'G',
+    'inscripciones.manual': 'G',
     'legacy.usar': 'G',
     'certificados.gestionar': 'G',
 
@@ -60,9 +62,11 @@ export const ETIQUETAS_PERMISO: Record<Permiso, string> = {
     'correo.configurar': 'Configurar credenciales de correo',
     'consultas_dni.gestionar': 'Consultas DNI y su pool de tokens',
     'participantes.gestionar': 'Crear y editar participantes',
+    'delegaciones.gestionar': 'Crear y gestionar las delegaciones del evento',
     'inscripciones.eliminar': 'Eliminar inscripciones',
     'inscripciones.cancelar': 'Cancelar inscripciones',
     'inscripciones.cortesia': 'Registrar inscripciones de cortesía',
+    'inscripciones.manual': 'Registrar inscripciones manuales con su pago',
     'legacy.usar': 'Usar las rutas de la versión anterior',
     'certificados.gestionar': 'Gestionar plantillas y emitir certificados',
 

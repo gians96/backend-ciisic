@@ -29,6 +29,7 @@ eventos de la Facultad) con sus inscripciones, credenciales, asistencia, ponenci
 | `google-auth` | Acceso con Google (panel) y verificación de correo (landing) | 010 |
 | `participant-portal` | Portal del inscrito: sus inscripciones y su credencial | 011 |
 | `admin`, `catalog` | Administradores, sesión, catálogos | 001–002 |
+| `delegation` | Delegaciones por evento (grupos con delegado) e inscripción manual del staff | 018 |
 
 ## Flujos principales
 

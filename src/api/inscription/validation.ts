@@ -86,3 +86,39 @@ export const cortesiaSchema = yup.object({
 }).required()
 
 export type CortesiaInput = yup.InferType<typeof cortesiaSchema>
+
+/**
+ * `POST /v1/events/:eventId/manual-inscriptions` (spec 018): el staff registra una inscripción con
+ * su pago real (sin voucher) y, opcionalmente, la vincula a una delegación. A quién se inscribe se
+ * indica con `participanteId` (registro existente) o con `participante` (documento: se reutiliza si
+ * ya existe y si no se da de alta), exactamente uno de los dos.
+ */
+export const inscripcionManualSchema = yup.object({
+    participanteId: yup.number().integer().positive(),
+    /** Sin esto yup castea el objeto ausente a `{}` y dispara sus campos requeridos. */
+    participante: participanteSchema.optional().default(undefined),
+    tipoInscripcionId: yup.number().integer().positive().nullable(),
+    clasificacionId: yup.number().integer().positive().nullable(),
+    delegacionId: yup.number().integer().positive().nullable(),
+    modalidadPago: yup.string().oneOf(['banco', 'billetera', 'efectivo']).required(),
+    banco: yup.string().trim().lowercase().max(40).nullable()
+        .when('modalidadPago', { is: 'banco', then: (schema) => schema.required('Indique el banco') }),
+    tipoOperacion: yup.string().oneOf(['directo', 'interbancario']).nullable()
+        .when('modalidadPago', { is: 'banco', then: (schema) => schema.required('Indique el tipo de operación') }),
+    billeteraDigital: yup.string().trim().lowercase().max(40).nullable()
+        .when('modalidadPago', { is: 'billetera', then: (schema) => schema.required('Indique la billetera digital') }),
+    numeroOperacion: numeroOperacion(),
+    fechaPago: fechaPago(),
+    monto: yup.number().typeError('El monto debe ser un número').min(0, 'El monto no puede ser negativo')
+        .max(999999.99, 'El monto es demasiado grande').required('Indique el monto pagado'),
+    descuento: yup.number().typeError('El descuento debe ser un número').min(0).max(999999.99).default(0),
+    /** Genera y envía la credencial al crearla, como al aprobar. */
+    enviarCredencial: yup.boolean().default(false),
+}).test('persona', 'Indique participanteId o los datos del participante', function (value) {
+    const conId = value?.participanteId !== undefined
+    const conDatos = value?.participante !== undefined
+    if (conId === conDatos) return this.createError({ message: 'Indique exactamente uno: participanteId o participante' })
+    return true
+}).required()
+
+export type InscripcionManualInput = yup.InferType<typeof inscripcionManualSchema>

@@ -158,6 +158,13 @@ const MATRIZ: Record<Clave, Esperada> = {
     'PATCH /v1/contact-messages/:id': g('mensajes.ver', eventoDeMensaje),
     'DELETE /v1/contact-messages/:id': g('mensajes.eliminar', eventoDeMensaje),
 
+    // delegation (spec 018)
+    'GET /v1/events/:eventId/delegations': g('delegaciones.gestionar'),
+    'POST /v1/events/:eventId/delegations': g('delegaciones.gestionar'),
+    'GET /v1/delegations/:id': g('delegaciones.gestionar'),
+    'PATCH /v1/delegations/:id': g('delegaciones.gestionar'),
+    'GET /v1/delegations/:id/members': g('delegaciones.gestionar'),
+
     // document-lookup
     'GET /v1/document-lookup/dni/:numero': g('consultas_dni.gestionar'),
     'GET /v1/lookup-tokens': g('consultas_dni.gestionar'),
@@ -199,6 +206,7 @@ const MATRIZ: Record<Clave, Esperada> = {
     'GET /v1/inscriptions/:id/credential': g('inscripciones.ver', eventoDeInscripcion),
     'GET /v1/inscriptions/:id/photo': g(['asistencia.marcar', 'inscripciones.ver'], eventoDeInscripcion),
     'POST /v1/events/:eventId/courtesy-inscriptions': g('inscripciones.cortesia'),
+    'POST /v1/events/:eventId/manual-inscriptions': g('inscripciones.manual'),
     'DELETE /v1/inscriptions/:id': g('inscripciones.eliminar'),
 
     // integration
@@ -255,7 +263,7 @@ const esValidacion = (h: Handle) => h.validaCuerpo === true
 /** Limitadores con clave por cuenta: necesitan `req.actor`, que deja la guarda. */
 const LIMITES_POR_ACTOR: readonly RequestHandler[] = [limiteMarcarAsistencia, limiteReenvioCredencial, limiteRenovacionSesion, limiteSwitch]
 /** Total de rutas de /api: una ruta nueva obliga a clasificarla aquí. */
-const TOTAL_RUTAS = 129
+const TOTAL_RUTAS = 135
 
 function clasesDe(ruta: Ruta): Clase[] {
     const clases: Clase[] = []

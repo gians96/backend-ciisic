@@ -36,6 +36,10 @@ export type MetodoAsistencia = typeof METODOS_ASISTENCIA[number]
 export const DISPONIBILIDADES_TIPO = ['TODOS', 'INSTITUCIONAL', 'EXTERNOS'] as const
 export type DisponibilidadTipo = typeof DISPONIBILIDADES_TIPO[number]
 
+/** Tipo de grupo de una delegación (spec 018): salón, ciclo u otro. */
+export const TIPOS_DELEGACION = ['SALON', 'CICLO', 'OTRO'] as const
+export type CodigoTipoDelegacion = typeof TIPOS_DELEGACION[number]
+
 export const CATEGORIA_ESTUDIANTES = 'ESTUDIANTES'
 export const CATEGORIA_PUBLICO_GENERAL = 'PUBLICO_GENERAL'
 

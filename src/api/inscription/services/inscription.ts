@@ -21,7 +21,8 @@ import { borrarCredenciales, generarCredencialPdf, rutaCredencial } from '../uti
 import { enDiferido, enviarAvisoCorreoConservado, enviarCorreoAprobacion } from '../utils/sendEmail'
 import { calcularPrecio, esCorreoInstitucional, mensajeTipoNoDisponible, tipoDisponible } from './pricing'
 import { aDetalle, aFilaLista, detalleInclude, type InscripcionDetalle } from './mappers'
-import type { CortesiaInput, CrearInscripcionInput } from '../validation'
+import { crearParticipante } from '../../participant/services/participant'
+import type { CortesiaInput, CrearInscripcionInput, InscripcionManualInput } from '../validation'
 
 export interface OpcionesCreacion {
     /** Ruta legacy: voucher opcional y regla histórica de precio por dominio de correo. */
@@ -271,6 +272,7 @@ export interface FiltrosInscripcion {
     estado?: string
     tipoInscripcionId?: number
     categoria?: string
+    delegacionId?: number
     esEstudianteUndc?: boolean
     q?: string
 }
@@ -283,6 +285,7 @@ export function construirFiltro(eventoId: number, filtros: FiltrosInscripcion, c
         ...(filtros.estado ? { estado: { codigo: filtros.estado } } : {}),
         ...(filtros.tipoInscripcionId ? { tipoInscripcionId: filtros.tipoInscripcionId } : {}),
         ...(filtros.categoria ? { tipoInscripcion: { categoria: { codigo: filtros.categoria } } } : {}),
+        ...(filtros.delegacionId ? { delegacionId: filtros.delegacionId } : {}),
         ...(filtros.esEstudianteUndc !== undefined ? { esEstudianteUndc: filtros.esEstudianteUndc } : {}),
         ...(q
             ? {
@@ -489,6 +492,110 @@ export async function crearInscripcionCortesia(eventoId: number, input: Cortesia
                 throw comoColisionDeCodigo(error)
             }
         })
+    } catch (error) {
+        return errorDeUnicidad(error)
+    }
+
+    if (!input.enviarCredencial) return { inscripcion: creada, credencialEnviada: null }
+    const credencialEnviada = await emitirCredencial(creada)
+    return { inscripcion: await obtenerInscripcion(creada.id), credencialEnviada }
+}
+
+// ─── Inscripción manual del staff (spec 018) ────────────────────────────────
+
+type PersonaManual = { id: number, correo: string }
+
+/**
+ * A quién se inscribe: el participante indicado por id, o el documento enviado (si ya existe se
+ * reutiliza tal cual; si no, se da de alta con las mismas reglas que `POST /v1/participants`:
+ * correo único y nombres del DNI cuando la consulta responde).
+ */
+async function resolverParticipante(input: InscripcionManualInput): Promise<PersonaManual> {
+    if (input.participanteId) {
+        const existente = await prisma.participante.findUnique({ where: { id: input.participanteId }, select: { id: true, correo: true } })
+        if (!existente) throw notFound('PARTICIPANT_NOT_FOUND', `Participante con id ${input.participanteId} no encontrado`)
+        return existente
+    }
+    const datos = input.participante ?? null
+    if (!datos) throw unprocessable('VALIDATION_ERROR', 'Indique participanteId o los datos del participante.')
+    const porDocumento = await prisma.participante.findUnique({
+        where: { tipoDocumentoId_numeroDocumento: { tipoDocumentoId: datos.tipoDocumento, numeroDocumento: datos.numeroDocumento } },
+        select: { id: true, correo: true },
+    })
+    if (porDocumento) return porDocumento
+    const creado = await crearParticipante(datos)
+    return { id: creado.id, correo: creado.correo }
+}
+
+/** La delegación debe pertenecer al evento y estar activa (422 `DELEGATION_INVALID` / `DELEGATION_INACTIVE`). */
+async function exigirDelegacion(eventoId: number, delegacionId: number): Promise<void> {
+    const delegacion = await prisma.delegacion.findFirst({ where: { id: delegacionId }, select: { eventoId: true, activo: true } })
+    if (!delegacion || delegacion.eventoId !== eventoId) {
+        throw unprocessable('DELEGATION_INVALID', 'La delegación no existe o no pertenece a este evento.')
+    }
+    if (!delegacion.activo) throw unprocessable('DELEGATION_INACTIVE', 'La delegación está inactiva. Reactívela para inscribir en ella.')
+}
+
+/** Monto a dos decimales (la columna es `DECIMAL(10,2)`). */
+const aDosDecimales = (valor: number) => Math.round(valor * 100) / 100
+
+/**
+ * Inscripción manual (spec 018): el staff registra a una persona con su pago real (sin voucher) y,
+ * opcionalmente, la vincula a una delegación. Nace APROBADO y queda revisada por quien la registra.
+ * A diferencia de la cortesía, el número de operación lo escribe el staff (es único en el sistema:
+ * uno repetido responde 409 `OPERATION_ALREADY_REGISTERED`). Con `enviarCredencial` genera y envía
+ * la credencial como al aprobar (si el envío falla, la inscripción se mantiene).
+ */
+export async function crearInscripcionManual(eventoId: number, input: InscripcionManualInput, adminId: number) {
+    const evento = await obtenerEventoPorId(eventoId)
+    const participante = await resolverParticipante(input)
+    if (input.tipoInscripcionId) {
+        const tipo = await prisma.tipoInscripcion.findFirst({ where: { id: input.tipoInscripcionId, categoria: { eventoId: evento.id } }, select: { id: true } })
+        if (!tipo) throw unprocessable('REGISTRATION_TYPE_INVALID', 'El tipo de inscripción no existe o no pertenece a este evento.')
+    }
+    if (input.clasificacionId) {
+        const clasificacion = await prisma.clasificacion.findUnique({ where: { id: input.clasificacionId }, select: { id: true } })
+        if (!clasificacion) throw unprocessable('CLASSIFICATION_INVALID', 'La clasificación seleccionada no existe.')
+    }
+    if (input.delegacionId) await exigirDelegacion(evento.id, input.delegacionId)
+    const existente = await prisma.inscripcion.findUnique({
+        where: { eventoId_participanteId: { eventoId: evento.id, participanteId: participante.id } },
+        select: { id: true },
+    })
+    if (existente) throw conflict('ALREADY_REGISTERED', 'La persona ya tiene una inscripción en este evento.')
+
+    const ahora = new Date()
+    const descuento = aDosDecimales(input.descuento ?? 0)
+    let creada: InscripcionDetalle
+    try {
+        creada = await conReintentoDeCodigo(() => prisma.inscripcion.create({
+            data: {
+                evento: { connect: { id: evento.id } },
+                participante: { connect: { id: participante.id } },
+                ...(input.tipoInscripcionId ? { tipoInscripcion: { connect: { id: input.tipoInscripcionId } } } : {}),
+                ...(input.clasificacionId ? { clasificacion: { connect: { id: input.clasificacionId } } } : {}),
+                ...(input.delegacionId ? { delegacion: { connect: { id: input.delegacionId } } } : {}),
+                estado: { connect: { codigo: 'APROBADO' } },
+                codigoCredencial: nuevoCodigoCredencial(),
+                modalidadPago: input.modalidadPago,
+                banco: input.modalidadPago === 'banco' ? input.banco ?? null : null,
+                tipoOperacion: input.modalidadPago === 'banco' ? input.tipoOperacion ?? null : null,
+                billeteraDigital: input.modalidadPago === 'billetera' ? input.billeteraDigital ?? null : null,
+                numeroOperacion: input.numeroOperacion.trim(),
+                fechaPago: aColumnaFecha(input.fechaPago),
+                // Sin voucher: el staff registró el pago directamente
+                voucherArchivo: null,
+                monto: aDosDecimales(input.monto),
+                descuento,
+                tieneDescuento: descuento > 0,
+                esCorreoInstitucional: esCorreoInstitucional(participante.correo, evento.dominioInstitucional),
+                verificacionEstudiante: Prisma.JsonNull,
+                verificacionCorreo: Prisma.JsonNull,
+                revisadoEn: ahora,
+                revisadoPor: { connect: { id: adminId } },
+            },
+            include: detalleInclude,
+        }))
     } catch (error) {
         return errorDeUnicidad(error)
     }

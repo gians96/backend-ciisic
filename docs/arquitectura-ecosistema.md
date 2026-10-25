@@ -375,6 +375,14 @@ Definido en `specs/014-portal-fotocheck-asistencia/contracts/api-asistencia.md` 
 - `POST /api/v1/participants` (`participantes.gestionar`; `409 PARTICIPANT_EXISTS` con
   `fields.id`, `409 EMAIL_IN_USE`, `422 NAMES_REQUIRED`) y
   `POST /api/v1/events/:eventId/courtesy-inscriptions` (`inscripciones.cortesia`).
+- **Delegaciones e inscripción manual (spec 018)**: el panel gestiona grupos por evento
+  (`GET/POST /api/v1/events/:eventId/delegations`, `GET/PATCH /api/v1/delegations/:id`,
+  `GET /api/v1/delegations/:id/members`) y registra inscripciones con pago real del staff
+  (`POST /api/v1/events/:eventId/manual-inscriptions`, que nacen `APROBADO` sin voucher y pueden
+  quedar vinculadas a una delegación). Ambas rutas exigen permisos **globales**
+  (`delegaciones.gestionar`, `inscripciones.manual`): solo Owner y Administrador; el listado de
+  inscripciones acepta `?delegacionId=`. Contrato:
+  [`specs/018-delegaciones-inscripcion-manual/contracts/api-delegaciones.md`](../specs/018-delegaciones-inscripcion-manual/contracts/api-delegaciones.md).
 - **Orden de despliegue**: primero (o a la vez) el panel 009, que lee los dos formatos de QR; nunca
   el backend 014 solo. Con el panel anterior, cada credencial que se apruebe, reenvíe o descargue
   lleva el QR nuevo y su escáner lo rechaza en el navegador («usa DNI / documento»).

@@ -9,7 +9,7 @@ import type { AuthenticatedRequest } from '../../../middlewares/auth'
 import { obtenerEventoPorId, obtenerEventoPrincipal } from '../../event/services/public-event'
 import * as service from '../services/inscription'
 import { aCreada, aDetalle, aLegacy, aLegacyCreada } from '../services/mappers'
-import { cambiarEstadoSchema, crearInscripcionSchema, inscripcionLegacySchema, type CortesiaInput, type CrearInscripcionInput } from '../validation'
+import { cambiarEstadoSchema, crearInscripcionSchema, inscripcionLegacySchema, type CortesiaInput, type CrearInscripcionInput, type InscripcionManualInput } from '../validation'
 import { eventoDelSitio } from '../../../middlewares/sitio'
 
 /** Quita cadenas vacías (multipart) para que yup trate los campos como ausentes. */
@@ -117,10 +117,12 @@ export async function legacyUpdateStatus(req: AuthenticatedRequest, res: Respons
 function filtros(query: Request['query']): service.FiltrosInscripcion {
     const texto = (valor: unknown) => (typeof valor === 'string' && valor.trim() ? valor.trim() : undefined)
     const tipo = Number(query.tipoInscripcionId)
+    const delegacion = Number(query.delegacionId)
     return {
         estado: texto(query.estado)?.toUpperCase(),
         tipoInscripcionId: Number.isSafeInteger(tipo) && tipo > 0 ? tipo : undefined,
         categoria: texto(query.categoria)?.toUpperCase(),
+        delegacionId: Number.isSafeInteger(delegacion) && delegacion > 0 ? delegacion : undefined,
         esEstudianteUndc: query.esEstudianteUndc === 'true' ? true : query.esEstudianteUndc === 'false' ? false : undefined,
         q: texto(query.q)?.slice(0, 100),
     }
@@ -179,6 +181,13 @@ export async function credential(req: Request, res: Response) {
 export async function createCourtesy(req: AuthenticatedRequest, res: Response) {
     const eventoId = idParam(req.params.eventId, 'eventId')
     const { inscripcion, credencialEnviada } = await service.crearInscripcionCortesia(eventoId, req.body as CortesiaInput, actorDe(req).id)
+    res.status(201).json({ success: true, data: { ...aDetalle(inscripcion, conPago(req)), credencialEnviada } })
+}
+
+/** Inscripción manual con pago real (spec 018). El cuerpo ya viene validado (`inscripcionManualSchema`). */
+export async function createManual(req: AuthenticatedRequest, res: Response) {
+    const eventoId = idParam(req.params.eventId, 'eventId')
+    const { inscripcion, credencialEnviada } = await service.crearInscripcionManual(eventoId, req.body as InscripcionManualInput, actorDe(req).id)
     res.status(201).json({ success: true, data: { ...aDetalle(inscripcion, conPago(req)), credencialEnviada } })
 }
 
