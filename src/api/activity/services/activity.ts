@@ -6,6 +6,7 @@ import { aColumnaFecha, fechaLima, fechaSoloDia, horaLima, instanteLima } from '
 import { modalidadDe, type MetodoAsistencia } from '../../../core/catalogos'
 import { tienePermiso, type Actor } from '../../../core/actor'
 import { rutaFoto } from '../../../core/almacenamiento'
+import { aKit, KIT_SELECT } from '../../../core/kit'
 import { obtenerEventoPorId } from '../../event/services/public-event'
 import type { ActualizarActividadInput, CrearActividadInput, RegistrarAsistenciaInput } from '../validation'
 
@@ -125,31 +126,76 @@ function aPersona(persona: Persona, actor: Actor) {
     }
 }
 
+/** Tipo y kit de la inscripción tal como lo ve quien marca (spec 037). `incluyeKit` va dentro del tipo, como `modalidad`. */
+const DATOS_TIPO_MARCA = { nombre: true, etiqueta: true, modalidad: true, incluyeKit: true } as const
+
+type DatosInscripcionKit = {
+    id: number
+    tipoInscripcion: { nombre: string, etiqueta: string | null, modalidad: unknown, incluyeKit: boolean } | null
+    kitEntregadoEn?: Date | null
+    kitEntregadoPor?: { id: number, nombres: string, apellidos: string } | null
+}
+
+function aInscripcionMarca(inscripcion: DatosInscripcionKit) {
+    return {
+        id: inscripcion.id,
+        tipoInscripcion: inscripcion.tipoInscripcion
+            // Spec 018: la modalidad se informa; spec 037: un virtual ya no marca, y el tipo dice si incluye kit
+            ? {
+                nombre: inscripcion.tipoInscripcion.nombre,
+                etiqueta: inscripcion.tipoInscripcion.etiqueta,
+                modalidad: modalidadDe(inscripcion.tipoInscripcion.modalidad),
+                incluyeKit: inscripcion.tipoInscripcion.incluyeKit === true,
+            }
+            : null,
+        kit: aKit(inscripcion),
+    }
+}
+
 export async function listarAsistencias(actividadId: number, actor: Actor) {
-    await obtenerActividad(actividadId)
+    const actividad = await obtenerActividad(actividadId)
     const asistencias = await prisma.asistencia.findMany({
         where: { actividadId, ...VIGENTE },
         include: {
-            participante: { select: DATOS_PERSONA },
+            participante: {
+                select: {
+                    ...DATOS_PERSONA,
+                    // La inscripción de la persona en el evento de la actividad: su tipo y su kit (spec 037)
+                    inscripciones: {
+                        where: { eventoId: actividad.eventoId },
+                        take: 1,
+                        select: { id: true, tipoInscripcion: { select: DATOS_TIPO_MARCA }, ...KIT_SELECT },
+                    },
+                },
+            },
             registradoPor: { select: { id: true, nombres: true, apellidos: true } },
         },
         orderBy: { registradoEn: 'desc' },
     })
-    return asistencias.map((asistencia) => ({
-        id: asistencia.id,
-        registradoEn: asistencia.registradoEn,
-        metodo: asistencia.metodo,
-        esFueraDeHorario: asistencia.esFueraDeHorario,
-        registradoPor: asistencia.registradoPor,
-        participante: aPersona(asistencia.participante, actor),
-    }))
+    return asistencias.map((asistencia) => {
+        const inscripcion = asistencia.participante.inscripciones?.[0]
+        return {
+            id: asistencia.id,
+            registradoEn: asistencia.registradoEn,
+            metodo: asistencia.metodo,
+            esFueraDeHorario: asistencia.esFueraDeHorario,
+            registradoPor: asistencia.registradoPor,
+            participante: aPersona(asistencia.participante, actor),
+            inscripcion: inscripcion ? aInscripcionMarca(inscripcion) : null,
+        }
+    })
 }
 
-const yaRegistrada = (registradoEn?: Date | null) => conflict(
+/**
+ * `datos` (spec 037): a quién se le registró y su inscripción con el kit, para que el escáner pueda entregar un kit
+ * pendiente aunque la persona ya hubiera marcado en esta actividad (se emite como `data` del error).
+ */
+const yaRegistrada = (registradoEn?: Date | null, datos?: unknown) => conflict(
     'ATTENDANCE_ALREADY_REGISTERED',
     registradoEn
         ? `La asistencia ya fue registrada para esta actividad a las ${horaLima(registradoEn)}.`
         : 'La asistencia ya fue registrada para esta actividad.',
+    datos,
 )
 
 /** Lo que la marca necesita de la inscripción: estado, regla del QR anterior y datos para el escáner. */
@@ -160,8 +206,9 @@ const DATOS_INSCRIPCION = {
     esQrLegado: true,
     estado: { select: { codigo: true } },
     evento: { select: { fechaFin: true } },
-    tipoInscripcion: { select: { nombre: true, etiqueta: true, modalidad: true } },
+    tipoInscripcion: { select: DATOS_TIPO_MARCA },
     participante: { select: { ...DATOS_PERSONA, fotoArchivo: true } },
+    ...KIT_SELECT,
 } as const
 
 type Inscrito = Prisma.InscripcionGetPayload<{ select: typeof DATOS_INSCRIPCION }>
@@ -241,6 +288,11 @@ export async function registrarAsistencia(actividadId: number, input: RegistrarA
     if (qrLegado) exigirQrLegadoVigente(inscripcion, ahora)
     const { estado, participante } = inscripcion
     if (estado.codigo !== 'APROBADO') throw new HttpError(403, 'NOT_APPROVED', 'El participante no tiene una inscripción aprobada en este evento.')
+    // Spec 037: solo los presenciales marcan asistencia; los virtuales reciben el enlace de la transmisión por correo.
+    // Nada lo salta (ni «fuera de horario» ni la marca manual). Una cortesía sin tipo se lee como presencial.
+    if (modalidadDe(inscripcion.tipoInscripcion?.modalidad) === 'VIRTUAL') {
+        throw new HttpError(403, 'VIRTUAL_REGISTRATION', 'La inscripción es virtual: no registra asistencia presencial. Recibe el enlace de la transmisión por correo.')
+    }
     const metodo: MetodoAsistencia = manual ? 'MANUAL' : input.codigo ? 'QR' : qrLegado ? 'QR_LEGADO' : 'DOCUMENTO'
     const alerta: AlertaAsistencia | null = qrLegado ? 'QR_LEGADO' : null
 
@@ -255,11 +307,17 @@ export async function registrarAsistencia(actividadId: number, input: RegistrarA
             : `La asistencia se registra desde ${horaLima(desde)} hasta ${horaLima(actividad.horaFin)}.`)
     }
 
+    // La persona y su inscripción con el kit: es la respuesta de la marca y también lo que acompaña a «ya registrada» (spec 037)
+    // La foto se pide aparte con GET /v1/inscriptions/:id/photo
+    const quien = {
+        participante: { ...aPersona(participante, actor), foto: { tiene: rutaFoto(participante.fotoArchivo) !== null } },
+        inscripcion: aInscripcionMarca(inscripcion),
+    }
     const clave = { participanteId_actividadId: { participanteId: participante.id, actividadId } }
     const horaPrevia = async () => (await prisma.asistencia.findUnique({ where: clave, select: { registradoEn: true } }))?.registradoEn
     const marca = { registradoEn: ahora, registradoPorId: actor.id, metodo, esFueraDeHorario: fueraDeHorario }
     const previa = await prisma.asistencia.findUnique({ where: clave, select: { id: true, registradoEn: true, anuladoEn: true } })
-    if (previa && !previa.anuladoEn) throw yaRegistrada(previa.registradoEn)
+    if (previa && !previa.anuladoEn) throw yaRegistrada(previa.registradoEn, quien)
 
     let id: number
     if (previa) {
@@ -268,14 +326,14 @@ export async function registrarAsistencia(actividadId: number, input: RegistrarA
             where: { id: previa.id, anuladoEn: { not: null } },
             data: { ...marca, anuladoEn: null, anuladoPorId: null },
         })
-        if (!count) throw yaRegistrada(await horaPrevia())
+        if (!count) throw yaRegistrada(await horaPrevia(), quien)
         id = previa.id
     } else {
         try {
             id = (await prisma.asistencia.create({ data: { actividadId, participanteId: participante.id, ...marca }, select: { id: true } })).id
         } catch (error) {
             // Dos marcas simultáneas de la misma persona: la segunda choca con el índice único
-            if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') throw yaRegistrada(await horaPrevia())
+            if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') throw yaRegistrada(await horaPrevia(), quien)
             throw error
         }
     }
@@ -285,15 +343,7 @@ export async function registrarAsistencia(actividadId: number, input: RegistrarA
         metodo,
         esFueraDeHorario: marca.esFueraDeHorario,
         alerta,
-        // La foto se pide aparte con GET /v1/inscriptions/:id/photo
-        participante: { ...aPersona(participante, actor), foto: { tiene: rutaFoto(participante.fotoArchivo) !== null } },
-        inscripcion: {
-            id: inscripcion.id,
-            tipoInscripcion: inscripcion.tipoInscripcion
-                // Spec 018: el escáner solo avisa si es virtual; la marca se registra igual
-                ? { nombre: inscripcion.tipoInscripcion.nombre, etiqueta: inscripcion.tipoInscripcion.etiqueta, modalidad: modalidadDe(inscripcion.tipoInscripcion.modalidad) }
-                : null,
-        },
+        ...quien,
     }
 }
 

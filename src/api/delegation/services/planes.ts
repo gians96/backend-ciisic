@@ -19,13 +19,15 @@ interface DefinicionPlan {
     codigoTipo: string
     etiqueta: string
     modalidad: ModalidadAsistencia
+    /** Spec 037: el plan incluye el kit (solo `CON_KIT`): el escáner avisa y deja marcar su entrega. */
+    incluyeKit: boolean
     orden: number
 }
 
 export const PLANES: readonly DefinicionPlan[] = [
-    { codigo: 'CON_KIT', codigoTipo: 'delegacion_con_kit', etiqueta: 'CON KIT', modalidad: 'PRESENCIAL', orden: 1 },
-    { codigo: 'SIN_KIT', codigoTipo: 'delegacion_sin_kit', etiqueta: 'SIN KIT', modalidad: 'PRESENCIAL', orden: 2 },
-    { codigo: 'VIRTUAL', codigoTipo: 'delegacion_virtual', etiqueta: 'VIRTUAL', modalidad: 'VIRTUAL', orden: 3 },
+    { codigo: 'CON_KIT', codigoTipo: 'delegacion_con_kit', etiqueta: 'CON KIT', modalidad: 'PRESENCIAL', incluyeKit: true, orden: 1 },
+    { codigo: 'SIN_KIT', codigoTipo: 'delegacion_sin_kit', etiqueta: 'SIN KIT', modalidad: 'PRESENCIAL', incluyeKit: false, orden: 2 },
+    { codigo: 'VIRTUAL', codigoTipo: 'delegacion_virtual', etiqueta: 'VIRTUAL', modalidad: 'VIRTUAL', incluyeKit: false, orden: 3 },
 ]
 
 /** Prefijo del código de la categoría oculta de cada delegación. */
@@ -123,6 +125,7 @@ export function datosDePlan(categoriaId: number, nombreDelegacion: string, plan:
         precioPromocional: cambios?.precioPromocional ?? null,
         disponiblePara: 'TODOS',
         modalidad: definicion.modalidad,
+        incluyeKit: definicion.incluyeKit,
         activo: cambios?.activo ?? false,
         orden: definicion.orden,
     }

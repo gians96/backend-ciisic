@@ -593,6 +593,14 @@ desconocida = `PRESENCIAL` (también una cortesía sin tipo).
   landing anterior los mostraría como planes normales, sin separarlos. Detalle y reversión en
   `docs/operacion.md` (Migración 018).
 
+### Entrega del kit y asistencia solo presencial (spec 037)
+
+- **El kit es de la inscripción** (una vez por congreso): `inscripciones.kit_entregado_en` y `kit_entregado_por_id`. Qué tipo lo lleva lo dice `tipos_inscripcion.incluye_kit` (`incluyeKit` dentro del objeto del tipo, como `modalidad`); un tipo virtual nunca lo incluye y los planes de delegación lo llevan solo en `CON_KIT`.
+- `PUT` y `DELETE /api/v1/inscriptions/:id/kit` entregan y deshacen (`asistencia.marcar`; `409 KIT_ALREADY_DELIVERED` con la hora, `KIT_NOT_INCLUDED`, `KIT_NOT_DELIVERED`, `403 NOT_APPROVED`); `GET /api/v1/events/:eventId/kits/summary` da `{ conKit, entregados, pendientes }` (`asistencia.ver`).
+- La marca de asistencia, el listado de la actividad y el detalle de la inscripción traen `kit` (`{ incluye, entregado, entregadoEn, entregadoPor }`). `ATTENDANCE_ALREADY_REGISTERED` trae `data { participante, inscripcion }` para poder entregar un kit pendiente al volver a escanear.
+- **Una inscripción virtual ya no marca asistencia**: `403 VIRTUAL_REGISTRATION` (nada lo salta; también las rutas legacy). El enlace de la transmisión lo envía la organización por correo, fuera del sistema. Las ponencias especializadas no cambian.
+- **Orden de despliegue**: backend primero (migración aditiva con relleno de `incluye_kit`; revisar con `prisma/preflight/verificar-kit.sql`) y luego el panel. Un panel anterior con el backend nuevo solo pierde los avisos del kit y ve el rechazo de los virtuales como un error de asistencia.
+
 ---
 
 

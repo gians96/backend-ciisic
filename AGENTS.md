@@ -155,6 +155,14 @@ y Google. Documentación: [`docs/`](docs/README.md).
   y recalcula Delegaciones. Todo va en **una transacción** y condicionado al tipo leído (`409 INSCRIPTION_CHANGED`): el cambio, una fila de `cambios_tipo_inscripcion` (el **texto** de los dos tipos,
   motivo y autor; sale en `cambiosTipo` del **detalle**, no en listados ni en el CSV) y, si cambia la modalidad de asistencia, el `modo_asistencia` de sus ponencias especializadas pendientes (vigentes, sin
   asistencia y sin terminar; pasar a presencial exige cupo en cada una: `409 TALK_FULL_ON_TYPE_CHANGE`; las que ya asistieron conservan su modo). Se borran los PDF de credencial guardados (llevan el tipo) y **no se envía ningún correo**.
+- Entrega del kit y asistencia solo presencial (spec 037, `src/core/kit.ts`, `src/api/kit`): **el kit es de la inscripción, no de la actividad** (`inscripciones.kit_entregado_en` y `kit_entregado_por_id`;
+  `NULL` = pendiente y deshacer las limpia) y qué tipo lo lleva lo dice `tipos_inscripcion.incluye_kit` (no el texto de la etiqueta; la migración lo rellenó con `codigo LIKE '%\_con\_kit'`; los planes de delegación lo
+  llevan solo en `CON_KIT`; un tipo virtual se guarda siempre sin kit; se clona con el evento). `tipoIncluyeKit` = `incluye_kit` **y** presencial. `PUT|DELETE /v1/inscriptions/:id/kit` entregan y deshacen con
+  `asistencia.marcar` (sin permiso nuevo) y son atómicos (`updateMany` condicionado: `409 KIT_ALREADY_DELIVERED` con la hora, `KIT_NOT_DELIVERED`); entregar exige `APROBADO` y un tipo con kit (`409 KIT_NOT_INCLUDED`),
+  deshacer no (se corrige aunque el tipo cambie). `GET …/kits/summary` (`asistencia.ver`) cuenta aprobados con kit, entregados y pendientes. **Los virtuales no marcan asistencia**: `registrarAsistencia` responde `403
+  VIRTUAL_REGISTRATION` tras `NOT_APPROVED`, sin excepción (ni «fuera de horario» ni la marca manual; también las rutas legacy); las ponencias especializadas no cambian. La marca, el listado de la actividad y el
+  detalle traen `tipoInscripcion.incluyeKit` y `kit`; `ATTENDANCE_ALREADY_REGISTERED` trae `data { participante, inscripcion }` (`HttpError.datos`) para poder entregar un kit pendiente al volver a escanear. El correo con el
+  enlace de la transmisión a los virtuales lo manda la organización por fuera. Despliegue: backend primero (migración aditiva) y revisar con `prisma/preflight/verificar-kit.sql`.
 - Delegaciones (specs 021–024 y 029): un grupo con delegado (`Delegacion`) cuyos integrantes tienen cada uno su inscripción
   (`delegacion_id`). **Cada delegación tiene sus propios planes** `CON_KIT`, `SIN_KIT` y `VIRTUAL`: tres tipos reales (`delegacion_con_kit`,
   `delegacion_sin_kit`, `delegacion_virtual`; `precio == precioInstitucional`) de su **categoría oculta** `DELEGACION_<id>`
@@ -291,7 +299,7 @@ con ambos sistemas levantados.
 
 Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Cada cambio
 empieza en `specs/NNN-nombre/` (spec → plan → tasks → contracts) y se marcan las tasks al
-implementar. Specs actuales: 001–014, 016–029 y 030–036 (ver [README](README.md)); la 015 (certificados) tiene
+implementar. Specs actuales: 001–014, 016–029 y 030–037 (ver [README](README.md)); la 015 (certificados) tiene
 solo su diseño (`research.md`).
 
 ## Antes de dar por terminado

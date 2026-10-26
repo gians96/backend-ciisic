@@ -8,6 +8,8 @@ export class HttpError extends Error {
     readonly fields?: Record<string, string>
     /** Segundos de espera que el `errorHandler` anuncia en `Retry-After` (errores temporales: 429, 503). */
     readonly reintentarEnSegundos?: number
+    /** Datos que acompañan al error (el `errorHandler` los emite como `data`): p. ej. a quién ya se le registró la asistencia (spec 037). */
+    datos?: unknown
 
     constructor(status: number, code: string, message: string, fields?: Record<string, string>, reintentarEnSegundos?: number) {
         super(message)
@@ -22,7 +24,11 @@ export class HttpError extends Error {
 
 export const badRequest = (code: string, message: string, fields?: Record<string, string>) => new HttpError(400, code, message, fields)
 export const notFound = (code: string, message: string) => new HttpError(404, code, message)
-export const conflict = (code: string, message: string) => new HttpError(409, code, message)
+export const conflict = (code: string, message: string, datos?: unknown) => {
+    const error = new HttpError(409, code, message)
+    if (datos !== undefined) error.datos = datos
+    return error
+}
 export const unprocessable = (code: string, message: string, fields?: Record<string, string>) => new HttpError(422, code, message, fields)
 
 /** Convierte un parámetro de ruta en entero positivo o lanza 400. */

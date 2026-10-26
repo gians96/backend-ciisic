@@ -184,6 +184,8 @@ export async function crearEvento(input: CrearEventoInput) {
                         modalidad: tipo.modalidad,
                         // Spec 020: sin esto un tipo copiado volvería a admitir estudiantes UNDC
                         excluyeEstudiantesUndc: tipo.excluyeEstudiantesUndc,
+                        // Spec 037: sin esto un tipo «con kit» copiado volvería a no llevar kit
+                        incluyeKit: tipo.incluyeKit,
                         activo: tipo.activo,
                         orden: tipo.orden,
                     })),

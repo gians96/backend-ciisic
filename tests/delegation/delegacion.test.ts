@@ -462,6 +462,8 @@ describe('administración: alta de una delegación', () => {
         expect(tipos[1]).toMatchObject({ codigo: 'delegacion_sin_kit', precio: 60, precioPromocional: 50, activo: true })
         // Sin indicarlo, el virtual nace apagado y sin precio
         expect(tipos[2]).toMatchObject({ codigo: 'delegacion_virtual', modalidad: 'VIRTUAL', precio: 0, activo: false })
+        // Spec 037: solo el plan Con kit incluye el kit que se entrega en la puerta
+        expect(tipos.map((tipo) => tipo.incluyeKit)).toEqual([true, false, false])
     })
 
     it('sin planes en el cuerpo, los tres nacen apagados y sin precio', async () => {

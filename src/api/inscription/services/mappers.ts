@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { fechaSoloDia } from '../../../core/fechas'
 import { modalidadDe, monto } from '../../../core/catalogos'
+import { aKit } from '../../../core/kit'
 import { enmascararCorreo } from '../../../core/codigos'
 import { mimeDeArchivo } from '../../../middlewares/upload'
 import { resumenPagos } from '../../delegation/services/pagos'
@@ -13,6 +14,8 @@ export const detalleInclude = {
     estado: true,
     evento: true,
     revisadoPor: { select: { id: true, nombres: true, apellidos: true } },
+    /** Quién entregó el kit (spec 037). */
+    kitEntregadoPor: { select: { id: true, nombres: true, apellidos: true } },
     /** Delegación del grupo (spec 022 y 023): sus pagos son conjuntos y viven en `delegacion_pagos`. */
     delegacion: {
         select: {
@@ -115,6 +118,8 @@ export function aDetalle(i: InscripcionDetalle, conPago = true) {
                 etiqueta: i.tipoInscripcion.etiqueta,
                 // Spec 018: cómo se asiste. Vive dentro del tipo: `pago.modalidad` es la modalidad de PAGO
                 modalidad: modalidadDe(i.tipoInscripcion.modalidad),
+                // Spec 037: el tipo incluye el kit (no es un precio: sale también sin «pagos.ver»)
+                incluyeKit: i.tipoInscripcion.incluyeKit === true,
                 precio: conPago ? monto(i.tipoInscripcion.precio) : null,
                 precioInstitucional: conPago ? monto(i.tipoInscripcion.precioInstitucional) : null,
                 categoria: {
@@ -127,6 +132,8 @@ export function aDetalle(i: InscripcionDetalle, conPago = true) {
             : null,
         clasificacion: i.clasificacion ? { id: i.clasificacion.id, nombre: i.clasificacion.nombre } : null,
         estado: { id: i.estado.id, codigo: i.estado.codigo, nombre: i.estado.nombre },
+        /** Entrega del kit (spec 037): si el tipo lo incluye y, si ya se entregó, cuándo y quién. */
+        kit: aKit(i),
         pago: conPago ? pagoDe(i) : pagoOculto(),
         /** Grupo de la delegación (spec 022); `null` en las inscripciones individuales. */
         delegacion: delegacionDe(i, conPago),
@@ -154,10 +161,12 @@ export function aFilaLista(i: InscripcionDetalle, conPago = true) {
         creadoEn: d.creadoEn,
         participante: d.participante,
         tipoInscripcion: d.tipoInscripcion
-            ? { id: d.tipoInscripcion.id, nombre: d.tipoInscripcion.nombre, etiqueta: d.tipoInscripcion.etiqueta, modalidad: d.tipoInscripcion.modalidad, categoria: d.tipoInscripcion.categoria.codigo }
+            ? { id: d.tipoInscripcion.id, nombre: d.tipoInscripcion.nombre, etiqueta: d.tipoInscripcion.etiqueta, modalidad: d.tipoInscripcion.modalidad, incluyeKit: d.tipoInscripcion.incluyeKit, categoria: d.tipoInscripcion.categoria.codigo }
             : null,
         clasificacion: d.clasificacion,
         estado: d.estado,
+        /** Kit entregado (spec 037); el detalle trae cuándo y quién. */
+        kitEntregado: d.kit.entregado,
         /** La delegación sin su pago: el grupo completo se ve en el detalle (spec 022). */
         delegacion: d.delegacion ? { id: d.delegacion.id, nombre: d.delegacion.nombre, codigoLink: d.delegacion.codigoLink, totalIntegrantes: d.delegacion.totalIntegrantes } : null,
         monto: d.pago.monto,

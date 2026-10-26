@@ -117,6 +117,7 @@ async function seedDemo() {
                     precio: tipo.precio, precioInstitucional: tipo.precioInstitucional, orden: tipo.orden,
                     modalidad: tipo.modalidad ?? 'PRESENCIAL',
                     excluyeEstudiantesUndc: tipo.excluyeEstudiantesUndc ?? false,
+                    incluyeKit: tipo.kit && (tipo.modalidad ?? 'PRESENCIAL') === 'PRESENCIAL',
                     caracteristicas: (tipo.caracteristicas ?? caracteristicas(tipo.kit)) as Prisma.InputJsonValue,
                 },
                 update: {},

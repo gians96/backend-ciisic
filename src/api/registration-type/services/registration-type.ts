@@ -2,13 +2,16 @@ import { Prisma } from '@prisma/client'
 import type { CategoriaInscripcion, TipoInscripcion } from '@prisma/client'
 import { prisma } from '../../../database/prisma'
 import { conflict, notFound } from '../../../core/http-error'
-import { aNumero, modalidadDe, monto } from '../../../core/catalogos'
+import { aNumero, modalidadDe, monto, type ModalidadAsistencia } from '../../../core/catalogos'
 import { obtenerEventoPorId } from '../../event/services/public-event'
 import type { ActualizarCategoriaInput, ActualizarTipoInput, CrearCategoriaInput, CrearTipoInput } from '../validation'
 
 type Json = Prisma.InputJsonValue | typeof Prisma.JsonNull
 
 const json = (value: unknown): Json => (value === null ? Prisma.JsonNull : value as Prisma.InputJsonValue)
+
+/** Spec 037: solo un tipo presencial puede incluir kit; uno virtual se guarda sin kit. */
+const incluyeKitFinal = (modalidad: ModalidadAsistencia, incluyeKit: boolean) => modalidad === 'PRESENCIAL' && incluyeKit
 
 export function aTipo(tipo: TipoInscripcion, totalInscripciones?: number) {
     return {
@@ -26,6 +29,8 @@ export function aTipo(tipo: TipoInscripcion, totalInscripciones?: number) {
         modalidad: modalidadDe(tipo.modalidad),
         // Spec 020: no es un precio, sale también sin «pagos.ver»
         excluyeEstudiantesUndc: tipo.excluyeEstudiantesUndc === true,
+        // Spec 037: el tipo incluye el kit (no es un precio: sale también sin «pagos.ver»)
+        incluyeKit: tipo.incluyeKit === true,
         activo: tipo.activo,
         orden: tipo.orden,
         ...(totalInscripciones !== undefined ? { totalInscripciones } : {}),
@@ -218,6 +223,7 @@ export async function crearTipo(categoriaId: number, input: CrearTipoInput) {
             disponiblePara: input.disponiblePara ?? 'TODOS',
             modalidad: input.modalidad ?? 'PRESENCIAL',
             excluyeEstudiantesUndc: input.excluyeEstudiantesUndc ?? false,
+            incluyeKit: incluyeKitFinal(input.modalidad ?? 'PRESENCIAL', input.incluyeKit ?? false),
             activo: input.activo ?? true,
             orden: input.orden ?? 0,
         },
@@ -244,6 +250,9 @@ export async function actualizarTipo(id: number, input: ActualizarTipoInput) {
     if (input.disponiblePara !== undefined) data.disponiblePara = input.disponiblePara
     if (input.modalidad !== undefined) data.modalidad = input.modalidad
     if (input.excluyeEstudiantesUndc !== undefined) data.excluyeEstudiantesUndc = input.excluyeEstudiantesUndc
+    // Spec 037: un tipo que queda virtual no lleva kit, aunque el cuerpo no lo mencione
+    const incluyeKit = incluyeKitFinal(input.modalidad ?? modalidadDe(actual.modalidad), input.incluyeKit ?? actual.incluyeKit === true)
+    if (input.incluyeKit !== undefined || incluyeKit !== (actual.incluyeKit === true)) data.incluyeKit = incluyeKit
     if (input.activo !== undefined) data.activo = input.activo
     if (input.orden !== undefined) data.orden = input.orden
     const tipo = await prisma.tipoInscripcion.update({ where: { id }, data })

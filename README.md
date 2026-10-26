@@ -47,6 +47,7 @@ virtual, asistencia y perfil con foto).
 | [034](specs/034-padron-cursos-sivireno) | Seguimiento por curso y docente según SIVIRENO: cada curso (asignatura, ciclo, sección y docente) con sus matriculados, quién pagó por curso y por docente, listado completo y pestaña «Por curso»; `npm run padron:desde-jp` carga cursos, matrículas y docentes desde JP |
 | [035](specs/035-cambiar-tipo-inscripcion) | El Owner corrige el tipo (y con él la categoría) de una inscripción: conserva el monto pagado, recalcula el descuento, ajusta las ponencias especializadas si cambia la modalidad y deja un historial |
 | [036](specs/036-enlace-aforo-ponencias) | Enlace público del aforo de las ponencias especializadas: el Owner lo crea, renueva o desactiva; con él la landing muestra por tema el aforo, los inscritos presenciales, los cupos libres y la asistencia, sin datos de personas |
+| [037](specs/037-entrega-kit) | Entrega del kit en la puerta (el tipo dice si lo incluye; se marca con hora y quién y se puede deshacer) y asistencia solo presencial: una inscripción virtual ya no marca asistencia |
 
 ## Desarrollo local
 

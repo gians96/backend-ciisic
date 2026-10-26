@@ -70,7 +70,7 @@ describe('modalidad en la lista, el detalle y la creación (spec 018)', () => {
         const r = await request(app).get('/api/v1/events/2/inscriptions').set(tesorero())
         expect(r.status).toBe(200)
         const [virtual, presencial, sinTipo] = r.body.data
-        expect(virtual.tipoInscripcion).toEqual({ id: 14, nombre: 'ESTUDIANTES', etiqueta: 'VIRTUAL', modalidad: 'VIRTUAL', categoria: 'ESTUDIANTES' })
+        expect(virtual.tipoInscripcion).toEqual({ id: 14, nombre: 'ESTUDIANTES', etiqueta: 'VIRTUAL', modalidad: 'VIRTUAL', incluyeKit: false, categoria: 'ESTUDIANTES' })
         expect(presencial.tipoInscripcion.modalidad).toBe('PRESENCIAL')
         expect(sinTipo.tipoInscripcion).toBeNull()
         // modalidadPago sigue siendo la de pago (banco, billetera, cortesía) y no hay `modalidad` en la raíz

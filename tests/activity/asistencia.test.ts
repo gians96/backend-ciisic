@@ -61,7 +61,10 @@ const NUEVA = persona(105, '44443333')
 const PERSONAS = [ANA, LUIS, DE_OTRO_EVENTO, DNI_REPETIDO, CE_REPETIDO, NUEVA]
 
 const APROBADO = { codigo: 'APROBADO' }
-const ESTUDIANTE = { nombre: 'Estudiante', etiqueta: 'UNDC', modalidad: 'PRESENCIAL' }
+const ESTUDIANTE = { nombre: 'Estudiante', etiqueta: 'UNDC', modalidad: 'PRESENCIAL', incluyeKit: false }
+/** Tipo presencial con kit (spec 037). */
+const CON_KIT = { nombre: 'ESTUDIANTES', etiqueta: 'CON KIT', modalidad: 'PRESENCIAL', incluyeKit: true }
+const SIN_ENTREGA = { incluye: false, entregado: false, entregadoEn: null, entregadoPor: null }
 const INSCRIPCIONES = [
     { id: 500, eventoId: 2, participante: ANA, estado: APROBADO, codigoCredencial: 'ANA0000001', esQrLegado: true, tipoInscripcion: ESTUDIANTE },
     { id: 501, eventoId: 2, participante: LUIS, estado: { codigo: 'PENDIENTE' }, codigoCredencial: 'LUIS000001', esQrLegado: false, tipoInscripcion: null },
@@ -84,6 +87,10 @@ const DE_EVENTO_3 = 20
 
 let actividades: Map<number, Fila>
 let asistencias: Fila[]
+/** Kits ya entregados por id de inscripción (spec 037): cuándo y quién. */
+let kitsEntregados: Map<number, { en: Date, por: { id: number, nombres: string, apellidos: string } }>
+const ENTREGADO_EN = new Date('2026-10-26T15:32:00.000Z')
+const ENTREGADOR = { id: 41, nombres: 'Rosa', apellidos: 'Quispe' }
 let siguienteId: number
 /** Último día (`fechaFin`) de cada evento: el QR anterior vale hasta ese día inclusive. */
 let finEvento: Record<number, string>
@@ -103,6 +110,7 @@ function reiniciarBd() {
     ]
     siguienteId = 3
     finEvento = { 2: HOY, 3: HOY }
+    kitsEntregados = new Map()
 }
 
 /** Fila de inscripción como la devuelve el `select` del servicio (con la fecha de fin del evento). */
@@ -155,7 +163,13 @@ beforeEach(() => {
     m.asistencia.findMany.mockImplementation(({ where, include }) => Promise.resolve(asistencias.filter((a) => cumple(a, where)).map((a) => (include
         ? {
             ...a,
-            participante: PERSONAS.find((p) => p.id === a.participanteId),
+            // La inscripción de la persona en el evento de la actividad (tipo y kit, spec 037)
+            participante: {
+                ...PERSONAS.find((p) => p.id === a.participanteId),
+                inscripciones: INSCRIPCIONES
+                    .filter((i) => i.participante.id === a.participanteId && i.eventoId === actividades.get(a.actividadId as number)?.eventoId)
+                    .map((i) => ({ id: i.id, tipoInscripcion: i.tipoInscripcion, kitEntregadoEn: kitsEntregados.get(i.id)?.en ?? null, kitEntregadoPor: kitsEntregados.get(i.id)?.por ?? null })),
+            },
             registradoPor: a.registradoPorId ? { id: a.registradoPorId, nombres: 'Test', apellidos: 'Staff' } : null,
         }
         : a))))
@@ -208,7 +222,7 @@ describe('marcar asistencia', () => {
             alerta: null,
             // Sin `inscripciones.ver` el documento va enmascarado; la foto se pide con GET /v1/inscriptions/:id/photo
             participante: { id: ANA.id, nombres: 'Persona', apellidos: 'Prueba 100', tipoDocumento: 'dni', numeroDocumento: '****5678', foto: { tiene: true } },
-            inscripcion: { id: 500, tipoInscripcion: { nombre: 'Estudiante', etiqueta: 'UNDC', modalidad: 'PRESENCIAL' } },
+            inscripcion: { id: 500, tipoInscripcion: { nombre: 'Estudiante', etiqueta: 'UNDC', modalidad: 'PRESENCIAL', incluyeKit: false }, kit: SIN_ENTREGA },
         })
         expect(fila(3)).toMatchObject({ actividadId: EN_CURSO, participanteId: ANA.id, registradoPorId: 41, metodo: 'QR', esFueraDeHorario: false, anuladoEn: null })
         expect(m.inscripcion.findUnique.mock.calls[0][0].where).toEqual({ codigoCredencial: 'ANA0000001' })
@@ -360,27 +374,50 @@ describe('marcar asistencia', () => {
 
 // ─── Spec 014: código, QR anterior, método y tolerancia ──────────────────────
 
-describe('marcar a un inscrito virtual (spec 018)', () => {
+describe('marcar a un inscrito virtual (specs 018 y 037)', () => {
     const virtual = () => ({
         ...conEvento(INSCRIPCIONES[5]),
-        tipoInscripcion: { nombre: 'ESTUDIANTES', etiqueta: 'VIRTUAL', modalidad: 'VIRTUAL' },
+        tipoInscripcion: { nombre: 'ESTUDIANTES', etiqueta: 'VIRTUAL', modalidad: 'VIRTUAL', incluyeKit: false },
     })
 
-    it('no se bloquea: la marca se registra y la respuesta avisa la modalidad', async () => {
+    it('se rechaza con 403 VIRTUAL_REGISTRATION y no deja ninguna asistencia', async () => {
         m.inscripcion.findUnique.mockResolvedValueOnce(virtual())
         const r = await marcar(EN_CURSO, { codigo: 'K7Q2M9X4TB' }, comision())
-        expect(r.status).toBe(201)
-        expect(r.body.data).toMatchObject({
-            metodo: 'QR',
-            alerta: null,
-            inscripcion: { id: 505, tipoInscripcion: { nombre: 'ESTUDIANTES', etiqueta: 'VIRTUAL', modalidad: 'VIRTUAL' } },
-        })
-        expect(fila(r.body.data.id)).toMatchObject({ actividadId: EN_CURSO, participanteId: NUEVA.id, anuladoEn: null })
+        expect(r.status).toBe(403)
+        expect(r.body).toMatchObject({ success: false, code: 'VIRTUAL_REGISTRATION' })
+        expect(m.asistencia.create).not.toHaveBeenCalled()
+        expect(m.asistencia.updateMany).not.toHaveBeenCalled()
+        expect(asistencias.some((a) => a.participanteId === NUEVA.id)).toBe(false)
     })
 
-    it('el select pide la modalidad del tipo', async () => {
+    it('nada lo salta: ni «fuera de horario», ni la marca manual, ni el documento, ni quien tiene todos los permisos', async () => {
+        // Por código la inscripción sale de `findUnique`; por documento o id de `findMany`
+        m.inscripcion.findUnique.mockResolvedValueOnce(virtual())
+        const porCodigo = await marcar(EN_CURSO, { codigo: 'K7Q2M9X4TB', fueraDeHorario: true }, admin())
+        expect(porCodigo.status).toBe(403)
+        expect(porCodigo.body.code).toBe('VIRTUAL_REGISTRATION')
+        for (const cuerpo of [{ participanteId: NUEVA.id, metodo: 'MANUAL' }, { numeroDocumento: NUEVA.numeroDocumento }]) {
+            m.inscripcion.findMany.mockResolvedValueOnce([virtual()])
+            const r = await marcar(EN_CURSO, cuerpo, admin())
+            expect(r.status).toBe(403)
+            expect(r.body.code).toBe('VIRTUAL_REGISTRATION')
+        }
+        expect(m.asistencia.create).not.toHaveBeenCalled()
+    })
+
+    it('una inscripción virtual que además no está aprobada sigue diciendo NOT_APPROVED', async () => {
+        m.inscripcion.findUnique.mockResolvedValueOnce({ ...virtual(), estado: { codigo: 'PENDIENTE' } })
+        const r = await marcar(EN_CURSO, { codigo: 'K7Q2M9X4TB' }, comision())
+        expect(r.status).toBe(403)
+        expect(r.body.code).toBe('NOT_APPROVED')
+    })
+
+    it('el select pide la modalidad y el kit del tipo, y quién y cuándo entregó', async () => {
         await marcar(EN_CURSO, { codigo: 'ANA0000001' }, comision())
-        expect(m.inscripcion.findUnique.mock.calls[0][0].select.tipoInscripcion).toEqual({ select: { nombre: true, etiqueta: true, modalidad: true } })
+        const { select } = m.inscripcion.findUnique.mock.calls[0][0]
+        expect(select.tipoInscripcion).toEqual({ select: { nombre: true, etiqueta: true, modalidad: true, incluyeKit: true } })
+        expect(select.kitEntregadoEn).toBe(true)
+        expect(select.kitEntregadoPor).toEqual({ select: { id: true, nombres: true, apellidos: true } })
     })
 
     it('una fila sin modalidad (tipo anterior) se lee PRESENCIAL', async () => {
@@ -388,6 +425,74 @@ describe('marcar a un inscrito virtual (spec 018)', () => {
         const r = await marcar(EN_CURSO, { codigo: 'K7Q2M9X4TB' }, comision())
         expect(r.status).toBe(201)
         expect(r.body.data.inscripcion.tipoInscripcion.modalidad).toBe('PRESENCIAL')
+    })
+})
+
+describe('el kit en la asistencia (spec 037)', () => {
+    const conKit = (extra: Fila = {}) => ({ ...conEvento(INSCRIPCIONES[0]), tipoInscripcion: CON_KIT, ...extra })
+
+    it('la marca de un tipo con kit avisa que lo incluye y que aún está pendiente', async () => {
+        m.inscripcion.findUnique.mockResolvedValueOnce(conKit())
+        const r = await marcar(EN_CURSO, { codigo: 'ANA0000001' }, comision())
+        expect(r.status).toBe(201)
+        expect(r.body.data.inscripcion).toEqual({
+            id: 500,
+            tipoInscripcion: { nombre: 'ESTUDIANTES', etiqueta: 'CON KIT', modalidad: 'PRESENCIAL', incluyeKit: true },
+            kit: { incluye: true, entregado: false, entregadoEn: null, entregadoPor: null },
+        })
+    })
+
+    it('si el kit ya se entregó, dice cuándo y quién', async () => {
+        m.inscripcion.findUnique.mockResolvedValueOnce(conKit({ kitEntregadoEn: ENTREGADO_EN, kitEntregadoPor: ENTREGADOR }))
+        const r = await marcar(EN_CURSO, { codigo: 'ANA0000001' }, comision())
+        expect(r.body.data.inscripcion.kit).toEqual({ incluye: true, entregado: true, entregadoEn: ENTREGADO_EN.toISOString(), entregadoPor: ENTREGADOR })
+    })
+
+    it('un tipo marcado con kit pero virtual no cuenta con kit (y además ya no marca)', async () => {
+        m.inscripcion.findUnique.mockResolvedValueOnce(conKit({ tipoInscripcion: { ...CON_KIT, modalidad: 'VIRTUAL' } }))
+        const r = await marcar(EN_CURSO, { codigo: 'ANA0000001' }, comision())
+        expect(r.status).toBe(403)
+        expect(r.body.code).toBe('VIRTUAL_REGISTRATION')
+    })
+
+    it('una cortesía sin tipo no tiene kit', async () => {
+        const r = await marcar(EN_CURSO, { codigo: 'K7Q2M9X4TB' }, comision())
+        expect(r.body.data.inscripcion).toEqual({ id: 505, tipoInscripcion: null, kit: SIN_ENTREGA })
+    })
+
+    it('«ya registrada» lleva a la persona y su kit para poder entregarlo al volver a escanear', async () => {
+        expect((await marcar(EN_CURSO, { codigo: 'ANA0000001' }, comision())).status).toBe(201)
+        m.inscripcion.findUnique.mockResolvedValueOnce(conKit({ kitEntregadoEn: null }))
+        const r = await marcar(EN_CURSO, { codigo: 'ANA0000001' }, comision())
+        expect(r.status).toBe(409)
+        expect(r.body.code).toBe('ATTENDANCE_ALREADY_REGISTERED')
+        expect(r.body.data).toEqual({
+            participante: { id: ANA.id, nombres: 'Persona', apellidos: 'Prueba 100', tipoDocumento: 'dni', numeroDocumento: '****5678', foto: { tiene: true } },
+            inscripcion: {
+                id: 500,
+                tipoInscripcion: { nombre: 'ESTUDIANTES', etiqueta: 'CON KIT', modalidad: 'PRESENCIAL', incluyeKit: true },
+                kit: { incluye: true, entregado: false, entregadoEn: null, entregadoPor: null },
+            },
+        })
+    })
+
+    it('los demás errores no llevan `data`', async () => {
+        const r = await marcar(EN_CURSO, { codigo: 'ZZZZZZZZZZ' }, comision())
+        expect(r.body).not.toHaveProperty('data')
+    })
+
+    it('el listado trae el tipo y el kit de cada asistente (con quién lo entregó)', async () => {
+        kitsEntregados.set(500, { en: ENTREGADO_EN, por: ENTREGADOR })
+        const r = await request(app).get(`/api/v1/activities/${PASADA}/attendances`).set('Authorization', comision())
+        expect(r.status).toBe(200)
+        expect(r.body.data[0].inscripcion).toEqual({
+            id: 500,
+            tipoInscripcion: { nombre: 'Estudiante', etiqueta: 'UNDC', modalidad: 'PRESENCIAL', incluyeKit: false },
+            kit: { incluye: false, entregado: true, entregadoEn: ENTREGADO_EN.toISOString(), entregadoPor: ENTREGADOR },
+        })
+        // Solo la inscripción del evento de la actividad
+        const { select } = m.asistencia.findMany.mock.calls[0][0].include.participante
+        expect(select.inscripciones).toMatchObject({ where: { eventoId: 2 }, take: 1 })
     })
 })
 
@@ -592,6 +697,8 @@ describe('lecturas de asistencia', () => {
             esFueraDeHorario: false,
             registradoPor: { id: 2, nombres: 'Test', apellidos: 'Staff' },
             participante: { id: ANA.id, nombres: 'Persona', apellidos: 'Prueba 100', tipoDocumento: 'dni', numeroDocumento: '****5678' },
+            // Tipo y kit de la inscripción de la persona en el evento (spec 037)
+            inscripcion: { id: 500, tipoInscripcion: { nombre: 'Estudiante', etiqueta: 'UNDC', modalidad: 'PRESENCIAL', incluyeKit: false }, kit: SIN_ENTREGA },
         }])
 
         const conDocumento = await request(app).get(`/api/v1/activities/${PASADA}/attendances`).set('Authorization', tesorero())

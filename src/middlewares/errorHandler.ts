@@ -62,5 +62,6 @@ export function errorHandler(err: AppError, req: Request, res: Response, next: N
     } else if (status >= 500) {
         console.error('Error interno:', err.name, err.message)
     }
-    res.status(status).json({ success: false, code, message, ...(fields ? { fields } : {}) })
+    const datos = err instanceof HttpError ? err.datos : undefined
+    res.status(status).json({ success: false, code, message, ...(fields ? { fields } : {}), ...(datos !== undefined ? { data: datos } : {}) })
 }

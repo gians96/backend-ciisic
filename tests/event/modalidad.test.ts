@@ -102,6 +102,23 @@ describe('crear un evento copiando otro (spec 018)', () => {
         expect(data[1]).toMatchObject({ codigo: 'general_virtual', excluyeEstudiantesUndc: true })
     })
 
+    it('cada tipo copia si incluye kit (spec 037): sin esto uno «con kit» volvería a no llevarlo', async () => {
+        const conKit = evento(1, {
+            categorias: [{
+                id: 1, eventoId: 1, codigo: 'ESTUDIANTES', nombre: 'Estudiantes', descripcion: null, caracteristicas: null, precioDesde: null, esEstudiantil: true, orden: 1,
+                tipos: [tipo(10, 'estudiantes_con_kit', { incluyeKit: true }), tipo(11, 'estudiantes_sin_kit', { incluyeKit: false })],
+            }],
+        })
+        m.evento.findUnique.mockImplementation(({ where }: { where: { id?: number, codigo?: string } }) =>
+            Promise.resolve(where.id === 1 ? conKit : where.id === 5 ? evento(5, { _count: {} }) : null))
+        const r = await request(app).post('/api/v1/events').set(admin())
+            .send({ codigo: 'ciisic-ix-2027', nombre: 'IX Congreso', nombreCorto: 'IX CIISIC', fechaInicio: '2027-10-26', fechaFin: '2027-10-30', copiarDeEventoId: 1 })
+        expect(r.status).toBe(201)
+        const { data } = m.tx.tipoInscripcion.createMany.mock.calls[0][0]
+        expect(data[0]).toMatchObject({ codigo: 'estudiantes_con_kit', incluyeKit: true })
+        expect(data[1]).toMatchObject({ codigo: 'estudiantes_sin_kit', incluyeKit: false })
+    })
+
     it('al copiar de otro evento no se llevan las categorías de las delegaciones (spec 029)', async () => {
         await request(app).post('/api/v1/events').set(admin())
             .send({ codigo: 'ciisic-ix-2027', nombre: 'IX Congreso', nombreCorto: 'IX CIISIC', fechaInicio: '2027-10-26', fechaFin: '2027-10-30', copiarDeEventoId: 1 })

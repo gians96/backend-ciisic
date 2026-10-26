@@ -242,6 +242,10 @@ const MATRIZ: Record<Clave, Esperada> = {
     'GET /v1/inscriptions/:id/photo': g(['asistencia.marcar', 'inscripciones.ver'], eventoDeInscripcion),
     'POST /v1/events/:eventId/courtesy-inscriptions': g('inscripciones.cortesia'),
     'DELETE /v1/inscriptions/:id': g('inscripciones.eliminar'),
+    // Entrega del kit (spec 037): quien marca asistencia entrega y deshace; ver cuántos van, asistencia.ver
+    'PUT /v1/inscriptions/:id/kit': g('asistencia.marcar', eventoDeInscripcion),
+    'DELETE /v1/inscriptions/:id/kit': g('asistencia.marcar', eventoDeInscripcion),
+    'GET /v1/events/:eventId/kits/summary': g('asistencia.ver', P()),
 
     // integration
     'GET /v1/events/:eventId/integrations': g('eventos.configurar'),
@@ -340,7 +344,7 @@ const LIMITES_POR_ACTOR: readonly RequestHandler[] = [
     limiteDescargaResumenPonencias, limiteAvisosPonencias,
 ]
 /** Total de rutas de /api: una ruta nueva obliga a clasificarla aquí. */
-const TOTAL_RUTAS = 191
+const TOTAL_RUTAS = 194
 
 function clasesDe(ruta: Ruta): Clase[] {
     const clases: Clase[] = []
@@ -425,7 +429,7 @@ describe('matriz de rutas (spec 013)', () => {
         expect(malas).toEqual([])
         // Y se usan donde la tabla lo pide
         const con = (h: RequestHandler) => rutas.filter((r) => r.handles.includes(h)).map((r) => r.clave)
-        expect(con(limiteMarcarAsistencia)).toEqual(['POST /v1/activities/:id/attendances'])
+        expect(con(limiteMarcarAsistencia)).toEqual(['POST /v1/activities/:id/attendances', 'PUT /v1/inscriptions/:id/kit', 'DELETE /v1/inscriptions/:id/kit'])
         expect(con(limiteCheckInPonencia)).toEqual(['POST /v1/specialized-talks/:id/check-in'])
         expect(con(limiteReenvioCredencial)).toEqual(['POST /v1/inscriptions/:id/resend-credential'])
         expect(con(limiteRenovacionSesion)).toEqual(['POST /v1/auth/refresh'])

@@ -48,6 +48,7 @@ model Administrador {
   inscripcionesPonenciaRegistradas InscripcionPonencia[]  @relation("InscripcionPonenciaRegistradaPor")
   asistenciasPonenciaRegistradas   InscripcionPonencia[]  @relation("InscripcionPonenciaAsistenciaPor")
   cambiosTipoRealizados            CambioTipoInscripcion[] @relation("CambioTipoRealizadoPor")
+  kitsEntregados                   Inscripcion[]          @relation("InscripcionKitEntregadoPor")
 
   @@index([rolId], map: "idx_administradores_rol")
   @@map("administradores")
@@ -227,6 +228,8 @@ model TipoInscripcion {
   precioPromocional      Decimal?             @map("precio_promocional") @db.Decimal(10, 2)
   disponiblePara         DisponibilidadTipo   @default(TODOS) @map("disponible_para")
   modalidad              ModalidadAsistencia  @default(PRESENCIAL) @map("modalidad")
+  /// Spec 037: el tipo incluye el kit de merchandising (se entrega en la puerta). Un tipo virtual nunca lo incluye.
+  incluyeKit             Boolean              @default(false) @map("incluye_kit")
   /// Spec 020: no se ofrece a estudiantes de la UNDC (verificados o con correo institucional numérico).
   excluyeEstudiantesUndc Boolean              @default(false) @map("excluye_estudiantes_undc")
   activo                 Boolean              @default(true)
@@ -305,6 +308,9 @@ model Inscripcion {
   codigoCredencial       String?           @unique(map: "uq_inscripciones_codigo_credencial") @map("codigo_credencial") @db.Char(10)
   /// Pudo recibir la credencial con el QR anterior (id del participante): ese QR se acepta con aviso.
   esQrLegado             Boolean           @default(false) @map("es_qr_legado")
+  /// Spec 037: cuándo y quién entregó el kit (una persona recibe uno por congreso). `NULL` = aún no se entrega; deshacer la entrega las limpia.
+  kitEntregadoEn         DateTime?         @map("kit_entregado_en")
+  kitEntregadoPorId      Int?              @map("kit_entregado_por_id")
   evento                 Evento            @relation(fields: [eventoId], references: [id], map: "fk_inscripciones_evento")
   participante           Participante      @relation(fields: [participanteId], references: [id], map: "fk_inscripciones_participante")
   delegacion             Delegacion?        @relation(fields: [delegacionId], references: [id], onDelete: SetNull, map: "fk_inscripciones_delegacion")
@@ -312,6 +318,7 @@ model Inscripcion {
   clasificacion          Clasificacion?    @relation(fields: [clasificacionId], references: [id], onDelete: SetNull, map: "fk_inscripciones_clasificacion")
   estado                 EstadoInscripcion @relation(fields: [estadoId], references: [id], map: "fk_inscripciones_estado")
   revisadoPor            Administrador?    @relation("InscripcionRevisor", fields: [revisadoPorId], references: [id], onDelete: SetNull, map: "fk_inscripciones_revisado_por")
+  kitEntregadoPor        Administrador?    @relation("InscripcionKitEntregadoPor", fields: [kitEntregadoPorId], references: [id], onDelete: SetNull, map: "fk_inscripciones_kit_entregado_por")
   inscripcionesPonencia  InscripcionPonencia[]
   cambiosTipo            CambioTipoInscripcion[]
 
@@ -322,6 +329,7 @@ model Inscripcion {
   @@index([clasificacionId], map: "idx_inscripciones_clasificacion")
   @@index([estadoId], map: "idx_inscripciones_estado")
   @@index([revisadoPorId], map: "idx_inscripciones_revisado_por")
+  @@index([kitEntregadoPorId], map: "idx_inscripciones_kit_entregado_por")
   @@map("inscripciones")
 }
 

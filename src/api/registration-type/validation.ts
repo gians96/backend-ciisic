@@ -41,6 +41,8 @@ const camposTipo = {
     modalidad: yup.mixed<ModalidadAsistencia>().oneOf([...MODALIDADES_ASISTENCIA], 'Elige la modalidad de asistencia: PRESENCIAL o VIRTUAL'),
     // Spec 020: no admite estudiantes UNDC (sin enviar: false al crear, se conserva al actualizar)
     excluyeEstudiantesUndc: yup.boolean(),
+    // Spec 037: incluye el kit de merchandising (sin enviar: false al crear, se conserva al actualizar; un tipo virtual se guarda sin kit)
+    incluyeKit: yup.boolean(),
     activo: yup.boolean(),
     orden: yup.number().integer().min(0).max(1000),
 }

@@ -9,12 +9,14 @@ export function normalizeErrorResponses(_req: Request, res: Response, next: Next
   const originalJson = res.json.bind(res)
   res.json = ((body: unknown) => {
     if (res.statusCode < 400 || typeof body !== 'object' || body === null) return originalJson(body)
-    const value = body as { code?: string; message?: string; error?: string; fields?: Record<string, string> }
+    const value = body as { code?: string; message?: string; error?: string; fields?: Record<string, string>; data?: unknown }
     return originalJson({
       success: false,
       code: value.code || statusCodes[res.statusCode] || 'INTERNAL_ERROR',
       message: value.message || value.error || (res.statusCode >= 500 ? 'Error interno del servidor' : 'Solicitud inválida'),
       ...(value.fields ? { fields: value.fields } : {}),
+      // Datos que acompañan a un error de negocio (`HttpError.datos`, spec 037)
+      ...(value.data !== undefined ? { data: value.data } : {}),
     })
   }) as typeof res.json
   next()
