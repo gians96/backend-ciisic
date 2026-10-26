@@ -12,6 +12,7 @@ export const actualizarConfiguracionSchema = yup.object({
         excludeEmptyString: true,
     }).nullable(),
     urlPanel: yup.string().trim().max(255).nullable(),
+    urlLanding: yup.string().trim().max(255).nullable(),
     rutasLegacyActivas: yup.boolean(),
 }).required()
 

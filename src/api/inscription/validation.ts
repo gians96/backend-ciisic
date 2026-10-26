@@ -1,6 +1,7 @@
 import * as yup from 'yup'
 import { fechaLima, REGEX_FECHA } from '../../core/fechas'
 import { ESTADOS_INSCRIPCION } from '../../core/catalogos'
+import { MAXIMO_TECNOLOGIAS, REGEX_ID_TECNOLOGIA } from './services/credencial-publica'
 
 const numeroDocumento = () => yup.string().trim().required().when('tipoDocumento', {
     is: 'dni',
@@ -95,3 +96,12 @@ export const cortesiaSchema = yup.object({
 }).required()
 
 export type CortesiaInput = yup.InferType<typeof cortesiaSchema>
+
+/** Tecnologías de la credencial 3D (spec 038): ids del catálogo de la landing, únicos y en orden. */
+export const tecnologiasCredencialSchema = yup.object({
+    tecnologias: yup.array().of(yup.string().trim().matches(REGEX_ID_TECNOLOGIA, 'Id de tecnología no válido').required()).required()
+        .max(MAXIMO_TECNOLOGIAS, `Máximo ${MAXIMO_TECNOLOGIAS} tecnologías`)
+        .test('unicas', 'No repitas tecnologías', (ids) => !ids || new Set(ids).size === ids.length),
+}).required()
+
+export type TecnologiasCredencialInput = yup.InferType<typeof tecnologiasCredencialSchema>

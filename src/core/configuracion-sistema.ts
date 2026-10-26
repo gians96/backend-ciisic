@@ -14,6 +14,8 @@ export interface ConfiguracionVigente {
     undcApiTimeoutMs: number
     googleClientId: string | null
     urlPanel: string | null
+    /** Origen de la landing (spec 038): de aquí salen los enlaces de la credencial 3D y de la inscripción a ponencias. */
+    urlLanding: string | null
     rutasLegacyActivas: boolean
 }
 
@@ -25,6 +27,7 @@ const POR_DEFECTO: ConfiguracionVigente = Object.freeze({
     undcApiTimeoutMs: 8000,
     googleClientId: null,
     urlPanel: null,
+    urlLanding: null,
     rutasLegacyActivas: true,
 })
 
@@ -39,6 +42,7 @@ function aVigente(fila: ConfiguracionSistema): ConfiguracionVigente {
         undcApiTimeoutMs: fila.undcApiTimeoutMs,
         googleClientId: fila.googleClientId,
         urlPanel: fila.urlPanel,
+        urlLanding: fila.urlLanding,
         rutasLegacyActivas: fila.rutasLegacyActivas,
     }
 }

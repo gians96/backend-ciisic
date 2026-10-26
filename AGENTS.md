@@ -200,6 +200,16 @@ y Google. Documentación: [`docs/`](docs/README.md).
   `llena`, `asistentes` y `personas` (`aPonenciaAforo`): de cada inscrito vigente **solo** nombre, modo y `asistioEn`, por apellido; **nunca** documento, correo, celular, procedencia,
   biografías ni precios (hay una prueba que lo comprueba). Cualquier token inválido o de otro evento =
   el mismo `404 LINK_NOT_FOUND`. Respuestas `no-store` y `noindex`.
+- Credencial 3D con enlace (spec 038, `inscription/services/credencial-publica.ts`): `GET /v1/site/credential/:codigo` (sitio) da lo que se imprime (nombres, clasificación o tipo, evento) y
+  `tecnologias`, **solo** de una inscripción `APROBADO` del evento del token con ese `codigo_credencial` (`404 CREDENTIAL_NOT_FOUND` para inexistente, de otro evento o sin aprobar; `422 INVALID_CODE` sin
+  consultar la BD); **nunca** documento, correo, celular ni montos, y `no-store`. `POST …/technologies` guarda hasta 8 ids (`^[a-z0-9][a-z0-9-]{0,29}$`, únicos, en orden) en `inscripciones.tecnologias_credencial`
+  (JSON): el catálogo vive en la landing, el backend solo valida la forma. `configuracion_sistema.url_landing` (Sistema, solo el origen, **no** público) arma los enlaces (`core/enlaces-landing.ts`); el correo de
+  aprobación **conserva el PDF** y agrega la fila «Ver mi credencial 3D» solo si hay landing y código.
+- Envíos masivos a los presenciales (spec 039, `src/api/broadcast`): destinatarios = `APROBADO` con tipo presencial o sin tipo (`aprobadasPresenciales`, que el servidor vuelve a comprobar). Dos canales con su
+  marca en `inscripciones`: `enlace_credencial_enviado_en` (cada persona recibe **su** enlace, `credential-links`) y `enlace_ponencias_enviado_en` (**un mismo mensaje** escapado con botón a
+  `<landing>/inscripcion-ponencias`, `specialized-talk-invitations`). Un correo por persona; antes de enviar se **reserva** la marca con un `UPDATE` condicionado a lo leído y si el correo falla se
+  devuelve; sin `reenviar` se omite a quien ya la tiene. Hasta 100 por petición (el panel envía de 25 en 25). Permisos existentes: `inscripciones.ver`/`credenciales.reenviar` y
+  `especializadas.ver`/`especializadas.inscribir`. Sin `url_landing` o sin credencial de correo = `409`. En el log solo ids y totales, nunca correos ni mensajes.
 - Enlace público por ciclo (spec 027): igual que el del docente pero por ciclo completo, en su propia tabla `enlaces_ciclo` (el padrón se reemplaza en cada
   carga, así que el enlace no puede vivir en él; recargarlo no lo toca). `GET /v1/public/cycle` (+ `/export`) con `X-Link-Token`: nombre, código, ciclo, sección,
   turno y situación de los estudiantes y el asesor de cada sección, pero **sin celular** (llega a más gente que el docente), DNI, correo ni montos (prueba que lo
@@ -299,7 +309,7 @@ con ambos sistemas levantados.
 
 Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Cada cambio
 empieza en `specs/NNN-nombre/` (spec → plan → tasks → contracts) y se marcan las tasks al
-implementar. Specs actuales: 001–014, 016–029 y 030–037 (ver [README](README.md)); la 015 (certificados) tiene
+implementar. Specs actuales: 001–014, 016–029 y 030–039 (ver [README](README.md)); la 015 (certificados) tiene
 solo su diseño (`research.md`).
 
 ## Antes de dar por terminado

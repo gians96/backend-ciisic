@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light" />
+    <title>Tu credencial digital</title>
+  </head>
+  <body style="margin: 0; padding: 0; width: 100%; background-color: #f4f6f9; color: #0b1b2e" bgcolor="#F4F6F9">
+    <!-- Texto de vista previa del cliente de correo -->
+    <div style="display: none; max-height: 0; overflow: hidden; opacity: 0; color: transparent">
+      Abre tu credencial del {{EVENTO_NOMBRE_CORTO}} y elige las tecnologías que usas.
+    </div>
+    <table width="100%" align="center" border="0" cellpadding="0" cellspacing="0" style="border-collapse: collapse; width: 100%">
+      <tr>
+        <td align="center" valign="top" style="padding: 32px 16px">
+          <table border="0" cellpadding="0" cellspacing="0" align="center" width="520" bgcolor="#FFFFFF" style="border-collapse: separate; max-width: 520px; width: 100%; border-radius: 16px; border: 1px solid #e3e8ef">
+            <tr>
+              <td align="left" valign="top" style="padding: 40px 40px 8px; font-family: -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+                <p style="margin: 0; padding: 0; font-size: 12px; font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase; color: #0071bc">
+                  {{EVENTO_NOMBRE_CORTO}}
+                </p>
+                <h1 style="margin: 18px 0 0; padding: 0; font-size: 28px; line-height: 120%; font-weight: 800; letter-spacing: -0.02em; color: #0b1b2e">
+                  Tu credencial digital<br />está lista
+                </h1>
+              </td>
+            </tr>
+            <tr>
+              <td align="left" valign="top" style="padding: 8px 40px 0; font-family: -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 16px; line-height: 165%; color: #3b4a5e">
+                <p style="margin: 14px 0 0; padding: 0">
+                  Hola {{NOMBRE}}, ya puedes ver tu credencial del {{EVENTO_NOMBRE_CORTO}}. Ábrela desde tu celular o tu
+                  computadora y personalízala con las tecnologías que usas.
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td align="left" valign="top" style="padding: 28px 40px 8px">
+                <table border="0" cellpadding="0" cellspacing="0" style="border-collapse: separate">
+                  <tr>
+                    <td align="center" bgcolor="#041D39" style="border-radius: 999px">
+                      <a
+                        href="{{ENLACE}}"
+                        style="display: inline-block; padding: 14px 32px; border-radius: 999px; font-family: -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 16px; font-weight: 700; line-height: 120%; color: #ffffff; text-decoration: none"
+                        >Ver mi credencial</a
+                      >
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td align="left" valign="top" style="padding: 20px 40px 0; font-family: -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 13px; line-height: 160%; color: #6b7a90">
+                <p style="margin: 0; padding: 0">
+                  Tu código: <span style="font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 700; letter-spacing: 0.06em; color: #0b1b2e">{{CODIGO}}</span>
+                </p>
+                <p style="margin: 10px 0 0; padding: 0">
+                  Si el botón no abre, copia este enlace en tu navegador:<br />
+                  <a href="{{ENLACE}}" style="color: #0071bc; word-break: break-all">{{ENLACE}}</a>
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td align="left" valign="top" style="padding: 28px 40px 36px; font-family: -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 12px; line-height: 160%; color: #8794a8">
+                <hr style="margin: 0 0 18px; border: 0; border-top: 1px solid #e3e8ef" />
+                <p style="margin: 0; padding: 0">
+                  ¿Dudas? Escríbenos a
+                  <a href="mailto:{{EVENTO_CORREO}}" style="color: #0071bc; text-decoration: none">{{EVENTO_CORREO}}</a>.
+                </p>
+                <p style="margin: 6px 0 0; padding: 0">© {{ANIO}} {{EVENTO_NOMBRE_CORTO}} · {{EVENTO_NOMBRE}}</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

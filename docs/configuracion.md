@@ -21,7 +21,7 @@ variable antigua que sobre y **importa una sola vez** las que tienen equivalente
 
 | Pantalla | Qué se configura | Tabla |
 |---|---|---|
-| **Sistema** | API_UNDC (URL, API key, timeout, **Probar**), client ID de Google, URL del panel, interruptor "Landing anterior" (rutas legacy) | `configuracion_sistema` (fila única, caché de 30 s) |
+| **Sistema** | API_UNDC (URL, API key, timeout, **Probar**), client ID de Google, URL del panel, **URL de la landing** (spec 038: origen `https://dominio` de donde salen el enlace de la credencial 3D y el de la inscripción a ponencias; no es pública), interruptor "Landing anterior" (rutas legacy) | `configuracion_sistema` (fila única, caché de 30 s) |
 | **Correo** | Credenciales de Brevo (API key cifrada, remitente, predeterminada, prueba de cuenta, correo de prueba) | `credenciales_correo` |
 | **Consultas DNI** | Tokens de Decolecta/apiperu (límite, renovación, prioridad, prueba) | `tokens_consulta` |
 | **Eventos → Acceso** | Tokens de acceso de la landing del evento (se muestran una vez) | `tokens_acceso` |

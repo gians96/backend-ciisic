@@ -16,3 +16,9 @@ export function renderTemplate(template: string, values: Record<string, unknown>
         return raw.includes(key) ? String(values[key] ?? '') : escapeHtml(values[key])
     })
 }
+
+/** Primer nombre para el saludo: «JHOSEP JAVIER» → «Jhosep». */
+export function primerNombre(nombres: string): string {
+    const palabra = nombres.trim().split(/\s+/)[0] ?? ''
+    return palabra ? palabra.charAt(0).toUpperCase() + palabra.slice(1).toLowerCase() : ''
+}

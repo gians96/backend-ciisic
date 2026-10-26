@@ -2,7 +2,7 @@ import type { Evento } from '@prisma/client'
 import { prisma } from '../../../database/prisma'
 import type { Actor } from '../../../core/actor'
 import { conflict, notFound, unprocessable } from '../../../core/http-error'
-import { escapeHtml } from '../../../core/html'
+import { escapeHtml, primerNombre } from '../../../core/html'
 import { credencialParaEvento, enviarConCredencial } from '../../email-credential/services/email-credential'
 import { obtenerEventoPorId } from '../../event/services/public-event'
 import { cargarPersonas, type PersonaResumen } from './resumen'
@@ -27,25 +27,31 @@ const SIN_AVISOS: ResultadoAvisos = { enviados: 0, sinCorreo: 0, fallidos: 0, si
 const accesoLibreActivo = () =>
     conflict('FREE_ACCESS_ENABLED', 'Con el acceso libre encendido todas las personas pueden asistir. Apágalo en el Programa para cancelar o avisar a quienes no están inscritas al congreso.')
 
-/** Primer nombre para el saludo: «JHOSEP JAVIER» → «Jhosep». */
-function primerNombre(nombres: string): string {
-    const palabra = nombres.trim().split(/\s+/)[0] ?? ''
-    return palabra ? palabra.charAt(0).toUpperCase() + palabra.slice(1).toLowerCase() : ''
-}
-
 /**
  * HTML del comunicado. El texto es del staff pero se **escapa** (nada de HTML ajeno en un correo oficial); las líneas en
  * blanco separan párrafos y `{nombre}` se reemplaza por el primer nombre de cada persona.
  */
-export function htmlComunicado(mensaje: string, nombres: string, evento: Pick<Evento, 'nombre' | 'correoContacto'>, remitenteCorreo: string): string {
+export function htmlComunicado(
+    mensaje: string,
+    nombres: string,
+    evento: Pick<Evento, 'nombre' | 'correoContacto'>,
+    remitenteCorreo: string,
+    /** Botón al final del mensaje (spec 039): su texto y su URL se escapan. */
+    accion?: { texto: string, url: string },
+): string {
     const texto = mensaje.replace(/\{nombre\}/gi, () => primerNombre(nombres) || 'participante')
     const parrafos = texto.split(/\n{2,}/).map((bloque) => bloque.trim()).filter(Boolean)
         .map((bloque) => `<p style="margin: 0 0 14px 0; padding: 0">${escapeHtml(bloque).replace(/\n/g, '<br>')}</p>`)
         .join('')
+    const boton = accion
+        ? `<p style="margin: 24px 0 0 0; padding: 0"><a href="${escapeHtml(accion.url)}" style="display: inline-block; padding: 13px 28px; border-radius: 999px; background-color: #041d39; color: #ffffff; font-size: 15px; font-weight: 700; text-decoration: none">${escapeHtml(accion.texto)}</a></p>
+<p style="margin: 10px 0 0 0; padding: 0; color: #6b7280; font-size: 13px">Si el botón no abre, copia este enlace en tu navegador:<br><a href="${escapeHtml(accion.url)}" style="color: #0071bc; word-break: break-all">${escapeHtml(accion.url)}</a></p>
+`
+        : ''
     return `<div style="font-family: Arial, Helvetica, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1f2937; line-height: 1.55; font-size: 15px">
 <h2 style="margin: 0 0 18px 0; color: #0b3a6f; font-size: 18px">${escapeHtml(evento.nombre)}</h2>
 ${parrafos}
-<p style="margin: 22px 0 0 0; padding-top: 14px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 13px">Si tienes dudas, escríbenos a ${escapeHtml(evento.correoContacto ?? remitenteCorreo)}.</p>
+${boton}<p style="margin: 22px 0 0 0; padding-top: 14px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 13px">Si tienes dudas, escríbenos a ${escapeHtml(evento.correoContacto ?? remitenteCorreo)}.</p>
 </div>`
 }
 

@@ -257,7 +257,7 @@ CORS está abierto a cualquier origen; la landing lo usa desde su servidor Nitro
 spec 012; la landing la sirve desde su BFF), `POST /inscriptions`, `/student-verification`,
 `/google-verification`, `/papers`, `/contact`, `GET /specialized-talks` y
 `POST /specialized-talk-registrations` (spec 019), `POST /specialized-talk-eligibility` (spec 030) y
-`GET /specialized-talk-occupancy` (spec 036, con el token del enlace del aforo en `X-Link-Token`).
+`GET /specialized-talk-occupancy` (spec 036, con el token del enlace del aforo en `X-Link-Token`), y `GET /credential/:codigo` y `POST /credential/:codigo/technologies` (spec 038, credencial 3D por código).
 
 ### Ponencias especializadas (spec 019)
 
@@ -292,6 +292,16 @@ spec 012; la landing la sirve desde su BFF), `POST /inscriptions`, `/student-ver
   `asistentes`, y en `personas` los inscritos vigentes con **solo** nombre, modo y hora de asistencia (nunca documento, correo ni celular); un token faltante,
   mal formado, desconocido, desactivado o de otro evento da el mismo `404 LINK_NOT_FOUND`. Cambio aditivo
   (una tabla nueva, un permiso nuevo y rutas nuevas).
+
+### Credencial 3D y envíos masivos (specs 038 y 039)
+
+- **Spec 038** (`backend-ciisic/specs/038-credencial-3d-enlace/contracts/api-credencial.md`): la landing abre `<landing>/credencial/<codigo>` (código de 10 caracteres del QR) y pide
+  `GET /api/v1/site/credential/:codigo` con el token del evento: nombres, clasificación o tipo, evento y `tecnologias` de una inscripción **aprobada** (nunca documento, correo ni montos; `no-store`;
+  `404 CREDENTIAL_NOT_FOUND`, `422 INVALID_CODE`). `POST …/technologies` `{ tecnologias }` guarda hasta 8 ids en el servidor (el catálogo vive en la landing). La URL de la landing se configura en Sistema
+  (`urlLanding` en `GET|PUT /api/v1/settings`; **no** sale en `GET /site/config`). El correo de aprobación suma el botón «Ver mi credencial 3D» y conserva el PDF. Cambio aditivo (rutas y columnas nuevas).
+- **Spec 039** (`backend-ciisic/specs/039-envios-masivos-presenciales/contracts/api-envios-masivos.md`, solo panel): `GET …/events/:eventId/credential-links` y `…/specialized-talk-invitations` (+ `/ids`) listan a los
+  inscritos aprobados presenciales con la marca de envío; `POST …/credential-links/send` y `…/specialized-talk-invitations/send` (`/test` solo el segundo) envían un correo por persona (hasta 100 por petición)
+  y marcan a quien lo recibió. Mismos permisos que ya existen; sin catálogo nuevo. Cambio aditivo (rutas y columnas nuevas).
 
 ### Delegaciones con planes propios (specs 021, 022, 023 y 029)
 

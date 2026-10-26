@@ -6,7 +6,7 @@ import { requireParticipante, requirePermiso, requireSesion, type GuardaPermiso 
 import { requireTokenEvento } from '../../src/middlewares/sitio'
 import { rutaLegacy } from '../../src/middlewares/legacy'
 import {
-    limiteAvisosPonencias, limiteCargaPadron, limiteCheckInPonencia, limiteDescargaReportes, limiteDescargaResumenPonencias, limiteEnlacesAsesores, limiteGestionDocentes, limiteLecturaReportes, limiteMarcarAsistencia, limiteReenvioCredencial, limiteRenovacionSesion, limiteSwitch,
+    limiteAvisosPonencias, limiteCargaPadron, limiteCheckInPonencia, limiteDescargaReportes, limiteDescargaResumenPonencias, limiteEnlacesAsesores, limiteEnviosMasivos, limiteGestionDocentes, limiteLecturaEnvios, limiteLecturaReportes, limiteMarcarAsistencia, limiteReenvioCredencial, limiteRenovacionSesion, limiteSwitch,
 } from '../../src/middlewares/rate-limit'
 import { ALCANCE, type Permiso } from '../../src/core/permisos'
 import {
@@ -115,6 +115,9 @@ const SITIO: readonly Clave[] = [
     'POST /v1/site/specialized-talk-eligibility',
     // Aforo con el enlace público (spec 036): además del token del sitio, el del enlace en X-Link-Token
     'GET /v1/site/specialized-talk-occupancy',
+    // Credencial 3D por código (spec 038): el código del enlace del correo es la llave
+    'GET /v1/site/credential/:codigo',
+    'POST /v1/site/credential/:codigo/technologies',
 ]
 
 const PARTICIPANTE: readonly Clave[] = [
@@ -302,6 +305,15 @@ const MATRIZ: Record<Clave, Esperada> = {
     'POST /v1/events/:eventId/specialized-talk-attendees/cancel': g('especializadas.inscribir', P()),
     'POST /v1/events/:eventId/specialized-talk-attendees/notify': g('especializadas.inscribir', P()),
 
+    // broadcast (spec 039): envíos masivos del enlace de la credencial 3D y de la inscripción a ponencias
+    'GET /v1/events/:eventId/credential-links': g('inscripciones.ver', P()),
+    'GET /v1/events/:eventId/credential-links/ids': g('inscripciones.ver', P()),
+    'POST /v1/events/:eventId/credential-links/send': g('credenciales.reenviar', P()),
+    'GET /v1/events/:eventId/specialized-talk-invitations': g('especializadas.ver', P()),
+    'GET /v1/events/:eventId/specialized-talk-invitations/ids': g('especializadas.ver', P()),
+    'POST /v1/events/:eventId/specialized-talk-invitations/send': g('especializadas.inscribir', P()),
+    'POST /v1/events/:eventId/specialized-talk-invitations/test': g('especializadas.inscribir', P()),
+
     // advisory (spec 025): el seguimiento por asesor lo ven y descargan las cuentas del evento; el padrón lo carga una cuenta global
     'GET /v1/events/:eventId/advisory/summary': g('reportes.ver', P()),
     'GET /v1/events/:eventId/advisory/students': g('reportes.ver', P()),
@@ -341,10 +353,10 @@ const esValidacion = (h: Handle) => h.validaCuerpo === true
 /** Limitadores con clave por cuenta: necesitan `req.actor`, que deja la guarda. */
 const LIMITES_POR_ACTOR: readonly RequestHandler[] = [
     limiteMarcarAsistencia, limiteCheckInPonencia, limiteReenvioCredencial, limiteRenovacionSesion, limiteSwitch, limiteLecturaReportes, limiteDescargaReportes, limiteCargaPadron, limiteEnlacesAsesores, limiteGestionDocentes,
-    limiteDescargaResumenPonencias, limiteAvisosPonencias,
+    limiteDescargaResumenPonencias, limiteAvisosPonencias, limiteEnviosMasivos, limiteLecturaEnvios,
 ]
 /** Total de rutas de /api: una ruta nueva obliga a clasificarla aquí. */
-const TOTAL_RUTAS = 194
+const TOTAL_RUTAS = 203
 
 function clasesDe(ruta: Ruta): Clase[] {
     const clases: Clase[] = []
@@ -444,6 +456,8 @@ describe('matriz de rutas (spec 013)', () => {
         expect(con(limiteCargaPadron)).toEqual(['POST /v1/events/:eventId/advisory/import'])
         expect(con(limiteDescargaResumenPonencias)).toEqual(['GET /v1/events/:eventId/specialized-talk-attendees/export'])
         expect(con(limiteAvisosPonencias)).toEqual(['POST /v1/events/:eventId/specialized-talk-attendees/cancel', 'POST /v1/events/:eventId/specialized-talk-attendees/notify'])
+        expect(con(limiteEnviosMasivos)).toEqual(['POST /v1/events/:eventId/credential-links/send', 'POST /v1/events/:eventId/specialized-talk-invitations/send', 'POST /v1/events/:eventId/specialized-talk-invitations/test'])
+        expect(con(limiteLecturaEnvios)).toEqual(['GET /v1/events/:eventId/credential-links', 'GET /v1/events/:eventId/credential-links/ids', 'GET /v1/events/:eventId/specialized-talk-invitations', 'GET /v1/events/:eventId/specialized-talk-invitations/ids'])
     })
 
     it('todo permiso por evento (E) tiene resolutor de evento o filtraPorActor', () => {

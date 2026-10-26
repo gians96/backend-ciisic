@@ -3,11 +3,11 @@ import { AppRoute, buildRouter } from '../../../core/routes'
 import { upload, validateUploadedFileContent } from '../../../middlewares/upload'
 import { requirePermiso } from '../../../middlewares/auth'
 import { validateBody } from '../../../middlewares/validate'
-import { limiteInscripcion, limiteReenvioCredencial, limiteTokenInscripcion } from '../../../middlewares/rate-limit'
+import { limiteEdicionCredencial, limiteInscripcion, limiteLecturaPublica, limiteReenvioCredencial, limiteTokenEdicionCredencial, limiteTokenInscripcion, limiteTokenLectura } from '../../../middlewares/rate-limit'
 import { requireTokenEvento } from '../../../middlewares/sitio'
 import { rutaLegacy } from '../../../middlewares/legacy'
 import { eventoDeInscripcion, eventoDelParametro } from '../../../core/resolutores-evento'
-import { cambiarEstadoLegacySchema, cambiarTipoSchema, cortesiaSchema } from '../validation'
+import { cambiarEstadoLegacySchema, cambiarTipoSchema, cortesiaSchema, tecnologiasCredencialSchema } from '../validation'
 
 const routes: AppRoute[] = [
     // API del sitio (landing del evento, con su token de acceso). El token se valida antes de
@@ -17,6 +17,20 @@ const routes: AppRoute[] = [
         path: '/v1/site/inscriptions',
         handler: controller.publicCreate,
         middlewares: [requireTokenEvento, limiteInscripcion, limiteTokenInscripcion, upload.single('voucher'), validateUploadedFileContent],
+    },
+
+    // Credencial 3D por código (spec 038): la landing la abre desde el enlace del correo
+    {
+        method: 'get',
+        path: '/v1/site/credential/:codigo',
+        handler: controller.publicCredential,
+        middlewares: [requireTokenEvento, limiteLecturaPublica, limiteTokenLectura],
+    },
+    {
+        method: 'post',
+        path: '/v1/site/credential/:codigo/technologies',
+        handler: controller.publicSaveTechnologies,
+        middlewares: [requireTokenEvento, limiteEdicionCredencial, limiteTokenEdicionCredencial, validateBody(tecnologiasCredencialSchema)],
     },
 
     // Legacy (landing anterior y herramientas previas; evento principal)

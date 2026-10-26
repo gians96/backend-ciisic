@@ -298,6 +298,12 @@ model Inscripcion {
   revisadoPorId          Int?              @map("revisado_por_id")
   revisadoEn             DateTime?         @map("revisado_en")
   credencialEnviadaEn    DateTime?         @map("credencial_enviada_en")
+  /// Spec 039: último envío masivo del enlace de la credencial 3D (`<landing>/credencial/<codigo>`).
+  enlaceCredencialEnviadoEn DateTime?      @map("enlace_credencial_enviado_en")
+  /// Spec 039: último envío masivo del enlace para inscribirse a las ponencias especializadas.
+  enlacePonenciasEnviadoEn  DateTime?      @map("enlace_ponencias_enviado_en")
+  /// Spec 038: ids de las tecnologías que la persona eligió para su credencial 3D (máx. 8; el catálogo vive en la landing).
+  tecnologiasCredencial  Json?             @map("tecnologias_credencial")
   esEstudianteUndc       Boolean           @default(false) @map("es_estudiante_undc")
   codigoEstudiante       String?           @map("codigo_estudiante") @db.VarChar(20)
   verificacionEstudiante Json?             @map("verificacion_estudiante")
@@ -989,6 +995,7 @@ model ConfiguracionSistema {
   undcUltimaPruebaEn DateTime?          @map("undc_ultima_prueba_en")
   googleClientId     String?            @map("google_client_id") @db.VarChar(255)
   urlPanel           String?            @map("url_panel") @db.VarChar(255)
+  urlLanding         String?            @map("url_landing") @db.VarChar(255)
   rutasLegacyActivas Boolean            @default(true) @map("rutas_legacy_activas")
   actualizadoPorId   Int?               @map("actualizado_por_id")
   creadoEn           DateTime           @default(now()) @map("creado_en")

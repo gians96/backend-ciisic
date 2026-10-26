@@ -48,6 +48,8 @@ virtual, asistencia y perfil con foto).
 | [035](specs/035-cambiar-tipo-inscripcion) | El Owner corrige el tipo (y con él la categoría) de una inscripción: conserva el monto pagado, recalcula el descuento, ajusta las ponencias especializadas si cambia la modalidad y deja un historial |
 | [036](specs/036-enlace-aforo-ponencias) | Enlace público del aforo de las ponencias especializadas: el Owner lo crea, renueva o desactiva; con él la landing muestra por tema el aforo, los inscritos presenciales, los cupos libres y la asistencia, sin datos de personas |
 | [037](specs/037-entrega-kit) | Entrega del kit en la puerta (el tipo dice si lo incluye; se marca con hora y quién y se puede deshacer) y asistencia solo presencial: una inscripción virtual ya no marca asistencia |
+| [038](specs/038-credencial-3d-enlace) | Credencial 3D con enlace (`<landing>/credencial/<código>`): la persona ve lo que se imprime y elige sus tecnologías, que se guardan en el servidor; botón en el correo de aprobación (que conserva el PDF) y URL de la landing en Sistema |
+| [039](specs/039-envios-masivos-presenciales) | Envíos masivos a los inscritos presenciales desde el panel: el enlace de la credencial 3D (uno por persona) y un mismo mensaje con el enlace a la inscripción de ponencias, con marca de a quién ya se le envió |
 
 ## Desarrollo local
 

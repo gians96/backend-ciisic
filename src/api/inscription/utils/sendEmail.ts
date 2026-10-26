@@ -1,7 +1,9 @@
 import fs from 'fs'
 import path from 'path'
 import { Prisma, type Evento } from '@prisma/client'
-import { escapeHtml, renderTemplate } from '../../../core/html'
+import { escapeHtml, primerNombre, renderTemplate } from '../../../core/html'
+import { obtenerConfiguracion } from '../../../core/configuracion-sistema'
+import { urlCredencial } from '../../../core/enlaces-landing'
 import { modalidadDe } from '../../../core/catalogos'
 import { credencialParaEvento, enviarConCredencial } from '../../email-credential/services/email-credential'
 import type { InscripcionDetalle } from '../services/mappers'
@@ -27,6 +29,18 @@ function plantilla(nombre: string): string {
 }
 
 /**
+ * Fila del correo de aprobación con el botón a la credencial 3D (spec 038). `renderTemplate` no tiene
+ * condicionales: la fila se compone aquí (URL escapada) y, sin enlace, no hay fila.
+ */
+export function filaCredencial3d(enlace: string | null): string {
+    if (!enlace) return ''
+    return `<tr><td align="center" valign="top" style="padding: 18px 6.25% 5px 6.25%; font-family: sans-serif">
+<a href="${escapeHtml(enlace)}" style="display: inline-block; padding: 10px 22px; border: 2px solid #0071bc; border-radius: 4px; color: #0071bc; font-size: 16px; font-weight: 600; line-height: 120%; text-decoration: none">Ver mi credencial 3D</a>
+<p style="margin: 10px 0 0 0; padding: 0; font-size: 13px; line-height: 150%; color: #666666">Ábrela desde tu celular y elige las tecnologías que usas.</p>
+</td></tr>`
+}
+
+/**
  * Envía el correo de aprobación con la credencial adjunta usando la credencial de correo del
  * evento (o la predeterminada, spec 006). Devuelve `false` (sin lanzar) si no hay credencial
  * activa o el envío falla, para no revertir la aprobación.
@@ -48,6 +62,7 @@ export async function enviarCorreoAprobacion(inscripcion: InscripcionDetalle, pd
         console.warn('No hay una credencial de correo activa; no se envió el correo de aprobación')
         return false
     }
+    const { urlLanding } = await obtenerConfiguracion()
     let error: string | null
     try {
         const html = renderTemplate(plantilla('approval.html'), {
@@ -57,7 +72,8 @@ export async function enviarCorreoAprobacion(inscripcion: InscripcionDetalle, pd
             EVENTO_CORREO: evento.correoContacto ?? credencial.remitenteCorreo,
             ANIO: evento.fechaInicio.getUTCFullYear(),
             AVISO_MODALIDAD: parrafoModalidad(inscripcion.tipoInscripcion),
-        }, ['AVISO_MODALIDAD'])
+            FILA_CREDENCIAL_3D: filaCredencial3d(urlCredencial(urlLanding, inscripcion.codigoCredencial)),
+        }, ['AVISO_MODALIDAD', 'FILA_CREDENCIAL_3D'])
         error = await enviarConCredencial(credencial, {
             remitente: { email: credencial.remitenteCorreo, name: evento.remitenteNombre || credencial.remitenteNombre || evento.nombreCorto },
             para: [{ email: inscripcion.participante.correo }],
@@ -69,6 +85,42 @@ export async function enviarCorreoAprobacion(inscripcion: InscripcionDetalle, pd
         error = 'no se pudo preparar el correo (plantilla)'
     }
     if (error) console.error(`No se pudo enviar el correo de aprobación: ${error}`)
+    return error === null
+}
+
+/**
+ * Envío masivo del enlace de la credencial 3D (spec 039): un correo por persona con su propio enlace
+ * (`<landing>/credencial/<codigo>`). Devuelve `false` (sin lanzar) si no hay credencial de correo activa o
+ * el envío falla; el detalle del proveedor queda en la credencial de correo, no en el log.
+ */
+export async function enviarCorreoEnlaceCredencial(inscripcion: InscripcionDetalle, enlace: string): Promise<boolean> {
+    const evento = inscripcion.evento
+    const credencial = await credencialParaEvento(evento.credencialCorreoId)
+    if (!credencial) {
+        console.warn('No hay una credencial de correo activa; no se envió el enlace de la credencial')
+        return false
+    }
+    let error: string | null
+    try {
+        const html = renderTemplate(plantilla('credencial-enlace.html'), {
+            NOMBRE: primerNombre(inscripcion.participante.nombres) || 'participante',
+            EVENTO_NOMBRE: evento.nombre,
+            EVENTO_NOMBRE_CORTO: evento.nombreCorto,
+            EVENTO_CORREO: evento.correoContacto ?? credencial.remitenteCorreo,
+            ENLACE: enlace,
+            CODIGO: inscripcion.codigoCredencial ?? '',
+            ANIO: evento.fechaInicio.getUTCFullYear(),
+        })
+        error = await enviarConCredencial(credencial, {
+            remitente: { email: credencial.remitenteCorreo, name: evento.remitenteNombre || credencial.remitenteNombre || evento.nombreCorto },
+            para: [{ email: inscripcion.participante.correo }],
+            asunto: `Tu credencial digital del ${evento.nombreCorto}`,
+            html,
+        })
+    } catch {
+        error = 'no se pudo preparar el correo (plantilla)'
+    }
+    if (error) console.error('No se pudo enviar el enlace de la credencial (detalle en la credencial de correo)')
     return error === null
 }
 

@@ -64,6 +64,8 @@ export const limiteVerificacion = limitador(MINUTO, 20)
 export const limiteConsultaDocumento = limitador(MINUTO, 10, 'Demasiadas consultas. Espera un minuto e inténtalo nuevamente.')
 export const limitePonencias = limitador(15 * MINUTO, 10, 'Demasiados intentos. Intenta nuevamente en 15 minutos.')
 export const limiteContacto = limitador(15 * MINUTO, 5, 'Demasiados mensajes. Intenta nuevamente en 15 minutos.')
+/** Guardar las tecnologías de la credencial 3D (spec 038): la landing guarda sola tras cada cambio, así que el tope es holgado. */
+export const limiteEdicionCredencial = limitador(15 * MINUTO, 120, 'Demasiados cambios seguidos. Intenta nuevamente en unos minutos.')
 /** Inicio de sesión con contraseña. */
 export const limiteLogin = limitador(15 * MINUTO, 10, 'Demasiados intentos de inicio de sesión. Intenta nuevamente en 15 minutos.')
 /**
@@ -86,6 +88,7 @@ export const limiteTokenInscripcion = porToken(15 * MINUTO, 150)
 export const limiteTokenVerificacionCongresista = porToken(15 * MINUTO, 300)
 export const limiteTokenPonencias = porToken(15 * MINUTO, 60)
 export const limiteTokenContacto = porToken(15 * MINUTO, 60)
+export const limiteTokenEdicionCredencial = porToken(15 * MINUTO, 1500)
 
 // Por participante (portal del inscrito)
 export const limitePortal = limitador(MINUTO, 60, undefined, { clave: 'participante' })
@@ -105,6 +108,9 @@ export const limiteCheckInPonencia = limitador(MINUTO, 120, 'Demasiados registro
 /** Resumen de ponencias especializadas (spec 031): descarga del Excel y envío de comunicados por correo, por cuenta de staff. */
 export const limiteDescargaResumenPonencias = limitador(MINUTO, 20, 'Demasiadas descargas. Espera un minuto.', { clave: 'actor' })
 export const limiteAvisosPonencias = limitador(15 * MINUTO, 10, 'Demasiados envíos de comunicados. Intenta nuevamente en 15 minutos.', { clave: 'actor' })
+/** Envíos masivos (spec 039): el panel manda tandas de 25 personas, así que 400 inscritos son ~16 peticiones; el tope holgado frena un bucle, no el trabajo normal. */
+export const limiteEnviosMasivos = limitador(15 * MINUTO, 120, 'Demasiados envíos seguidos. Intenta nuevamente en unos minutos.', { clave: 'actor' })
+export const limiteLecturaEnvios = limitador(MINUTO, 120, undefined, { clave: 'actor' })
 export const limiteReenvioCredencial = limitador(15 * MINUTO, 20, 'Demasiados reenvíos de credencial. Intenta nuevamente en 15 minutos.', { clave: 'actor' })
 export const limiteRenovacionSesion = limitador(15 * MINUTO, 30, undefined, { clave: 'actor' })
 /** Paso del staff a su portal de participante (`POST /v1/auth/participant/switch`, spec 014). */

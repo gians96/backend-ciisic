@@ -9,8 +9,9 @@ import type { AuthenticatedRequest } from '../../../middlewares/auth'
 import { obtenerEventoPorId, obtenerEventoPrincipal } from '../../event/services/public-event'
 import * as service from '../services/inscription'
 import { cambiarTipo, historialDeTipo } from '../services/cambio-tipo'
+import * as credencialPublica from '../services/credencial-publica'
 import { aCreada, aDetalle, aLegacy, aLegacyCreada } from '../services/mappers'
-import { cambiarEstadoSchema, crearInscripcionSchema, inscripcionLegacySchema, type CambiarTipoInput, type CortesiaInput, type CrearInscripcionInput } from '../validation'
+import { cambiarEstadoSchema, crearInscripcionSchema, inscripcionLegacySchema, type CambiarTipoInput, type CortesiaInput, type CrearInscripcionInput, type TecnologiasCredencialInput } from '../validation'
 import { eventoDelSitio } from '../../../middlewares/sitio'
 
 /** Quita cadenas vacías (multipart) para que yup trate los campos como ausentes. */
@@ -38,6 +39,26 @@ export async function publicCreate(req: Request, res: Response) {
     )
     const inscripcion = await service.crearInscripcion(evento, input, req.file?.filename ?? null)
     res.status(201).json({ success: true, data: aCreada(inscripcion, inscripcion.correoConservado) })
+}
+
+/**
+ * Credencial 3D por código (spec 038): la landing la abre desde el enlace del correo. Datos personales
+ * mínimos → sin caché (mismo criterio que la consulta DNI).
+ */
+export async function publicCredential(req: Request, res: Response) {
+    const evento = eventoDelSitio(req)
+    const data = await credencialPublica.credencialPublica(String(req.params.codigo), evento.id)
+    res.setHeader('Cache-Control', 'no-store')
+    res.json({ success: true, data })
+}
+
+/** Guarda las tecnologías elegidas en la credencial 3D (spec 038); el cuerpo ya viene validado. */
+export async function publicSaveTechnologies(req: Request, res: Response) {
+    const evento = eventoDelSitio(req)
+    const { tecnologias } = req.body as TecnologiasCredencialInput
+    const data = await credencialPublica.guardarTecnologias(String(req.params.codigo), evento.id, tecnologias)
+    res.setHeader('Cache-Control', 'no-store')
+    res.json({ success: true, data })
 }
 
 // ─── Permisos del actor (spec 013) ──────────────────────────────────────────
