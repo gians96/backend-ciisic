@@ -540,7 +540,8 @@ matriculados; el docente de un curso es el asesor de sus alumnos. `summary` trae
 Definido en `specs/014-portal-fotocheck-asistencia/contracts/api-asistencia.md` (panel: spec 009).
 
 - El QR de la credencial (PDF y fotocheck) lleva el **código de credencial** de 10 caracteres
-  `[0-9A-Z]` (`codigoCredencial` en `GET /api/v1/inscriptions/:id`, nunca en listados ni CSV). El
+  `[0-9A-Z]` (`codigoCredencial` en `GET /api/v1/inscriptions/:id` y, desde la spec 040, en la
+  columna «Código QR» del CSV; nunca en listados ni búsquedas). El
   QR anterior (id del participante) se acepta hasta el `fechaFin` del evento solo en las
   inscripciones marcadas (`esQrLegado`).
 - `POST /api/v1/activities/:id/attendances` con exactamente uno de `{ codigo }` (método `QR`),

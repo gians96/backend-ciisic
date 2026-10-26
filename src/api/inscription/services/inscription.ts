@@ -11,6 +11,8 @@ import {
     asegurarCodigoCredencial, conReintentoDeCodigo, enmascararCorreo, INDICE_CODIGO_CREDENCIAL, nuevoCodigoCredencial,
 } from '../../../core/codigos'
 import { rutaFoto } from '../../../core/almacenamiento'
+import { obtenerConfiguracion } from '../../../core/configuracion-sistema'
+import { urlCredencial } from '../../../core/enlaces-landing'
 import { uploadedFilePath } from '../../../middlewares/upload'
 import { inscripcionesAbiertas, obtenerEventoPorId } from '../../event/services/public-event'
 import { apellidosDe, nombresOficiales } from '../../document-lookup/services/cache'
@@ -571,7 +573,7 @@ export function celdaCsv(valor: unknown): string {
 }
 
 /** Columnas del CSV. Las de pago solo salen con `conPago`. */
-const COLUMNAS_CSV: Array<{ titulo: string, pago?: true, valor: (d: ReturnType<typeof aDetalle>) => unknown }> = [
+const COLUMNAS_CSV: Array<{ titulo: string, pago?: true, valor: (d: ReturnType<typeof aDetalle>, urlLanding: string | null) => unknown }> = [
     { titulo: 'ID', valor: (d) => d.id },
     { titulo: 'Fecha registro', valor: (d) => fechaLima(d.creadoEn) },
     { titulo: 'Tipo doc.', valor: (d) => d.participante.tipoDocumento.toUpperCase() },
@@ -598,14 +600,20 @@ const COLUMNAS_CSV: Array<{ titulo: string, pago?: true, valor: (d: ReturnType<t
     { titulo: 'Estado', valor: (d) => d.estado.nombre },
     { titulo: 'Revisado', valor: (d) => (d.revision.revisadoEn ? fechaLima(d.revision.revisadoEn) : '') },
     { titulo: 'Motivo de rechazo', valor: (d) => d.revision.motivoRechazo },
+    // Spec 040: lo que codifica el QR del fotocheck y del PDF, y el enlace de la credencial 3D (la landing solo abre las aprobadas)
+    { titulo: 'Código QR', valor: (d) => d.codigoCredencial },
+    { titulo: 'Credencial 3D', valor: (d, urlLanding) => (d.estado.codigo === 'APROBADO' ? urlCredencial(urlLanding, d.codigoCredencial) : null) },
 ]
 
 export async function exportarCsv(eventoId: number, filtros: FiltrosInscripcion, conPago = true): Promise<string> {
-    const filas = await prisma.inscripcion.findMany({ where: construirFiltro(eventoId, filtros, conPago), include: detalleInclude, orderBy: { id: 'asc' } })
+    const [filas, { urlLanding }] = await Promise.all([
+        prisma.inscripcion.findMany({ where: construirFiltro(eventoId, filtros, conPago), include: detalleInclude, orderBy: { id: 'asc' } }),
+        obtenerConfiguracion(),
+    ])
     const columnas = COLUMNAS_CSV.filter((columna) => conPago || !columna.pago)
     const lineas = filas.map((fila) => {
         const d = aDetalle(fila, conPago)
-        return columnas.map((columna) => celdaCsv(columna.valor(d))).join(';')
+        return columnas.map((columna) => celdaCsv(columna.valor(d, urlLanding))).join(';')
     })
     return '﻿' + [columnas.map((columna) => columna.titulo).join(';'), ...lineas].join('\r\n')
 }

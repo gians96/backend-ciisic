@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client'
 import request from 'supertest'
 import app from '../../src/app'
 import { prisma } from '../../src/database/prisma'
+import * as configuracion from '../../src/core/configuracion-sistema'
 import { generarCredencialPdf, rutaCredencial } from '../../src/api/inscription/utils/generatePdf'
 import { enviarCorreoAprobacion } from '../../src/api/inscription/utils/sendEmail'
 import { tokenDeRol } from '../helpers/tokens'
@@ -185,6 +186,55 @@ describe('lista, detalle y CSV según «pagos.ver»', () => {
         expect(lista.body.data[0].delegacion).toBeNull()
         const detalle = await request(app).get('/api/v1/inscriptions/5').set(con(tesorero()))
         expect(detalle.body.data.delegacion).toBeNull()
+    })
+})
+
+describe('código del QR y enlace de la credencial 3D en el CSV (spec 040)', () => {
+    const aprobado = { id: 2, codigo: 'APROBADO', nombre: 'Aprobado' }
+    let landing: jest.SpyInstance | undefined
+    const conLanding = (urlLanding: string | null) => {
+        landing = jest.spyOn(configuracion, 'obtenerConfiguracion').mockResolvedValue({
+            undcApiUrl: null, undcApiKeyCifrada: null, undcApiTimeoutMs: 8000, googleClientId: null, urlPanel: null, urlLanding, rutasLegacyActivas: true,
+        })
+    }
+    afterEach(() => landing?.mockRestore())
+
+    /** Filas del CSV como objetos `{ título: valor }` (sin el BOM). */
+    const filasCsv = (texto: string) => {
+        const [encabezado, ...filas] = texto.slice(1).split('\r\n').map((linea) => linea.split(';'))
+        return filas.map((fila) => Object.fromEntries(encabezado.map((titulo, i) => [titulo, fila[i]])))
+    }
+
+    it('quien exporta recibe el código del QR de cada inscripción y el enlace solo en las aprobadas', async () => {
+        conLanding('https://ciisic.undc.edu.pe/')
+        m.inscripcion.findMany.mockResolvedValue([
+            inscripcion({ id: 5, estado: aprobado }),
+            inscripcion({ id: 6, codigoCredencial: 'P3W8N1R6ZD' }),
+            inscripcion({ id: 7, codigoCredencial: null, estado: aprobado }),
+        ])
+        // El Tesorero y también la Comisión, sin «pagos.ver»
+        for (const token of [tesorero(), comision()]) {
+            const r = await request(app).get('/api/v1/events/2/inscriptions/export').set(con(token))
+            expect(r.status).toBe(200)
+            const filas = filasCsv(r.text)
+            expect(filas.map((fila) => fila['Código QR'])).toEqual(['K7Q2M9X4TB', 'P3W8N1R6ZD', ''])
+            expect(filas.map((fila) => fila['Credencial 3D'])).toEqual(['https://ciisic.undc.edu.pe/credencial/K7Q2M9X4TB', '', ''])
+        }
+    })
+
+    it('sin la URL de la landing en Sistema el enlace va vacío', async () => {
+        conLanding(null)
+        m.inscripcion.findMany.mockResolvedValue([inscripcion({ estado: aprobado })])
+        const r = await request(app).get('/api/v1/events/2/inscriptions/export').set(con(tesorero()))
+        const [fila] = filasCsv(r.text)
+        expect(fila['Código QR']).toBe('K7Q2M9X4TB')
+        expect(fila['Credencial 3D']).toBe('')
+    })
+
+    it('el listado sigue sin el código del QR', async () => {
+        const r = await request(app).get('/api/v1/events/2/inscriptions').set(con(tesorero()))
+        expect(r.status).toBe(200)
+        expect(JSON.stringify(r.body)).not.toContain('K7Q2M9X4TB')
     })
 })
 

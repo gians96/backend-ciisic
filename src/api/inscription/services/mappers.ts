@@ -98,7 +98,7 @@ export function aDetalle(i: InscripcionDetalle, conPago = true) {
         evento: { id: i.evento.id, codigo: i.evento.codigo, nombreCorto: i.evento.nombreCorto },
         creadoEn: i.creadoEn,
         actualizadoEn: i.actualizadoEn,
-        /** Código del QR del fotocheck (spec 014). No va en los listados ni en el CSV. */
+        /** Código del QR del fotocheck (spec 014). Va en el CSV (spec 040), nunca en los listados ni en las búsquedas. */
         codigoCredencial: i.codigoCredencial,
         esQrLegado: i.esQrLegado,
         participante: {

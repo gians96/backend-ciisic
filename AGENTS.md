@@ -107,9 +107,11 @@ y Google. Documentación: [`docs/`](docs/README.md).
   (`PUT /v1/participants/:id`): se avisa al correo anterior y se registra con ids.
 - Cada inscripción tiene `codigo_credencial` (10 caracteres `[0-9A-Z]`, único): es lo único que va
   en el QR del fotocheck y del PDF. Se crea con `conReintentoDeCodigo(nuevoCodigoCredencial)` y, si
-  falta, `asegurarCodigoCredencial`. Va en el detalle, **nunca** en listados, búsquedas, el CSV ni en
-  un dato que salga en ellos (el `numeroOperacion` de una cortesía es aleatorio e independiente). El
-  QR anterior (id del participante) solo vale con `es_qr_legado` y hasta el `fechaFin` del evento.
+  falta, `asegurarCodigoCredencial`. Va en el detalle y en el CSV (spec 040: columnas «Código QR» y
+  «Credencial 3D», esta solo en las aprobadas; para todo el que exporta, también sin `pagos.ver`),
+  **nunca** en listados, búsquedas ni en un dato que salga en ellos (el `numeroOperacion` de una
+  cortesía es aleatorio e independiente). El CSV es, por eso, una credencial: con el código se rehace
+  el QR. El QR anterior (id del participante) solo vale con `es_qr_legado` y hasta el `fechaFin` del evento.
 - Staff (spec 013): Owner (`SUPERADMIN`) y Administrador del sistema (`ADMIN`) son globales;
   Tesorero y Comisión solo operan en sus eventos. Solo el Owner configura Sistema, elimina
   inscripciones, cambia su tipo, administra el enlace del aforo (`PERMISOS_SOLO_OWNER`) y gestiona Owners y Administradores. Sin `pagos.ver` no
@@ -309,7 +311,7 @@ con ambos sistemas levantados.
 
 Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Cada cambio
 empieza en `specs/NNN-nombre/` (spec → plan → tasks → contracts) y se marcan las tasks al
-implementar. Specs actuales: 001–014, 016–029 y 030–039 (ver [README](README.md)); la 015 (certificados) tiene
+implementar. Specs actuales: 001–014, 016–029 y 030–040 (ver [README](README.md)); la 015 (certificados) tiene
 solo su diseño (`research.md`).
 
 ## Antes de dar por terminado

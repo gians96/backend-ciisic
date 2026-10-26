@@ -30,7 +30,7 @@ su correo (también si está vinculado a Google); ambos abren una sesión de par
 renovación. El staff que entró con Google pasa a su portal con `POST /api/v1/auth/participant/switch`
 (con contraseña: `409 CODE_REQUIRED`). `GET /api/v1/auth/config` agrega
 `accesoCodigo: { disponible }`. Cada inscripción tiene un código de credencial de 10 caracteres
-(`codigoCredencial`, solo en el detalle) que va en el QR del fotocheck y del PDF; el escáner marca
+(`codigoCredencial`, en el detalle y en el CSV desde la spec 040; nunca en listados) que va en el QR del fotocheck y del PDF; el escáner marca
 asistencia con `{ codigo }` y acepta el QR anterior (`{ participanteId }`) con `alerta: 'QR_LEGADO'`
 hasta el fin del evento. Una reinscripción con otro correo conserva el correo registrado, aunque el
 nuevo venga verificado con Google (`correoConservado: true`); solo el staff lo cambia.
