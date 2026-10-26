@@ -36,7 +36,7 @@ export function filaCredencial3d(enlace: string | null): string {
     if (!enlace) return ''
     return `<tr><td align="center" valign="top" style="padding: 18px 6.25% 5px 6.25%; font-family: sans-serif">
 <a href="${escapeHtml(enlace)}" style="display: inline-block; padding: 10px 22px; border: 2px solid #0071bc; border-radius: 4px; color: #0071bc; font-size: 16px; font-weight: 600; line-height: 120%; text-decoration: none">Ver mi credencial 3D</a>
-<p style="margin: 10px 0 0 0; padding: 0; font-size: 13px; line-height: 150%; color: #666666">Ábrela desde tu celular y elige las tecnologías que usas.</p>
+<p style="margin: 10px 0 0 0; padding: 0; font-size: 13px; line-height: 150%; color: #666666">Ábrela desde tu celular y toca dos veces la credencial para elegir las tecnologías que usas.</p>
 </td></tr>`
 }
 
