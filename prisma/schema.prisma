@@ -302,6 +302,8 @@ model Inscripcion {
   enlaceCredencialEnviadoEn DateTime?      @map("enlace_credencial_enviado_en")
   /// Spec 039: último envío masivo del enlace para inscribirse a las ponencias especializadas.
   enlacePonenciasEnviadoEn  DateTime?      @map("enlace_ponencias_enviado_en")
+  /// Spec 043: último envío masivo del enlace de acceso al congreso a los inscritos virtuales.
+  enlaceVirtualEnviadoEn    DateTime?      @map("enlace_virtual_enviado_en")
   /// Spec 038: ids de las tecnologías que la persona eligió para su credencial 3D (máx. 8; el catálogo vive en la landing).
   tecnologiasCredencial  Json?             @map("tecnologias_credencial")
   esEstudianteUndc       Boolean           @default(false) @map("es_estudiante_undc")

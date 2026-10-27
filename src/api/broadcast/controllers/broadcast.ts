@@ -5,7 +5,13 @@ import { parsePagination } from '../../../core/pagination'
 import type { AuthenticatedRequest } from '../../../middlewares/auth'
 import * as destinatarios from '../services/destinatarios'
 import * as enviar from '../services/enviar'
-import type { EnviarEnlacesCredencialInput, EnviarInvitacionPonenciasInput, ProbarInvitacionPonenciasInput } from '../validation'
+import type {
+    EnviarAccesoVirtualInput,
+    EnviarEnlacesCredencialInput,
+    EnviarInvitacionPonenciasInput,
+    ProbarAccesoVirtualInput,
+    ProbarInvitacionPonenciasInput,
+} from '../validation'
 
 /** La guarda de permisos deja la cuenta en `req.actor`; sin ella la ruta está mal cableada. */
 function actorDe(req: Request): Actor {
@@ -26,7 +32,7 @@ function sinCache(res: Response) {
     res.setHeader('Cache-Control', 'no-store')
 }
 
-/** `GET …/credential-links` y `…/specialized-talk-invitations`: una página de destinatarios con su marca de envío. */
+/** `GET …/credential-links`, `…/specialized-talk-invitations` y `…/virtual-access`: una página de destinatarios con su marca de envío. */
 export function listar(canal: destinatarios.Canal) {
     return async (req: Request, res: Response) => {
         const { data, meta } = await destinatarios.listarDestinatarios(idParam(req.params.eventId, 'eventId'), canal, filtrosDe(req.query), parsePagination(req.query, 20, 100))
@@ -54,4 +60,12 @@ export async function sendTalkInvitations(req: Request, res: Response) {
 
 export async function testTalkInvitation(req: Request, res: Response) {
     res.json({ success: true, data: await enviar.probarInvitacionPonencias(idParam(req.params.eventId, 'eventId'), req.body as ProbarInvitacionPonenciasInput, actorDe(req)) })
+}
+
+export async function sendVirtualAccess(req: Request, res: Response) {
+    res.json({ success: true, data: await enviar.enviarAccesoVirtual(idParam(req.params.eventId, 'eventId'), req.body as EnviarAccesoVirtualInput, actorDe(req)) })
+}
+
+export async function testVirtualAccess(req: Request, res: Response) {
+    res.json({ success: true, data: await enviar.probarAccesoVirtual(idParam(req.params.eventId, 'eventId'), req.body as ProbarAccesoVirtualInput, actorDe(req)) })
 }

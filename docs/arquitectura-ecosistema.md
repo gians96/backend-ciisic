@@ -302,6 +302,9 @@ spec 012; la landing la sirve desde su BFF), `POST /inscriptions`, `/student-ver
 - **Spec 039** (`backend-ciisic/specs/039-envios-masivos-presenciales/contracts/api-envios-masivos.md`, solo panel): `GET …/events/:eventId/credential-links` y `…/specialized-talk-invitations` (+ `/ids`) listan a los
   inscritos aprobados presenciales con la marca de envío; `POST …/credential-links/send` y `…/specialized-talk-invitations/send` (`/test` solo el segundo) envían un correo por persona (hasta 100 por petición)
   y marcan a quien lo recibió. Mismos permisos que ya existen; sin catálogo nuevo. Cambio aditivo (rutas y columnas nuevas).
+- **Spec 043** (`backend-ciisic/specs/043-acceso-virtual/contracts/api-acceso-virtual.md`, solo panel): `GET …/events/:eventId/virtual-access` (+ `/ids`) lista a los inscritos **virtuales** aprobados con la marca de envío;
+  `POST …/virtual-access/send` `{ ids, asunto, mensaje, enlace, reenviar? }` envía un correo por persona con el botón «Ingresar al congreso» al `enlace` (`https`) que escribe el staff, y `…/test` lo manda a una dirección.
+  Permisos existentes (`inscripciones.ver`, `credenciales.reenviar`). Cambio aditivo (rutas y una columna nuevas).
 
 ### Delegaciones con planes propios (specs 021, 022, 023 y 029)
 

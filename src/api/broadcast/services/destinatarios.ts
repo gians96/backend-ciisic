@@ -5,10 +5,11 @@ import { obtenerEventoPorId } from '../../event/services/public-event'
 
 /**
  * Destinatarios de los envíos masivos (spec 039): las inscripciones **aprobadas y presenciales** del evento
- * (un tipo presencial o sin tipo, como las cortesías: igual que `resolverElegibilidad`). Cada canal lleva su
- * propia marca de «ya se le envió» en la inscripción, así se puede volver a elegir solo a quien falta.
+ * (un tipo presencial o sin tipo, como las cortesías: igual que `resolverElegibilidad`) y, en el canal
+ * `virtual` (spec 043), las **aprobadas con un tipo virtual**. Cada canal lleva su propia marca de «ya se le
+ * envió» en la inscripción, así se puede volver a elegir solo a quien falta.
  */
-export type Canal = 'credencial' | 'ponencias'
+export type Canal = 'credencial' | 'ponencias' | 'virtual'
 
 export interface FiltrosDestinatarios {
     q?: string
@@ -16,7 +17,7 @@ export interface FiltrosDestinatarios {
     enviado?: 'si' | 'no'
 }
 
-/** Aprobadas y presenciales del evento: la base de ambos envíos y lo único a lo que el servidor deja enviar. */
+/** Aprobadas y presenciales del evento: la base de los envíos a presenciales y lo único a lo que el servidor deja enviar. */
 export function aprobadasPresenciales(eventoId: number): Prisma.InscripcionWhereInput {
     return {
         eventoId,
@@ -25,18 +26,46 @@ export function aprobadasPresenciales(eventoId: number): Prisma.InscripcionWhere
     }
 }
 
+/** Aprobadas con un tipo virtual (spec 043). Sin tipo es presencial (`modalidadDe`), así que una cortesía no entra. */
+export function aprobadasVirtuales(eventoId: number): Prisma.InscripcionWhereInput {
+    return {
+        eventoId,
+        estado: { codigo: 'APROBADO' },
+        tipoInscripcion: { modalidad: 'VIRTUAL' },
+    }
+}
+
+/** Lo único a lo que el servidor deja enviar en cada canal. */
+export function baseDelCanal(eventoId: number, canal: Canal): Prisma.InscripcionWhereInput {
+    return canal === 'virtual' ? aprobadasVirtuales(eventoId) : aprobadasPresenciales(eventoId)
+}
+
+/** Marca de un canal en la inscripción, leída siempre por su nombre de campo (sin claves dinámicas). */
+export function marcaDe(
+    fila: { enlaceCredencialEnviadoEn: Date | null, enlacePonenciasEnviadoEn: Date | null, enlaceVirtualEnviadoEn: Date | null },
+    canal: Canal,
+): Date | null {
+    if (canal === 'credencial') return fila.enlaceCredencialEnviadoEn
+    if (canal === 'ponencias') return fila.enlacePonenciasEnviadoEn
+    return fila.enlaceVirtualEnviadoEn
+}
+
 function conMarca(canal: Canal): Prisma.InscripcionWhereInput {
-    return canal === 'credencial' ? { enlaceCredencialEnviadoEn: { not: null } } : { enlacePonenciasEnviadoEn: { not: null } }
+    if (canal === 'credencial') return { enlaceCredencialEnviadoEn: { not: null } }
+    if (canal === 'ponencias') return { enlacePonenciasEnviadoEn: { not: null } }
+    return { enlaceVirtualEnviadoEn: { not: null } }
 }
 
 function sinMarca(canal: Canal): Prisma.InscripcionWhereInput {
-    return canal === 'credencial' ? { enlaceCredencialEnviadoEn: null } : { enlacePonenciasEnviadoEn: null }
+    if (canal === 'credencial') return { enlaceCredencialEnviadoEn: null }
+    if (canal === 'ponencias') return { enlacePonenciasEnviadoEn: null }
+    return { enlaceVirtualEnviadoEn: null }
 }
 
 /** Cada palabra de la búsqueda debe aparecer en el documento, los nombres o el correo. */
 export function whereDestinatarios(eventoId: number, canal: Canal, filtros: FiltrosDestinatarios): Prisma.InscripcionWhereInput {
     const palabras = (filtros.q ?? '').toLowerCase().split(/\s+/).filter(Boolean).slice(0, 5)
-    const and: Prisma.InscripcionWhereInput[] = [aprobadasPresenciales(eventoId)]
+    const and: Prisma.InscripcionWhereInput[] = [baseDelCanal(eventoId, canal)]
     for (const palabra of palabras) {
         and.push({
             participante: {
@@ -58,6 +87,7 @@ const seleccion = {
     id: true,
     enlaceCredencialEnviadoEn: true,
     enlacePonenciasEnviadoEn: true,
+    enlaceVirtualEnviadoEn: true,
     participante: { select: { nombres: true, apellidos: true, tipoDocumentoId: true, numeroDocumento: true, correo: true } },
     tipoInscripcion: { select: { nombre: true, etiqueta: true } },
     clasificacion: { select: { nombre: true } },
@@ -75,7 +105,7 @@ export function aDestinatario(fila: FilaDestinatario, canal: Canal) {
         correo: fila.participante.correo,
         tipo: fila.tipoInscripcion ? { nombre: fila.tipoInscripcion.nombre, etiqueta: fila.tipoInscripcion.etiqueta } : null,
         clasificacion: fila.clasificacion?.nombre ?? null,
-        enviadoEn: canal === 'credencial' ? fila.enlaceCredencialEnviadoEn : fila.enlacePonenciasEnviadoEn,
+        enviadoEn: marcaDe(fila, canal),
     }
 }
 
@@ -84,7 +114,7 @@ const orden = [{ participante: { apellidos: 'asc' } }, { participante: { nombres
 /** Una página de destinatarios y, en `meta.resumen`, los totales del evento (no de los filtros). */
 export async function listarDestinatarios(eventoId: number, canal: Canal, filtros: FiltrosDestinatarios, paginacion: Pagination) {
     await obtenerEventoPorId(eventoId)
-    const base = aprobadasPresenciales(eventoId)
+    const base = baseDelCanal(eventoId, canal)
     const [filas, total, totalEvento, enviados] = await Promise.all([
         prisma.inscripcion.findMany({ where: whereDestinatarios(eventoId, canal, filtros), orderBy: orden, skip: paginacion.skip, take: paginacion.take, select: seleccion }),
         prisma.inscripcion.count({ where: whereDestinatarios(eventoId, canal, filtros) }),

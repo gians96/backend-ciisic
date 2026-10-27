@@ -164,7 +164,7 @@ y Google. Documentación: [`docs/`](docs/README.md).
   deshacer no (se corrige aunque el tipo cambie). `GET …/kits/summary` (`asistencia.ver`) cuenta aprobados con kit, entregados y pendientes. **Los virtuales no marcan asistencia**: `registrarAsistencia` responde `403
   VIRTUAL_REGISTRATION` tras `NOT_APPROVED`, sin excepción (ni «fuera de horario» ni la marca manual; también las rutas legacy); las ponencias especializadas no cambian. La marca, el listado de la actividad y el
   detalle traen `tipoInscripcion.incluyeKit` y `kit`; `ATTENDANCE_ALREADY_REGISTERED` trae `data { participante, inscripcion }` (`HttpError.datos`) para poder entregar un kit pendiente al volver a escanear. El correo con el
-  enlace de la transmisión a los virtuales lo manda la organización por fuera. Despliegue: backend primero (migración aditiva) y revisar con `prisma/preflight/verificar-kit.sql`.
+  enlace de la transmisión a los virtuales se envía desde el panel (spec 043). Despliegue: backend primero (migración aditiva) y revisar con `prisma/preflight/verificar-kit.sql`.
 - Delegaciones (specs 021–024 y 029): un grupo con delegado (`Delegacion`) cuyos integrantes tienen cada uno su inscripción
   (`delegacion_id`). **Cada delegación tiene sus propios planes** `CON_KIT`, `SIN_KIT` y `VIRTUAL`: tres tipos reales (`delegacion_con_kit`,
   `delegacion_sin_kit`, `delegacion_virtual`; `precio == precioInstitucional`) de su **categoría oculta** `DELEGACION_<id>`
@@ -212,6 +212,11 @@ y Google. Documentación: [`docs/`](docs/README.md).
   `<landing>/inscripcion-ponencias`, `specialized-talk-invitations`). Un correo por persona; antes de enviar se **reserva** la marca con un `UPDATE` condicionado a lo leído y si el correo falla se
   devuelve; sin `reenviar` se omite a quien ya la tiene. Hasta 100 por petición (el panel envía de 25 en 25). Permisos existentes: `inscripciones.ver`/`credenciales.reenviar` y
   `especializadas.ver`/`especializadas.inscribir`. Sin `url_landing` o sin credencial de correo = `409`. En el log solo ids y totales, nunca correos ni mensajes.
+- Acceso de los inscritos virtuales (spec 043, mismo módulo `src/api/broadcast`): tercer canal `virtual` con su marca `enlace_virtual_enviado_en`. Destinatarios = `APROBADO` con un tipo **virtual** (`aprobadasVirtuales`;
+  una cortesía sin tipo es presencial y no entra; el servidor lo vuelve a comprobar). **Un mismo mensaje escapado y un mismo enlace** para todas, con el botón «Ingresar al congreso»
+  (`htmlComunicado` con `accion`): el `enlace` lo escribe quien envía en cada petición (`https`, sin credenciales ni espacios, máx. 500: `esEnlaceDeAcceso`), no se guarda ni necesita `url_landing`. Rutas `…/virtual-access`
+  (+ `/ids`, `/send`, `/test`) con los permisos existentes: ver = `inscripciones.ver`, enviar y probar = `credenciales.reenviar`. Reserva de la marca, reversión y tandas como la spec 039. El enlace da acceso a la
+  transmisión: **no va al log** (solo ids y totales) ni a la BD.
 - Correo con respaldo (spec 041, `src/api/email-credential`): una credencial es `BREVO` (API) o `GMAIL_SMTP` (`smtp.gmail.com:465`, SSL, **host fijo**; la contraseña de aplicación va cifrada en `api_key_cifrada`
   y el remitente es la cuenta de Gmail). La **predeterminada es siempre la primera** y las demás van por `prioridad` (`PUT /v1/email-credentials/order` con todos los ids). **Todo envío pasa por
   `enviarConCredencial`**, que prueba la credencial elegida y, si falla, las demás activas por prioridad (máx. 3) **con el remitente de la que envía**; una cuenta que falla por sí misma (sin créditos,
@@ -321,7 +326,7 @@ con ambos sistemas levantados.
 
 Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Cada cambio
 empieza en `specs/NNN-nombre/` (spec → plan → tasks → contracts) y se marcan las tasks al
-implementar. Specs actuales: 001–014, 016–029 y 030–042 (ver [README](README.md)); la 015 (certificados) tiene
+implementar. Specs actuales: 001–014, 016–029 y 030–043 (ver [README](README.md)); la 015 (certificados) tiene
 solo su diseño (`research.md`).
 
 ## Antes de dar por terminado

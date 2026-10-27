@@ -5,8 +5,11 @@ import * as configuracion from '../../src/core/configuracion-sistema'
 import { asegurarCodigoCredencial } from '../../src/core/codigos'
 import { credencialParaEvento, enviarConCredencial } from '../../src/api/email-credential/services/email-credential'
 import { enviarCorreoEnlaceCredencial } from '../../src/api/inscription/utils/sendEmail'
-import { aprobadasPresenciales, idsDestinatarios, listarDestinatarios, whereDestinatarios } from '../../src/api/broadcast/services/destinatarios'
-import { enviarEnlacesCredencial, enviarInvitacionPonencias, htmlInvitacionPonencias, probarInvitacionPonencias } from '../../src/api/broadcast/services/enviar'
+import { aprobadasPresenciales, aprobadasVirtuales, idsDestinatarios, listarDestinatarios, whereDestinatarios } from '../../src/api/broadcast/services/destinatarios'
+import {
+    enviarAccesoVirtual, enviarEnlacesCredencial, enviarInvitacionPonencias, htmlAccesoVirtual, htmlInvitacionPonencias, probarAccesoVirtual, probarInvitacionPonencias,
+} from '../../src/api/broadcast/services/enviar'
+import { esEnlaceDeAcceso } from '../../src/api/broadcast/validation'
 import type { Actor } from '../../src/core/actor'
 import { tokenDeRol } from '../helpers/tokens'
 
@@ -49,6 +52,7 @@ const fila = (id: number, cambios: Record<string, unknown> = {}) => ({
     codigoCredencial: `CODIGO${String(id).padStart(4, '0')}`,
     enlaceCredencialEnviadoEn: null,
     enlacePonenciasEnviadoEn: null,
+    enlaceVirtualEnviadoEn: null,
     participante: { nombres: `Persona ${id}`, apellidos: 'Prueba', correo: `p${id}@example.com` },
     evento,
     ...cambios,
@@ -241,6 +245,131 @@ describe('probarInvitacionPonencias', () => {
     })
 })
 
+describe('acceso de los inscritos virtuales (spec 043)', () => {
+    const ENLACE = 'https://meet.example.com/ciisic-viii?pwd=abc123'
+    const mensaje = 'Hola.\n\nEntra a la transmisión del <b>congreso</b> con el botón.'
+    const entrada = { ids: [1, 2, 3], reenviar: false, asunto: 'Tu acceso al congreso', mensaje, enlace: ENLACE }
+
+    it('los destinatarios son las aprobadas con un tipo virtual: sin tipo (cortesía) cuenta como presencial', () => {
+        expect(aprobadasVirtuales(2)).toEqual({ eventoId: 2, estado: { codigo: 'APROBADO' }, tipoInscripcion: { modalidad: 'VIRTUAL' } })
+        const donde = whereDestinatarios(2, 'virtual', { enviado: 'no' }).AND as unknown[]
+        expect(donde[0]).toEqual(aprobadasVirtuales(2))
+        expect(donde).toContainEqual({ enlaceVirtualEnviadoEn: null })
+        expect(whereDestinatarios(2, 'virtual', { enviado: 'si' }).AND).toContainEqual({ enlaceVirtualEnviadoEn: { not: null } })
+    })
+
+    it('lista con la marca del acceso virtual y los totales de los virtuales del evento', async () => {
+        m.inscripcion.findMany.mockResolvedValue([{
+            id: 7, enlaceCredencialEnviadoEn: PREVIA, enlacePonenciasEnviadoEn: null, enlaceVirtualEnviadoEn: null,
+            participante: { nombres: 'Luis', apellidos: 'Rojas', tipoDocumentoId: 'dni', numeroDocumento: '87654321', correo: 'luis@example.com' },
+            tipoInscripcion: { nombre: 'Virtual estudiante', etiqueta: 'VIRTUAL' }, clasificacion: null,
+        }])
+        m.inscripcion.count.mockResolvedValueOnce(1).mockResolvedValueOnce(30).mockResolvedValueOnce(12)
+        const r = await listarDestinatarios(2, 'virtual', {}, { page: 1, pageSize: 20, skip: 0, take: 20 })
+        // La marca es la del acceso virtual, no la de la credencial que sí tiene
+        expect(r.data[0].enviadoEn).toBeNull()
+        expect(r.meta.resumen).toEqual({ total: 30, enviados: 12, pendientes: 18 })
+        expect(m.inscripcion.count).toHaveBeenCalledWith({ where: { AND: [aprobadasVirtuales(2), { enlaceVirtualEnviadoEn: { not: null } }] } })
+    })
+
+    it('manda el mismo mensaje a cada virtual por separado, con el botón al enlace escrito por el staff', async () => {
+        m.inscripcion.findMany.mockResolvedValue([fila(1), fila(2), fila(3, { enlaceVirtualEnviadoEn: PREVIA })])
+        const r = await enviarAccesoVirtual(2, entrada, actor, AHORA)
+        expect(r).toEqual({ enviados: 2, yaEnviados: 1, noElegibles: 0, fallidos: 0 })
+        // El servidor busca solo aprobadas virtuales del evento, entre las pedidas
+        expect(m.inscripcion.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { AND: [aprobadasVirtuales(2), { id: { in: [1, 2, 3] } }] } }))
+        expect(enviarCorreo).toHaveBeenCalledTimes(2)
+        const [, primero] = enviarCorreo.mock.calls[0]
+        const [, segundo] = enviarCorreo.mock.calls[1]
+        expect(primero.para).toEqual([{ email: 'p1@example.com' }])
+        expect(segundo.para).toEqual([{ email: 'p2@example.com' }])
+        expect(primero.asunto).toBe('Tu acceso al congreso')
+        expect(primero.html).toBe(segundo.html)
+        expect(primero.html).toContain(`href="${ENLACE}"`)
+        expect(primero.html).toContain('Ingresar al congreso')
+        // Solo se toca la marca de este canal
+        expect(m.inscripcion.updateMany).toHaveBeenCalledWith({ where: { id: 1, enlaceVirtualEnviadoEn: null }, data: { enlaceVirtualEnviadoEn: AHORA } })
+        expect(m.inscripcion.updateMany).not.toHaveBeenCalledWith(expect.objectContaining({ data: { enlaceCredencialEnviadoEn: AHORA } }))
+        expect(m.inscripcion.updateMany).not.toHaveBeenCalledWith(expect.objectContaining({ data: { enlacePonenciasEnviadoEn: AHORA } }))
+    })
+
+    it('no necesita la URL de la landing: el enlace es el que escribe el staff', async () => {
+        conLanding(null)
+        m.inscripcion.findMany.mockResolvedValue([fila(1)])
+        expect(await enviarAccesoVirtual(2, { ...entrada, ids: [1] }, actor, AHORA)).toMatchObject({ enviados: 1 })
+    })
+
+    it('escapa el mensaje, el nombre del evento y el enlace dentro del HTML', () => {
+        const html = htmlAccesoVirtual(mensaje, evento, 'no-reply@undc.edu.pe', 'https://x.example.com/a?b=1&c="2"')
+        expect(html).not.toContain('<b>congreso</b>')
+        expect(html).toContain('&lt;b&gt;congreso&lt;/b&gt;')
+        expect(html).toContain('VIII Congreso &lt;Internacional&gt;')
+        expect(html).toContain('href="https://x.example.com/a?b=1&amp;c=&quot;2&quot;"')
+    })
+
+    it('quien no es virtual aprobado (presencial, cortesía, de otro evento) sale como no elegible', async () => {
+        m.inscripcion.findMany.mockResolvedValue([fila(1)])
+        const r = await enviarAccesoVirtual(2, { ...entrada, ids: [1, 5, 6] }, actor, AHORA)
+        expect(r).toEqual({ enviados: 1, yaEnviados: 0, noElegibles: 2, fallidos: 0 })
+    })
+
+    it('con «reenviar» vuelve a enviar a quien ya lo recibió y, si el correo falla, devuelve la marca', async () => {
+        m.inscripcion.findMany.mockResolvedValue([fila(2, { enlaceVirtualEnviadoEn: PREVIA }), fila(3)])
+        enviarCorreo.mockResolvedValueOnce(null).mockResolvedValueOnce('Brevo respondió 500')
+        const r = await enviarAccesoVirtual(2, { ...entrada, ids: [2, 3], reenviar: true }, actor, AHORA)
+        expect(r).toEqual({ enviados: 1, yaEnviados: 0, noElegibles: 0, fallidos: 1 })
+        expect(m.inscripcion.updateMany).toHaveBeenCalledWith({ where: { id: 2, enlaceVirtualEnviadoEn: PREVIA }, data: { enlaceVirtualEnviadoEn: AHORA } })
+        expect(m.inscripcion.updateMany).toHaveBeenCalledWith({ where: { id: 3, enlaceVirtualEnviadoEn: AHORA }, data: { enlaceVirtualEnviadoEn: null } })
+    })
+
+    it('si otra cuenta ganó la reserva, no envía de nuevo', async () => {
+        m.inscripcion.findMany.mockResolvedValue([fila(1)])
+        m.inscripcion.updateMany.mockResolvedValue({ count: 0 })
+        const r = await enviarAccesoVirtual(2, { ...entrada, ids: [1] }, actor, AHORA)
+        expect(r).toEqual({ enviados: 0, yaEnviados: 1, noElegibles: 0, fallidos: 0 })
+        expect(enviarCorreo).not.toHaveBeenCalled()
+    })
+
+    it('sin credencial de correo responde 409 y no toca nada', async () => {
+        credencialDeCorreo.mockResolvedValue(null)
+        await expect(enviarAccesoVirtual(2, entrada, actor, AHORA)).rejects.toMatchObject({ status: 409, code: 'EMAIL_CREDENTIAL_UNAVAILABLE' })
+        expect(m.inscripcion.findMany).not.toHaveBeenCalled()
+        expect(m.inscripcion.updateMany).not.toHaveBeenCalled()
+    })
+
+    it('la prueba va a una sola dirección, marcada como prueba, y no marca a nadie', async () => {
+        const prueba = { correo: 'yo@example.com', asunto: 'Tu acceso', mensaje, enlace: ENLACE }
+        expect(await probarAccesoVirtual(2, prueba, actor)).toEqual({ enviado: true })
+        expect(enviarCorreo).toHaveBeenCalledTimes(1)
+        expect(enviarCorreo.mock.calls[0][1]).toMatchObject({ para: [{ email: 'yo@example.com' }], asunto: '[Prueba] Tu acceso' })
+        expect(enviarCorreo.mock.calls[0][1].html).toContain(`href="${ENLACE}"`)
+        expect(m.inscripcion.updateMany).not.toHaveBeenCalled()
+        enviarCorreo.mockResolvedValue('La cuenta de Brevo no tiene créditos')
+        await expect(probarAccesoVirtual(2, prueba, actor)).rejects.toMatchObject({ status: 502, code: 'EMAIL_SEND_FAILED' })
+    })
+
+    it.each([
+        ['https://meet.example.com/sala', true],
+        ['https://us02web.zoom.us/j/123456789?pwd=AbC', true],
+        ['http://meet.example.com/sala', false],
+        ['javascript:alert(1)', false],
+        ['data:text/html,<b>hola</b>', false],
+        ['//meet.example.com/sala', false],
+        ['https://usuario:clave@meet.example.com/sala', false],
+        ['https://localhost/sala', false],
+        ['https://meet.example.com/sala con espacio', false],
+        ['meet.example.com/sala', false],
+        ['', false],
+    ])('el enlace de acceso %s → %s', (enlace, valido) => {
+        expect(esEnlaceDeAcceso(enlace)).toBe(valido)
+    })
+
+    it('rechaza un enlace de más de 500 caracteres', () => {
+        expect(esEnlaceDeAcceso(`https://meet.example.com/${'a'.repeat(500)}`)).toBe(false)
+        expect(esEnlaceDeAcceso(`https://meet.example.com/${'a'.repeat(400)}`)).toBe(true)
+    })
+})
+
 describe('rutas de los envíos masivos', () => {
     const owner = () => `Bearer ${tokenDeRol('SUPERADMIN', 5)}`
 
@@ -266,6 +395,9 @@ describe('rutas de los envíos masivos', () => {
         ['sin asunto', '/api/v1/events/2/specialized-talk-invitations/send', { ids: [1], mensaje: 'Un mensaje suficiente.' }],
         ['mensaje muy corto', '/api/v1/events/2/specialized-talk-invitations/send', { ids: [1], asunto: 'Asunto', mensaje: 'Hola' }],
         ['prueba con un correo inválido', '/api/v1/events/2/specialized-talk-invitations/test', { correo: 'no-es-correo', asunto: 'Asunto', mensaje: 'Un mensaje suficiente.' }],
+        ['acceso virtual sin enlace', '/api/v1/events/2/virtual-access/send', { ids: [1], asunto: 'Asunto', mensaje: 'Un mensaje suficiente.' }],
+        ['acceso virtual con un enlace que no es https', '/api/v1/events/2/virtual-access/send', { ids: [1], asunto: 'Asunto', mensaje: 'Un mensaje suficiente.', enlace: 'javascript:alert(1)' }],
+        ['prueba del acceso virtual con http', '/api/v1/events/2/virtual-access/test', { correo: 'yo@example.com', asunto: 'Asunto', mensaje: 'Un mensaje suficiente.', enlace: 'http://meet.example.com/sala' }],
     ])('rechaza con 422 (%s) sin enviar nada', async (_caso, ruta, cuerpo) => {
         const r = await request(app).post(ruta).set('Authorization', owner()).send(cuerpo)
         expect(r.status).toBe(422)

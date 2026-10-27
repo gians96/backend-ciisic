@@ -10,21 +10,27 @@ import { obtenerEventoPorId } from '../../event/services/public-event'
 import { detalleInclude } from '../../inscription/services/mappers'
 import { enviarCorreoEnlaceCredencial } from '../../inscription/utils/sendEmail'
 import { htmlComunicado } from '../../specialized-talk/services/avisos'
-import { aprobadasPresenciales, type Canal } from './destinatarios'
-import type { EnviarEnlacesCredencialInput, EnviarInvitacionPonenciasInput, ProbarInvitacionPonenciasInput } from '../validation'
+import { baseDelCanal, marcaDe, type Canal } from './destinatarios'
+import type {
+    EnviarAccesoVirtualInput,
+    EnviarEnlacesCredencialInput,
+    EnviarInvitacionPonenciasInput,
+    ProbarAccesoVirtualInput,
+    ProbarInvitacionPonenciasInput,
+} from '../validation'
 
 /**
- * Envíos masivos a los inscritos presenciales (spec 039). Un correo por persona (nadie ve las direcciones
- * de otras) y una marca por persona y canal para saber a quién ya se le envió. Antes de enviar se **reserva**
- * la marca con un `UPDATE` condicionado a lo que se leyó: si dos cuentas envían a la vez, solo una gana y
- * nadie recibe el correo dos veces; si el envío falla, la marca vuelve a como estaba. El servidor vuelve a
- * comprobar a cada persona (aprobada y presencial): lo que mande el panel no decide.
+ * Envíos masivos a los inscritos (spec 039; el canal de los virtuales, spec 043). Un correo por persona (nadie
+ * ve las direcciones de otras) y una marca por persona y canal para saber a quién ya se le envió. Antes de enviar
+ * se **reserva** la marca con un `UPDATE` condicionado a lo que se leyó: si dos cuentas envían a la vez, solo una
+ * gana y nadie recibe el correo dos veces; si el envío falla, la marca vuelve a como estaba. El servidor vuelve a
+ * comprobar a cada persona (aprobada y de la modalidad del canal): lo que mande el panel no decide.
  */
 export interface ResultadoEnvio {
     enviados: number
     /** Ya lo habían recibido (y no se pidió reenviar), o lo tomó otra petición al mismo tiempo. */
     yaEnviados: number
-    /** No existen, no son del evento, no están aprobadas o no son presenciales. */
+    /** No existen, no son del evento, no están aprobadas o no son de la modalidad del canal (presenciales; virtuales en el acceso virtual). */
     noElegibles: number
     fallidos: number
 }
@@ -34,22 +40,23 @@ const sinResultado = (): ResultadoEnvio => ({ enviados: 0, yaEnviados: 0, noEleg
 const sinLanding = () => conflict('LANDING_URL_MISSING', 'Falta la URL de la landing. Configúrala en Sistema para poder armar los enlaces.')
 const sinCredencialDeCorreo = () => conflict('EMAIL_CREDENTIAL_UNAVAILABLE', 'No hay una credencial de correo activa. Configúrala en Correo para poder enviar.')
 
-/** Marca de un canal en la inscripción, leída y escrita siempre por su nombre de campo (sin claves dinámicas). */
-function marcaDe(fila: { enlaceCredencialEnviadoEn: Date | null, enlacePonenciasEnviadoEn: Date | null }, canal: Canal): Date | null {
-    return canal === 'credencial' ? fila.enlaceCredencialEnviadoEn : fila.enlacePonenciasEnviadoEn
-}
-
 /** Pasa la marca de `esperada` a `nueva` solo si sigue valiendo `esperada`. `true` si este envío la ganó. */
 async function cambiarMarca(id: number, canal: Canal, esperada: Date | null, nueva: Date | null): Promise<boolean> {
-    const { count } = canal === 'credencial'
-        ? await prisma.inscripcion.updateMany({ where: { id, enlaceCredencialEnviadoEn: esperada }, data: { enlaceCredencialEnviadoEn: nueva } })
-        : await prisma.inscripcion.updateMany({ where: { id, enlacePonenciasEnviadoEn: esperada }, data: { enlacePonenciasEnviadoEn: nueva } })
+    if (canal === 'credencial') {
+        const { count } = await prisma.inscripcion.updateMany({ where: { id, enlaceCredencialEnviadoEn: esperada }, data: { enlaceCredencialEnviadoEn: nueva } })
+        return count === 1
+    }
+    if (canal === 'ponencias') {
+        const { count } = await prisma.inscripcion.updateMany({ where: { id, enlacePonenciasEnviadoEn: esperada }, data: { enlacePonenciasEnviadoEn: nueva } })
+        return count === 1
+    }
+    const { count } = await prisma.inscripcion.updateMany({ where: { id, enlaceVirtualEnviadoEn: esperada }, data: { enlaceVirtualEnviadoEn: nueva } })
     return count === 1
 }
 
-async function cargarFilas(eventoId: number, ids: readonly number[]) {
+async function cargarFilas(eventoId: number, ids: readonly number[], canal: Canal) {
     const filas = await prisma.inscripcion.findMany({
-        where: { AND: [aprobadasPresenciales(eventoId), { id: { in: [...ids] } }] },
+        where: { AND: [baseDelCanal(eventoId, canal), { id: { in: [...ids] } }] },
         include: detalleInclude,
     })
     return new Map(filas.map((fila) => [fila.id, fila]))
@@ -69,7 +76,7 @@ async function recorrer(
     ahora: Date,
     enviar: (fila: FilaCargada) => Promise<boolean>,
 ): Promise<ResultadoEnvio> {
-    const filas = await cargarFilas(eventoId, ids)
+    const filas = await cargarFilas(eventoId, ids, canal)
     const resultado = sinResultado()
     for (const id of ids) {
         const fila = filas.get(id)
@@ -175,5 +182,55 @@ export async function probarInvitacionPonencias(eventoId: number, input: ProbarI
     })
     if (error !== null) throw new HttpError(502, 'EMAIL_SEND_FAILED', 'No se pudo enviar el correo de prueba. Revisa la credencial de correo.')
     console.info(`[envios-masivos] La cuenta ${actor.id} envió un correo de prueba del enlace de ponencias en el evento ${eventoId}`)
+    return { enviado: true }
+}
+
+// ─── Enlace de acceso al congreso para los inscritos virtuales (spec 043) ───
+
+export const ACCION_VIRTUAL = 'Ingresar al congreso'
+
+/** HTML del mensaje del staff con el botón al enlace de acceso (el mismo para todas las personas). */
+export function htmlAccesoVirtual(mensaje: string, evento: Pick<Evento, 'nombre' | 'correoContacto'>, remitenteCorreo: string, enlace: string): string {
+    return htmlComunicado(mensaje, '', evento, remitenteCorreo, { texto: ACCION_VIRTUAL, url: enlace })
+}
+
+/**
+ * Envía el mismo mensaje, con el botón al enlace que escribió el staff, a los inscritos virtuales aprobados
+ * elegidos (cada uno por separado). No necesita la URL de la landing: el enlace es de la transmisión.
+ */
+export async function enviarAccesoVirtual(eventoId: number, input: EnviarAccesoVirtualInput, actor: Actor, ahora = new Date()): Promise<ResultadoEnvio> {
+    const evento = await obtenerEventoPorId(eventoId)
+    const credencial = await credencialParaEvento(evento.credencialCorreoId)
+    if (!credencial) throw sinCredencialDeCorreo()
+
+    const html = htmlAccesoVirtual(input.mensaje, evento, credencial.remitenteCorreo, input.enlace)
+    const resultado = await recorrer(eventoId, input.ids, 'virtual', input.reenviar, ahora, async (fila) => {
+        const error = await enviarConCredencial(credencial, {
+            remitente: remitenteDe(evento, credencial),
+            para: [{ email: fila.participante.correo }],
+            asunto: input.asunto,
+            html,
+        })
+        return error === null
+    })
+    // El enlace da acceso a la transmisión: no va al log, solo ids y totales
+    console.info(`[envios-masivos] La cuenta ${actor.id} envió el acceso virtual a ${resultado.enviados} de ${input.ids.length} inscripción(es) del evento ${eventoId}`)
+    return resultado
+}
+
+/** Manda el mensaje a una dirección para ver cómo queda; no marca a nadie. */
+export async function probarAccesoVirtual(eventoId: number, input: ProbarAccesoVirtualInput, actor: Actor): Promise<{ enviado: true }> {
+    const evento = await obtenerEventoPorId(eventoId)
+    const credencial = await credencialParaEvento(evento.credencialCorreoId)
+    if (!credencial) throw sinCredencialDeCorreo()
+
+    const error = await enviarConCredencial(credencial, {
+        remitente: remitenteDe(evento, credencial),
+        para: [{ email: input.correo }],
+        asunto: `[Prueba] ${input.asunto}`,
+        html: htmlAccesoVirtual(input.mensaje, evento, credencial.remitenteCorreo, input.enlace),
+    })
+    if (error !== null) throw new HttpError(502, 'EMAIL_SEND_FAILED', 'No se pudo enviar el correo de prueba. Revisa la credencial de correo.')
+    console.info(`[envios-masivos] La cuenta ${actor.id} envió un correo de prueba del acceso virtual en el evento ${eventoId}`)
     return { enviado: true }
 }
