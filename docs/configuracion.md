@@ -55,7 +55,8 @@ numérica de 8–12 dígitos = estudiante; otra parte local = personal (docente 
 | Timeout de deportes-fi | 10 s | `src/api/integration/services/sports-client.ts` |
 | API de Brevo / timeout | `https://api.brevo.com/v3` / 15 s | `src/api/email-credential/services/brevo-client.ts` |
 | SMTP de Gmail (spec 041) / timeouts | `smtp.gmail.com:465` con SSL, fijo (no configurable) / 10 s de conexión, 30 s de socket | `src/api/email-credential/services/gmail-client.ts` |
-| Respaldo entre credenciales | hasta 3 por correo; una cuenta agotada queda 15 min en espera | `src/api/email-credential/services/email-credential.ts` |
+| Respaldo entre credenciales | hasta 3 por correo; una cuenta agotada queda 15 min en espera |
+| Créditos de Brevo (spec 042) | se revisan al probar, en «Revisar créditos» y antes de enviar si pasaron más de 5 min; con 0 envíos no se usa la credencial | `src/api/email-credential/services/email-credential.ts` |
 | Vigencia de los tokens de verificación | 24 h | `verification-token.ts`, `verificacion-correo.ts` |
 | Sesiones | Staff 1 h (renovable hasta 12 h); participante 12 h | `src/core/sesiones.ts` |
 | Carpeta de archivos / voucher máximo | `<cwd>/uploads` / 5 MB | `src/core/almacenamiento.ts` |

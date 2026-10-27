@@ -31,7 +31,7 @@ function respuesta(status: number, cuerpo: unknown) {
 function credencial(cambios: Record<string, unknown> = {}) {
     return {
         id: 1, proveedor: 'BREVO', nombre: 'Brevo', apiKeyCifrada: '', apiKeySufijo: 'abcd', remitenteCorreo: 'no-reply@undc.edu.pe',
-        remitenteNombre: 'Inscripción al congreso', esPredeterminada: true, prioridad: 0, activo: true, ultimoEstado: null, ultimoError: null,
+        remitenteNombre: 'Inscripción al congreso', esPredeterminada: true, prioridad: 0, creditos: null, creditosEn: new Date(), activo: true, ultimoEstado: null, ultimoError: null,
         ultimaPruebaEn: null, ultimoEnvioEn: null, creadoEn: new Date(), actualizadoEn: new Date(), eventos: [], ...cambios,
     }
 }
@@ -50,6 +50,7 @@ describe('acceso a las credenciales de correo (spec 013)', () => {
         ['get', '/api/v1/email-credentials'],
         ['post', '/api/v1/email-credentials'],
         ['put', '/api/v1/email-credentials/order'],
+        ['post', '/api/v1/email-credentials/check'],
         ['put', '/api/v1/email-credentials/1'],
         ['delete', '/api/v1/email-credentials/1'],
         ['post', '/api/v1/email-credentials/1/test'],

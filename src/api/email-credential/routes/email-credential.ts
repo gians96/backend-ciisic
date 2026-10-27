@@ -8,6 +8,7 @@ import { actualizarCredencialSchema, crearCredencialSchema, enviarPruebaSchema, 
 const routes: AppRoute[] = [
     { method: 'get', path: '/v1/email-credentials', handler: controller.list, middlewares: [requirePermiso('correo.configurar')] },
     { method: 'post', path: '/v1/email-credentials', handler: controller.create, middlewares: [requirePermiso('correo.configurar'), validateBody(crearCredencialSchema)] },
+    { method: 'post', path: '/v1/email-credentials/check', handler: controller.check, middlewares: [requirePermiso('correo.configurar')] },
     // Antes de `/:id`: «order» no es un id
     { method: 'put', path: '/v1/email-credentials/order', handler: controller.reorder, middlewares: [requirePermiso('correo.configurar'), validateBody(ordenarCredencialesSchema)] },
     { method: 'put', path: '/v1/email-credentials/:id', handler: controller.update, middlewares: [requirePermiso('correo.configurar'), validateBody(actualizarCredencialSchema)] },

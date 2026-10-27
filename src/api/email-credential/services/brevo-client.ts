@@ -62,8 +62,12 @@ async function llamar<T>(apiKey: string, ruta: string, init: { method?: string, 
     return cuerpo as T
 }
 
-export async function enviarConBrevo(apiKey: string, correo: CorreoSaliente): Promise<{ messageId: string | null }> {
-    const respuesta = await llamar<{ messageId?: string } | null>(apiKey, '/smtp/email', {
+/**
+ * Envía el correo y **comprueba que Brevo lo aceptó**: una respuesta exitosa sin el identificador del
+ * mensaje no cuenta como enviado (Brevo siempre lo devuelve al aceptar un correo).
+ */
+export async function enviarConBrevo(apiKey: string, correo: CorreoSaliente): Promise<{ messageId: string }> {
+    const respuesta = await llamar<{ messageId?: string, messageIds?: string[] } | null>(apiKey, '/smtp/email', {
         method: 'POST',
         body: {
             sender: correo.remitente,
@@ -75,7 +79,19 @@ export async function enviarConBrevo(apiKey: string, correo: CorreoSaliente): Pr
                 : {}),
         },
     })
-    return { messageId: respuesta?.messageId ?? null }
+    const messageId = respuesta?.messageId || respuesta?.messageIds?.[0]
+    if (!messageId) throw new CorreoFallido('Brevo no confirmó el envío: su respuesta no trae el identificador del mensaje')
+    return { messageId }
+}
+
+/**
+ * Envíos que le quedan a la cuenta: la suma de los créditos de sus planes de correo (no los de SMS). `null` si
+ * Brevo no informa créditos de envío (el plan es ilimitado o la respuesta no los trae): no se sabe, no que no haya.
+ */
+export function creditosDeEnvio(cuenta: CuentaCorreo): number | null {
+    const planes = cuenta.planes.filter((plan) => plan.tipo !== 'sms' && plan.creditos !== null && (plan.tipoCreditos === null || plan.tipoCreditos === 'sendLimit'))
+    if (!planes.length) return null
+    return Math.max(0, planes.reduce((total, plan) => total + (plan.creditos ?? 0), 0))
 }
 
 /** Verifica la API key sin enviar correos y devuelve la cuenta y los créditos del plan. */

@@ -88,6 +88,10 @@ function aCorreoFallido(error: unknown): CorreoFallido {
     return new CorreoFallido(`Gmail respondió ${estado ?? e.code ?? 'con un error'}${detalle}`, estado)
 }
 
+/**
+ * Envía el correo y **comprueba que Gmail aceptó a todos los destinatarios**: nodemailer puede resolver con
+ * algunos en `rejected`, y eso no es un envío completo.
+ */
 export async function enviarConGmail(cuenta: CuentaSmtp, correo: CorreoSaliente): Promise<{ messageId: string | null }> {
     try {
         const resultado = await transporteDe(cuenta).sendMail({
@@ -97,9 +101,10 @@ export async function enviarConGmail(cuenta: CuentaSmtp, correo: CorreoSaliente)
             html: correo.html,
             attachments: correo.adjuntos?.map((adjunto) => ({ filename: adjunto.nombre, content: adjunto.contenidoBase64, encoding: 'base64' })),
         })
+        if (!resultado.accepted?.length || resultado.rejected?.length) throw new CorreoFallido('Gmail no aceptó al destinatario del correo')
         return { messageId: resultado.messageId ?? null }
     } catch (error) {
-        throw aCorreoFallido(error)
+        throw error instanceof CorreoFallido ? error : aCorreoFallido(error)
     }
 }
 

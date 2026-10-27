@@ -25,7 +25,7 @@ const respuesta = (status: number, cuerpo: unknown) =>
 
 const credencial = () => ({
     id: 1, proveedor: 'BREVO', nombre: 'Brevo', apiKeyCifrada: cifrar('xkeysib-prueba'), apiKeySufijo: 'ueba', remitenteCorreo: 'no-reply@undc.edu.pe',
-    remitenteNombre: 'Inscripción al congreso', esPredeterminada: true, activo: true, ultimoEstado: null, ultimoError: null,
+    remitenteNombre: 'Inscripción al congreso', esPredeterminada: true, creditos: null, creditosEn: new Date(), activo: true, ultimoEstado: null, ultimoError: null,
     ultimaPruebaEn: null, ultimoEnvioEn: null, creadoEn: new Date(), actualizadoEn: new Date(),
 })
 

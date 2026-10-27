@@ -948,6 +948,9 @@ model CredencialCorreo {
   esPredeterminada Boolean            @default(false) @map("es_predeterminada")
   /// Orden de respaldo (menor = antes; la predeterminada va primero sin importar su valor). PUT /order la renumera 1, 2, 3… (spec 041).
   prioridad        Int                @default(0)
+  /// Envíos que le quedan en Brevo según su API (`/account`); NULL = no se sabe o no aplica (Gmail). Se actualiza al probar, al revisar y antes de enviar si pasaron más de 5 min (spec 042).
+  creditos         Int?               @map("creditos_disponibles")
+  creditosEn       DateTime?          @map("creditos_verificados_en")
   activo           Boolean            @default(true)
   ultimoEstado     EstadoIntegracion? @map("ultimo_estado")
   ultimoError      String?            @map("ultimo_error") @db.VarChar(500)

@@ -39,7 +39,7 @@ function respuesta(status: number, cuerpo: unknown) {
 function credencial(cambios: Record<string, unknown> = {}) {
     return {
         id: 1, proveedor: 'BREVO', nombre: 'Brevo', apiKeyCifrada: cifrar('xkeysib-uno'), apiKeySufijo: 'uno1', remitenteCorreo: 'congreso@undc.edu.pe',
-        remitenteNombre: 'CIISIC', esPredeterminada: true, prioridad: 0, activo: true, ultimoEstado: null, ultimoError: null,
+        remitenteNombre: 'CIISIC', esPredeterminada: true, prioridad: 0, creditos: null, creditosEn: new Date(), activo: true, ultimoEstado: null, ultimoError: null,
         ultimaPruebaEn: null, ultimoEnvioEn: null, creadoEn: new Date(), actualizadoEn: new Date(), eventos: [], ...cambios,
     }
 }
@@ -66,7 +66,7 @@ beforeEach(() => {
     reiniciarEsperasDeCredenciales()
     m.update.mockResolvedValue({})
     m.findMany.mockResolvedValue([])
-    mockEnviar.mockResolvedValue({ messageId: '<id@gmail>' })
+    mockEnviar.mockResolvedValue({ messageId: '<id@gmail>', accepted: ['ana@example.com'], rejected: [] })
     mockVerificar.mockResolvedValue(true)
     jest.spyOn(console, 'warn').mockImplementation(() => undefined)
 })

@@ -135,7 +135,7 @@ let participantes: (typeof ANA)[] = []
 
 const credencial = (cambios: Record<string, unknown> = {}) => ({
     id: 3, proveedor: 'BREVO', nombre: 'Principal', apiKeyCifrada: cifrar('xkeysib-prueba'), apiKeySufijo: 'ueba', remitenteCorreo: 'no-reply@ciisic.pe',
-    remitenteNombre: 'CIISIC', esPredeterminada: true, activo: true, ultimoEstado: 'OK', ultimoError: null, ultimaPruebaEn: null, ultimoEnvioEn: null,
+    remitenteNombre: 'CIISIC', esPredeterminada: true, creditos: null, creditosEn: new Date(), activo: true, ultimoEstado: 'OK', ultimoError: null, ultimaPruebaEn: null, ultimoEnvioEn: null,
     creadoEn: new Date(), actualizadoEn: new Date(), ...cambios,
 })
 
