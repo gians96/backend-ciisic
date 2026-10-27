@@ -5,7 +5,7 @@ import request from 'supertest'
 import app from '../../src/app'
 import { prisma } from '../../src/database/prisma'
 import { descifrar } from '../../src/core/crypto'
-import { credencialParaEvento } from '../../src/api/email-credential/services/email-credential'
+import { credencialParaEvento, reiniciarEsperasDeCredenciales } from '../../src/api/email-credential/services/email-credential'
 import { enviarCorreoAprobacion, parrafoModalidad, TEXTO_MODALIDAD_VIRTUAL } from '../../src/api/inscription/utils/sendEmail'
 import type { InscripcionDetalle } from '../../src/api/inscription/services/mappers'
 import { PERMISOS_ELEGIBLES_COMISION } from '../../src/core/permisos'
@@ -13,7 +13,7 @@ import { tokenDeRol } from '../helpers/tokens'
 
 jest.mock('../../src/database/prisma', () => {
     const credencialCorreo = {
-        count: jest.fn(), create: jest.fn(), findUnique: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(),
+        count: jest.fn(), create: jest.fn(), aggregate: jest.fn(), findUnique: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(),
         update: jest.fn(), updateMany: jest.fn(), delete: jest.fn(),
     }
     return { prisma: { credencialCorreo, $transaction: jest.fn((fn: (tx: unknown) => unknown) => fn({ credencialCorreo })) } }
@@ -31,7 +31,7 @@ function respuesta(status: number, cuerpo: unknown) {
 function credencial(cambios: Record<string, unknown> = {}) {
     return {
         id: 1, proveedor: 'BREVO', nombre: 'Brevo', apiKeyCifrada: '', apiKeySufijo: 'abcd', remitenteCorreo: 'no-reply@undc.edu.pe',
-        remitenteNombre: 'Inscripción al congreso', esPredeterminada: true, activo: true, ultimoEstado: null, ultimoError: null,
+        remitenteNombre: 'Inscripción al congreso', esPredeterminada: true, prioridad: 0, activo: true, ultimoEstado: null, ultimoError: null,
         ultimaPruebaEn: null, ultimoEnvioEn: null, creadoEn: new Date(), actualizadoEn: new Date(), eventos: [], ...cambios,
     }
 }
@@ -40,13 +40,16 @@ beforeAll(() => { global.fetch = fetchMock as unknown as typeof fetch })
 afterAll(() => { global.fetch = fetchOriginal })
 beforeEach(() => {
     jest.clearAllMocks()
+    reiniciarEsperasDeCredenciales()
     m.update.mockResolvedValue({})
+    m.findMany.mockResolvedValue([])
 })
 
 describe('acceso a las credenciales de correo (spec 013)', () => {
     const rutas: ['get' | 'post' | 'put' | 'delete', string][] = [
         ['get', '/api/v1/email-credentials'],
         ['post', '/api/v1/email-credentials'],
+        ['put', '/api/v1/email-credentials/order'],
         ['put', '/api/v1/email-credentials/1'],
         ['delete', '/api/v1/email-credentials/1'],
         ['post', '/api/v1/email-credentials/1/test'],
@@ -89,7 +92,7 @@ describe('CRUD de credenciales de correo', () => {
         const data = m.create.mock.calls[0][0].data
         expect(data.apiKeyCifrada).not.toContain('xkeysib')
         expect(descifrar(data.apiKeyCifrada)).toBe('xkeysib-secreta-1234')
-        expect(data).toMatchObject({ apiKeySufijo: '1234', remitenteCorreo: 'congreso@undc.edu.pe', esPredeterminada: true })
+        expect(data).toMatchObject({ proveedor: 'BREVO', apiKeySufijo: '1234', remitenteCorreo: 'congreso@undc.edu.pe', esPredeterminada: true, prioridad: 0 })
         expect(m.updateMany).toHaveBeenCalledWith({ data: { esPredeterminada: false } })
         expect(r.body.data).toMatchObject({ apiKeyEnmascarada: '••••1234', esPredeterminada: true })
         expect(JSON.stringify(r.body)).not.toContain('xkeysib')
@@ -135,14 +138,14 @@ describe('CRUD de credenciales de correo', () => {
 })
 
 describe('elección de la credencial al enviar', () => {
-    it('usa la del evento si está activa; si no, la predeterminada', async () => {
+    it('usa la del evento si está activa; si no, la primera activa por prioridad', async () => {
         m.findFirst.mockResolvedValueOnce(credencial({ id: 9, esPredeterminada: false }))
         expect(await credencialParaEvento(9)).toMatchObject({ id: 9 })
         expect(m.findFirst.mock.calls[0][0]).toEqual({ where: { id: 9, activo: true } })
 
         m.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce(credencial({ id: 1 }))
         expect(await credencialParaEvento(9)).toMatchObject({ id: 1 })
-        expect(m.findFirst.mock.calls[2][0]).toEqual({ where: { activo: true }, orderBy: [{ esPredeterminada: 'desc' }, { id: 'asc' }] })
+        expect(m.findFirst.mock.calls[2][0]).toEqual({ where: { activo: true }, orderBy: [{ esPredeterminada: 'desc' }, { prioridad: 'asc' }, { id: 'asc' }] })
     })
 })
 

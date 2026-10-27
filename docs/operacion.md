@@ -325,7 +325,10 @@ se crea en el panel (Equipo y administradores).
 | Consulta DNI siempre 503 | Sin tokens vigentes | Consultas DNI → agregar o reiniciar tokens y **Probar** |
 | Verificación de estudiante "no disponible" | API_UNDC sin configurar o caída | Sistema → API UNDC → **Probar** |
 | **Probar** dice "La URL redirige a otra página" | Se guardó la URL de un sitio web (p. ej. SIGENET, `https://jp.episundc.pe`) | Usar la URL de la API: `https://api-jp.episundc.pe`, con tiempo de espera de 15000 ms |
-| No salen los correos de aprobación | Credencial de Brevo inválida o remitente no verificado | Correo → **Probar** / **Enviar prueba**; luego "Reenviar credencial" |
+| No salen los correos de aprobación | Credencial de Brevo inválida o remitente no verificado, o sin créditos (plan gratuito: 300 al día) | Correo → **Probar** / **Enviar prueba**; luego "Reenviar credencial". Con otra credencial activa (p. ej. Gmail) el correo sale solo por ella (spec 041) |
+| Brevo se quedó sin créditos y no hay respaldo | Plan gratuito de 300 envíos al día | Correo → **Agregar credencial** → Gmail (cuenta + contraseña de aplicación de `myaccount.google.com/apppasswords`, requiere verificación en 2 pasos) y déjala como respaldo; **Probar** y **Enviar prueba** |
+| Gmail rechaza el usuario o la contraseña | La contraseña no es de aplicación (16 letras), la cuenta no tiene verificación en 2 pasos o, en Workspace, el administrador no permite contraseñas de aplicación | Crear otra contraseña de aplicación y pegarla en Correo → Editar |
+| Gmail dice «límite de envíos» | 500 al día en cuenta personal, 2000 en Workspace | Esperar unas horas; el correo sigue por la siguiente credencial |
 | Rutas antiguas responden 410 | "Landing anterior" desactivada | Es lo esperado cuando la landing nueva está publicada |
 | `429 RATE_LIMITED` en un sitio | Límite por visitante o por token | Revisar el log (`Límite por token alcanzado …`); revocar el token si hay abuso |
 | El panel pide volver a ingresar (`SESSION_INVALIDATED`) | La cuenta se desactivó, se borró o tiene un rol desconocido; o cambiaron su correo, su contraseña o su vínculo con Google | Revisarla en Equipo y administradores (la guarda lee la BD en cada petición); tras un cambio de credenciales es lo esperado |

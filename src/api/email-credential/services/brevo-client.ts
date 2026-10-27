@@ -1,32 +1,25 @@
-const BREVO_API_URL = 'https://api.brevo.com/v3'
-const TIMEOUT_MS = 15000
+import { CorreoFallido, type CorreoSaliente, type CuentaCorreo } from './correo'
+
+export { CorreoFallido, type CorreoSaliente }
+export type CuentaBrevo = CuentaCorreo
 
 /**
  * Cliente mínimo de la API transaccional de Brevo (v3) con `fetch`: la API key va por
  * solicitud, así cada evento puede usar su propia credencial sin estado global.
  */
-export class CorreoFallido extends Error {
-    readonly status?: number
+const BREVO_API_URL = 'https://api.brevo.com/v3'
+const TIMEOUT_MS = 15000
 
-    constructor(message: string, status?: number) {
-        super(message)
-        this.name = 'CorreoFallido'
-        this.status = status
-    }
+/** Códigos de error de Brevo que hablan de la cuenta (créditos, permisos, límite), no del mensaje. */
+const CODIGOS_DE_CUENTA = new Set(['not_enough_credits', 'permission_denied', 'unauthorized', 'too_many_requests', 'account_under_validation'])
+
+function codigoDe(cuerpo: unknown): string {
+    return cuerpo && typeof cuerpo === 'object' && 'code' in cuerpo ? String((cuerpo as { code: unknown }).code) : ''
 }
 
-export interface CorreoSaliente {
-    remitente: { email: string, name?: string }
-    para: { email: string, name?: string }[]
-    asunto: string
-    html: string
-    adjuntos?: { nombre: string, contenidoBase64: string }[]
-}
-
-export interface CuentaBrevo {
-    correo: string | null
-    empresa: string | null
-    planes: { tipo: string, creditos: number | null, tipoCreditos: string | null }[]
+/** El fallo es de la cuenta si Brevo lo dice con su código o con el estado HTTP (401, 402, 403 y 429). */
+function esDeLaCuenta(status: number, cuerpo: unknown): boolean {
+    return [401, 402, 403, 429].includes(status) || CODIGOS_DE_CUENTA.has(codigoDe(cuerpo))
 }
 
 function mensajeDeError(status: number, cuerpo: unknown): string {
@@ -35,7 +28,7 @@ function mensajeDeError(status: number, cuerpo: unknown): string {
         : ''
     const sufijo = detalle ? `: ${detalle}` : ''
     if (status === 401) return `API key de Brevo inválida o sin permisos${sufijo}`
-    if (status === 402) return `La cuenta de Brevo no tiene créditos o el plan no lo permite${sufijo}`
+    if (status === 402 || codigoDe(cuerpo) === 'not_enough_credits') return `La cuenta de Brevo no tiene créditos o el plan no lo permite${sufijo}`
     if (status === 429) return 'Brevo limitó las solicitudes (429); intenta más tarde'
     return `Brevo respondió ${status}${sufijo}`
 }
@@ -65,7 +58,7 @@ async function llamar<T>(apiKey: string, ruta: string, init: { method?: string, 
     } catch {
         cuerpo = null
     }
-    if (!respuesta.ok) throw new CorreoFallido(mensajeDeError(respuesta.status, cuerpo), respuesta.status)
+    if (!respuesta.ok) throw new CorreoFallido(mensajeDeError(respuesta.status, cuerpo), respuesta.status, esDeLaCuenta(respuesta.status, cuerpo))
     return cuerpo as T
 }
 
@@ -86,7 +79,7 @@ export async function enviarConBrevo(apiKey: string, correo: CorreoSaliente): Pr
 }
 
 /** Verifica la API key sin enviar correos y devuelve la cuenta y los créditos del plan. */
-export async function cuentaBrevo(apiKey: string): Promise<CuentaBrevo> {
+export async function cuentaBrevo(apiKey: string): Promise<CuentaCorreo> {
     const cuenta = await llamar<{
         email?: string
         companyName?: string

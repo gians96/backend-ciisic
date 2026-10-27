@@ -22,7 +22,7 @@ variable antigua que sobre y **importa una sola vez** las que tienen equivalente
 | Pantalla | Qué se configura | Tabla |
 |---|---|---|
 | **Sistema** | API_UNDC (URL, API key, timeout, **Probar**), client ID de Google, URL del panel, **URL de la landing** (spec 038: origen `https://dominio` de donde salen el enlace de la credencial 3D y el de la inscripción a ponencias; no es pública), interruptor "Landing anterior" (rutas legacy) | `configuracion_sistema` (fila única, caché de 30 s) |
-| **Correo** | Credenciales de Brevo (API key cifrada, remitente, predeterminada, prueba de cuenta, correo de prueba) | `credenciales_correo` |
+| **Correo** | Credenciales de **Brevo** (API key) o **Gmail por SMTP** (contraseña de aplicación), ambas cifradas; remitente, orden de prioridad (si una falla o se agota, se usa la siguiente), predeterminada, prueba de cuenta y correo de prueba | `credenciales_correo` |
 | **Consultas DNI** | Tokens de Decolecta/apiperu (límite, renovación, prioridad, prueba) | `tokens_consulta` |
 | **Eventos → Acceso** | Tokens de acceso de la landing del evento (se muestran una vez) | `tokens_acceso` |
 | **Delegaciones** | Delegaciones (grupos) del evento: planes Con kit / Sin kit / Virtual con su precio, mínimo para el promocional, dominio del correo, links del delegado e individual, integrantes y vouchers | `delegaciones`, `categorias_inscripcion` y `tipos_inscripcion` (sus planes) |
@@ -54,6 +54,8 @@ numérica de 8–12 dígitos = estudiante; otra parte local = personal (docente 
 | Timeout de proveedores DNI | 8 s | `src/api/document-lookup/services/lookup.ts` |
 | Timeout de deportes-fi | 10 s | `src/api/integration/services/sports-client.ts` |
 | API de Brevo / timeout | `https://api.brevo.com/v3` / 15 s | `src/api/email-credential/services/brevo-client.ts` |
+| SMTP de Gmail (spec 041) / timeouts | `smtp.gmail.com:465` con SSL, fijo (no configurable) / 10 s de conexión, 30 s de socket | `src/api/email-credential/services/gmail-client.ts` |
+| Respaldo entre credenciales | hasta 3 por correo; una cuenta agotada queda 15 min en espera | `src/api/email-credential/services/email-credential.ts` |
 | Vigencia de los tokens de verificación | 24 h | `verification-token.ts`, `verificacion-correo.ts` |
 | Sesiones | Staff 1 h (renovable hasta 12 h); participante 12 h | `src/core/sesiones.ts` |
 | Carpeta de archivos / voucher máximo | `<cwd>/uploads` / 5 MB | `src/core/almacenamiento.ts` |

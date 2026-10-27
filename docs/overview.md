@@ -8,7 +8,7 @@ eventos de la Facultad) con sus inscripciones, credenciales, asistencia, ponenci
 - **Consumidores**: el panel (`administrator-ciisic-frontend`, administradores e inscritos) y la
   landing de cada evento (`ciisic-undc-web`).
 - **Dependencias externas**: API_UNDC (verificación de estudiantes), deportes-fi (Semana
-  Sistémica), Decolecta/apiperu (consultas DNI), Brevo (correo), Google (inicio de sesión).
+  Sistémica), Decolecta/apiperu (consultas DNI), Brevo y Gmail por SMTP (correo), Google (inicio de sesión).
 
 ## Módulos (`src/api/<módulo>`)
 
@@ -24,7 +24,7 @@ eventos de la Facultad) con sus inscripciones, credenciales, asistencia, ponenci
 | `document-lookup` | Consulta DNI con pool de tokens rotativo, caché y bitácora | 003 |
 | `student-verification` | Verificación de estudiantes UNDC contra API_UNDC; token firmado | 004 |
 | `integration` | Integraciones por evento (deportes-fi) y resumen Semana Sistémica | 005 |
-| `email-credential` | Credenciales de correo (Brevo) cifradas, por evento | 006 |
+| `email-credential` | Credenciales de correo (Brevo o Gmail por SMTP) cifradas, por evento y con respaldo por prioridad | 006, 041 |
 | `access-token` | Tokens de acceso del sitio de cada evento | 007 |
 | `system-settings` | Configuración del sistema (API_UNDC, Google, URL del panel, rutas legacy) | 008 |
 | `google-auth` | Acceso con Google (panel) y verificación de correo (landing) | 010 |

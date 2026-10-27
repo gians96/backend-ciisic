@@ -14,6 +14,10 @@ export async function update(req: Request, res: Response) {
     res.json({ success: true, data: await service.actualizarCredencial(idParam(req.params.id), req.body) })
 }
 
+export async function reorder(req: Request, res: Response) {
+    res.json({ success: true, data: await service.ordenarCredenciales(req.body) })
+}
+
 export async function remove(req: Request, res: Response) {
     await service.eliminarCredencial(idParam(req.params.id))
     res.json({ success: true, data: null })

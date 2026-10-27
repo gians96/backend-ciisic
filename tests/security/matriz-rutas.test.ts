@@ -215,6 +215,7 @@ const MATRIZ: Record<Clave, Esperada> = {
     // email-credential
     'GET /v1/email-credentials': g('correo.configurar'),
     'POST /v1/email-credentials': g('correo.configurar'),
+    'PUT /v1/email-credentials/order': g('correo.configurar'),
     'PUT /v1/email-credentials/:id': g('correo.configurar'),
     'DELETE /v1/email-credentials/:id': g('correo.configurar'),
     'POST /v1/email-credentials/:id/test': g('correo.configurar'),
@@ -356,7 +357,7 @@ const LIMITES_POR_ACTOR: readonly RequestHandler[] = [
     limiteDescargaResumenPonencias, limiteAvisosPonencias, limiteEnviosMasivos, limiteLecturaEnvios,
 ]
 /** Total de rutas de /api: una ruta nueva obliga a clasificarla aquí. */
-const TOTAL_RUTAS = 203
+const TOTAL_RUTAS = 204
 
 function clasesDe(ruta: Ruta): Clase[] {
     const clases: Clase[] = []

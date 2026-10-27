@@ -212,6 +212,11 @@ y Google. Documentación: [`docs/`](docs/README.md).
   `<landing>/inscripcion-ponencias`, `specialized-talk-invitations`). Un correo por persona; antes de enviar se **reserva** la marca con un `UPDATE` condicionado a lo leído y si el correo falla se
   devuelve; sin `reenviar` se omite a quien ya la tiene. Hasta 100 por petición (el panel envía de 25 en 25). Permisos existentes: `inscripciones.ver`/`credenciales.reenviar` y
   `especializadas.ver`/`especializadas.inscribir`. Sin `url_landing` o sin credencial de correo = `409`. En el log solo ids y totales, nunca correos ni mensajes.
+- Correo con respaldo (spec 041, `src/api/email-credential`): una credencial es `BREVO` (API) o `GMAIL_SMTP` (`smtp.gmail.com:465`, SSL, **host fijo**; la contraseña de aplicación va cifrada en `api_key_cifrada`
+  y el remitente es la cuenta de Gmail). La **predeterminada es siempre la primera** y las demás van por `prioridad` (`PUT /v1/email-credentials/order` con todos los ids). **Todo envío pasa por
+  `enviarConCredencial`**, que prueba la credencial elegida y, si falla, las demás activas por prioridad (máx. 3) **con el remitente de la que envía**; una cuenta que falla por sí misma (sin créditos,
+  límite diario, clave inválida: `CorreoFallido.deLaCuenta`) queda 15 min en espera en memoria. No envíes con `enviarConBrevo`/`enviarConGmail` directamente salvo en «Probar» y «Enviar prueba»
+  (que no tienen respaldo). `credencialUtilizable` (código de acceso) devuelve la primera activa sin un fallo de hace menos de 15 min. El log de un respaldo lleva solo ids de credencial.
 - Enlace público por ciclo (spec 027): igual que el del docente pero por ciclo completo, en su propia tabla `enlaces_ciclo` (el padrón se reemplaza en cada
   carga, así que el enlace no puede vivir en él; recargarlo no lo toca). `GET /v1/public/cycle` (+ `/export`) con `X-Link-Token`: nombre, código, ciclo, sección,
   turno y situación de los estudiantes y el asesor de cada sección, pero **sin celular** (llega a más gente que el docente), DNI, correo ni montos (prueba que lo
@@ -311,7 +316,7 @@ con ambos sistemas levantados.
 
 Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Cada cambio
 empieza en `specs/NNN-nombre/` (spec → plan → tasks → contracts) y se marcan las tasks al
-implementar. Specs actuales: 001–014, 016–029 y 030–040 (ver [README](README.md)); la 015 (certificados) tiene
+implementar. Specs actuales: 001–014, 016–029 y 030–041 (ver [README](README.md)); la 015 (certificados) tiene
 solo su diseño (`research.md`).
 
 ## Antes de dar por terminado

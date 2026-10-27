@@ -15,7 +15,7 @@ jest.mock('../../src/database/prisma', () => ({
         $transaction: jest.fn(),
         codigoAcceso: { findMany: jest.fn(), findFirst: jest.fn(), updateMany: jest.fn(), create: jest.fn(), deleteMany: jest.fn() },
         participante: { findUnique: jest.fn() },
-        credencialCorreo: { findFirst: jest.fn(), update: jest.fn() },
+        credencialCorreo: { findMany: jest.fn(), update: jest.fn() },
         configuracionSistema: { findUnique: jest.fn() },
         tokenAcceso: { findUnique: jest.fn(), update: jest.fn() },
     },
@@ -171,7 +171,7 @@ beforeEach(() => {
     m.$transaction.mockImplementation((fn: (tx: unknown) => unknown) => fn(prisma))
     m.participante.findUnique.mockImplementation(async ({ where }: { where: { correo?: string, id?: number } }) =>
         participantes.find((p) => (where.correo !== undefined ? p.correo === where.correo : p.id === where.id)) ?? null)
-    m.credencialCorreo.findFirst.mockResolvedValue(credencial())
+    m.credencialCorreo.findMany.mockResolvedValue([credencial()])
     m.credencialCorreo.update.mockResolvedValue({})
     m.configuracionSistema.findUnique.mockResolvedValue({ id: 1, googleClientId: 'cid.apps.googleusercontent.com', urlPanel: 'https://admin.example', rutasLegacyActivas: true, undcApiTimeoutMs: 8000 })
     m.tokenAcceso.update.mockResolvedValue({})
@@ -331,21 +331,31 @@ describe('POST /v1/auth/participant/code', () => {
         expect(filas).toHaveLength(2)
     })
 
-    it('503 CODE_LOGIN_UNAVAILABLE sin credencial predeterminada activa o con un error de hace menos de 15 min', async () => {
+    it('503 CODE_LOGIN_UNAVAILABLE sin credencial activa o con un error de hace menos de 15 min en todas', async () => {
         silenciarErroresInternos()
-        m.credencialCorreo.findFirst.mockResolvedValue(null)
+        m.credencialCorreo.findMany.mockResolvedValue([])
         const r = await pedir('ana@gmail.com')
         expect(r.status).toBe(503)
         expect(r.body.code).toBe('CODE_LOGIN_UNAVAILABLE')
-        expect(m.credencialCorreo.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { activo: true, esPredeterminada: true } }))
+        expect(m.credencialCorreo.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { activo: true } }))
 
-        m.credencialCorreo.findFirst.mockResolvedValue(credencial({ ultimoEstado: 'ERROR', ultimoEnvioEn: new Date(Date.now() - 5 * 60_000) }))
+        m.credencialCorreo.findMany.mockResolvedValue([credencial({ ultimoEstado: 'ERROR', ultimoEnvioEn: new Date(Date.now() - 5 * 60_000) })])
         expect((await pedir('ana@gmail.com')).body.code).toBe('CODE_LOGIN_UNAVAILABLE')
         expect(filas).toHaveLength(0)
 
         // Pasados 15 min se vuelve a intentar (disyuntor que se recupera solo)
-        m.credencialCorreo.findFirst.mockResolvedValue(credencial({ ultimoEstado: 'ERROR', ultimoEnvioEn: new Date(Date.now() - 16 * 60_000) }))
+        m.credencialCorreo.findMany.mockResolvedValue([credencial({ ultimoEstado: 'ERROR', ultimoEnvioEn: new Date(Date.now() - 16 * 60_000) })])
         expect((await pedir('ana@gmail.com')).status).toBe(202)
+    })
+
+    it('si la predeterminada falló hace poco, el código sale por la siguiente credencial activa (spec 041)', async () => {
+        const caida = credencial({ id: 1, ultimoEstado: 'ERROR', ultimoEnvioEn: new Date(Date.now() - 5 * 60_000) })
+        const respaldo = credencial({ id: 2, esPredeterminada: false, remitenteCorreo: 'respaldo@undc.edu.pe' })
+        m.credencialCorreo.findMany.mockResolvedValue([caida, respaldo])
+        expect((await pedir('ana@gmail.com')).status).toBe(202)
+        await esperarEnvios()
+        expect(enviarConBrevo).toHaveBeenCalledTimes(1)
+        expect(enviarConBrevo.mock.calls[0][1].remitente.email).toBe('respaldo@undc.edu.pe')
     })
 
     it('un fallo de Brevo en el envío diferido no tumba el proceso, no registra datos personales ni marca la credencial', async () => {
@@ -579,9 +589,9 @@ describe('GET /v1/auth/config (accesoCodigo)', () => {
         const panel = await request(app).get('/api/v1/auth/config')
         expect(panel.body.data).toEqual({ google: { clientId: 'cid.apps.googleusercontent.com' }, urlPanel: 'https://admin.example', accesoCodigo: { disponible: true } })
 
-        m.credencialCorreo.findFirst.mockResolvedValue(null)
+        m.credencialCorreo.findMany.mockResolvedValue([])
         expect((await request(app).get('/api/v1/auth/config')).body.data.accesoCodigo).toEqual({ disponible: false })
-        m.credencialCorreo.findFirst.mockRejectedValue(new Error('BD caída'))
+        m.credencialCorreo.findMany.mockRejectedValue(new Error('BD caída'))
         expect((await request(app).get('/api/v1/auth/config')).body.data.accesoCodigo).toEqual({ disponible: false })
 
         m.tokenAcceso.findUnique.mockResolvedValue(registroDeToken({ id: 2, estado: 'PUBLICADO' }))

@@ -930,10 +930,13 @@ model IntegracionEvento {
 
 enum ProveedorCorreo {
   BREVO
+  /// SMTP de Gmail (smtp.gmail.com:465, SSL) con una contraseña de aplicación (spec 041).
+  GMAIL_SMTP
 }
 
-/// Credencial de envío de correo (API key cifrada con AES-256-GCM). Cada evento puede elegir
-/// una; si no, se usa la predeterminada.
+/// Credencial de envío de correo (API key de Brevo o contraseña de aplicación de Gmail, cifrada con
+/// AES-256-GCM). Cada evento puede elegir una; si no, se usa la predeterminada. Si el envío falla,
+/// se prueban las demás activas por `prioridad` (spec 041).
 model CredencialCorreo {
   id               Int                @id @default(autoincrement())
   proveedor        ProveedorCorreo    @default(BREVO)
@@ -943,6 +946,8 @@ model CredencialCorreo {
   remitenteCorreo  String             @map("remitente_correo") @db.VarChar(191)
   remitenteNombre  String?            @map("remitente_nombre") @db.VarChar(120)
   esPredeterminada Boolean            @default(false) @map("es_predeterminada")
+  /// Orden de respaldo (menor = antes; la predeterminada va primero sin importar su valor). PUT /order la renumera 1, 2, 3… (spec 041).
+  prioridad        Int                @default(0)
   activo           Boolean            @default(true)
   ultimoEstado     EstadoIntegracion? @map("ultimo_estado")
   ultimoError      String?            @map("ultimo_error") @db.VarChar(500)
