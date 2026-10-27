@@ -5,7 +5,8 @@ import { asegurarCodigoCredencial } from '../../../core/codigos'
 import { obtenerConfiguracion } from '../../../core/configuracion-sistema'
 import { origenLanding, urlCredencial, urlInscripcionPonencias } from '../../../core/enlaces-landing'
 import { conflict, HttpError } from '../../../core/http-error'
-import { credencialParaEvento, enviarConCredencial } from '../../email-credential/services/email-credential'
+import { credencialParaEvento, enviarConCredencial, prepararEnvioMasivo } from '../../email-credential/services/email-credential'
+import { conRecuento, type EnviosPorCredencial } from '../../email-credential/services/recuento-envios'
 import { obtenerEventoPorId } from '../../event/services/public-event'
 import { detalleInclude } from '../../inscription/services/mappers'
 import { enviarCorreoEnlaceCredencial } from '../../inscription/utils/sendEmail'
@@ -33,6 +34,10 @@ export interface ResultadoEnvio {
     /** No existen, no son del evento, no están aprobadas o no son de la modalidad del canal (presenciales; virtuales en el acceso virtual). */
     noElegibles: number
     fallidos: number
+    /** Cuántos salieron por cada credencial de correo (spec 044). Solo si salió alguno. */
+    porCredencial?: EnviosPorCredencial[]
+    /** Se acabaron los envíos de todas las credenciales: se cortó y lo que faltó quedó sin atender (spec 044). Solo si pasó. */
+    agotado?: true
 }
 
 const sinResultado = (): ResultadoEnvio => ({ enviados: 0, yaEnviados: 0, noElegibles: 0, fallidos: 0 })
@@ -66,7 +71,8 @@ type FilaCargada = Awaited<ReturnType<typeof cargarFilas>> extends Map<number, i
 
 /**
  * Recorre las inscripciones pedidas de una en una: reserva la marca, envía y, si falla, la devuelve.
- * `enviar` devuelve `true` si el correo salió.
+ * `enviar` devuelve `true` si el correo salió. Anota cuántos salieron por cada credencial (`porCredencial`) y,
+ * si ninguna tiene envíos, **corta** (`agotado`): lo que faltó no se cuenta como fallido, sigue sin enviar.
  */
 async function recorrer(
     eventoId: number,
@@ -77,36 +83,40 @@ async function recorrer(
     enviar: (fila: FilaCargada) => Promise<boolean>,
 ): Promise<ResultadoEnvio> {
     const filas = await cargarFilas(eventoId, ids, canal)
-    const resultado = sinResultado()
-    for (const id of ids) {
-        const fila = filas.get(id)
-        if (!fila) {
-            resultado.noElegibles += 1
-            continue
+    const { valor: resultado, porCredencial, agotado } = await conRecuento(async (recuento) => {
+        const total = sinResultado()
+        for (const id of ids) {
+            const fila = filas.get(id)
+            if (!fila) {
+                total.noElegibles += 1
+                continue
+            }
+            const previa = marcaDe(fila, canal)
+            if (previa !== null && !reenviar) {
+                total.yaEnviados += 1
+                continue
+            }
+            if (!(await cambiarMarca(id, canal, previa, ahora))) {
+                total.yaEnviados += 1
+                continue
+            }
+            let enviado = false
+            try {
+                enviado = await enviar(fila)
+            } catch {
+                enviado = false
+            }
+            if (enviado) {
+                total.enviados += 1
+            } else {
+                await cambiarMarca(id, canal, ahora, previa).catch(() => undefined)
+                if (recuento.agotado) break
+                total.fallidos += 1
+            }
         }
-        const previa = marcaDe(fila, canal)
-        if (previa !== null && !reenviar) {
-            resultado.yaEnviados += 1
-            continue
-        }
-        if (!(await cambiarMarca(id, canal, previa, ahora))) {
-            resultado.yaEnviados += 1
-            continue
-        }
-        let enviado = false
-        try {
-            enviado = await enviar(fila)
-        } catch {
-            enviado = false
-        }
-        if (enviado) {
-            resultado.enviados += 1
-        } else {
-            resultado.fallidos += 1
-            await cambiarMarca(id, canal, ahora, previa).catch(() => undefined)
-        }
-    }
-    return resultado
+        return total
+    })
+    return { ...resultado, ...(porCredencial.length ? { porCredencial } : {}), ...(agotado ? { agotado: true as const } : {}) }
 }
 
 function remitenteDe(evento: Evento, credencial: { remitenteCorreo: string, remitenteNombre: string | null }) {
@@ -120,7 +130,7 @@ export async function enviarEnlacesCredencial(eventoId: number, input: EnviarEnl
     const evento = await obtenerEventoPorId(eventoId)
     const { urlLanding } = await obtenerConfiguracion()
     if (!origenLanding(urlLanding)) throw sinLanding()
-    if (!(await credencialParaEvento(evento.credencialCorreoId))) throw sinCredencialDeCorreo()
+    await prepararEnvioMasivo(evento.credencialCorreoId)
 
     const resultado = await recorrer(eventoId, input.ids, 'credencial', input.reenviar, ahora, async (fila) => {
         // Las inscripciones de la imagen anterior pueden no tener código: se les asigna uno
@@ -150,6 +160,7 @@ export async function enviarInvitacionPonencias(eventoId: number, input: EnviarI
     if (!enlace) throw sinLanding()
     const credencial = await credencialParaEvento(evento.credencialCorreoId)
     if (!credencial) throw sinCredencialDeCorreo()
+    await prepararEnvioMasivo(evento.credencialCorreoId)
 
     const html = htmlInvitacionPonencias(input.mensaje, evento, credencial.remitenteCorreo, enlace)
     const resultado = await recorrer(eventoId, input.ids, 'ponencias', input.reenviar, ahora, async (fila) => {
@@ -202,6 +213,7 @@ export async function enviarAccesoVirtual(eventoId: number, input: EnviarAccesoV
     const evento = await obtenerEventoPorId(eventoId)
     const credencial = await credencialParaEvento(evento.credencialCorreoId)
     if (!credencial) throw sinCredencialDeCorreo()
+    await prepararEnvioMasivo(evento.credencialCorreoId)
 
     const html = htmlAccesoVirtual(input.mensaje, evento, credencial.remitenteCorreo, input.enlace)
     const resultado = await recorrer(eventoId, input.ids, 'virtual', input.reenviar, ahora, async (fila) => {

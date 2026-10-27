@@ -9,12 +9,15 @@ export class CorreoFallido extends Error {
      * mensaje: no tiene sentido insistir con ella un rato (`enEspera`) y conviene pasar a la siguiente.
      */
     readonly deLaCuenta: boolean
+    /** La cuenta ya no tiene envíos (Brevo: sin créditos o límite diario): se guarda en 0 para no volver a intentar (spec 044). */
+    readonly sinCreditos: boolean
 
-    constructor(message: string, status?: number, deLaCuenta = false) {
+    constructor(message: string, status?: number, deLaCuenta = false, sinCreditos = false) {
         super(message)
         this.name = 'CorreoFallido'
         this.status = status
         this.deLaCuenta = deLaCuenta
+        this.sinCreditos = sinCreditos
     }
 }
 

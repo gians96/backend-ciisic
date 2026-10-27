@@ -53,6 +53,7 @@ virtual, asistencia y perfil con foto).
 | [040](specs/040-csv-codigo-qr) | El CSV de inscripciones trae el código del QR de cada inscripción y el enlace de su credencial 3D (solo las aprobadas), para todo el que exporta |
 | [042](specs/042-creditos-correo) | Créditos de cada credencial de Brevo (se revisan, se descuentan y no se envía con una cuenta sin envíos) y confirmación de que el proveedor aceptó cada correo |
 | [043](specs/043-acceso-virtual) | Enlace de acceso al congreso para los inscritos virtuales: un mismo mensaje con el enlace que escribe el staff, con marca de a quién ya se le envió, desde el panel |
+| [044](specs/044-reparto-envios) | Los envíos masivos pasan solos de una credencial a la siguiente al llegar al límite: tope seguro (se pregunta a Brevo antes de cada envío cerca del límite), `409` si ninguna tiene envíos, corte al agotarse y cuántos salieron por cada credencial |
 | [041](specs/041-correo-respaldo-gmail) | Correo con respaldo: credenciales por prioridad (si una falla o se queda sin créditos se usa la siguiente) y envío directo por el SMTP de Gmail con una contraseña de aplicación |
 
 ## Desarrollo local

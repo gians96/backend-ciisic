@@ -227,6 +227,12 @@ y Google. Documentación: [`docs/`](docs/README.md).
   créditos); cada envío exitoso descuenta 1 (`descontarEnvio`). `enviarConCredencial` **salta las credenciales con 0 envíos vigentes** (`sinCreditos`) y, sin ninguna con envíos, no intenta nada; `credencialUtilizable`
   también. **Un envío solo se da por hecho si el proveedor lo confirma**: Brevo con `messageId`/`messageIds` (si no, `CorreoFallido`) y Gmail con el destinatario en `accepted` y `rejected` vacío; no confirmar
   prueba la siguiente credencial. Esto no sabe si el mensaje llegó al buzón (rebotes y spam).
+- Reparto de los envíos masivos entre credenciales (spec 044, `email-credential.ts`, `recuento-envios.ts`, `broadcast/services/enviar.ts`): **el control es el conteo de créditos, no un error** (el plan gratuito de Brevo puede
+  *aceptar* pasado el tope y dejar los correos en cola). Con 1 a 25 envíos guardados (`ZONA_DE_REVISION`) se pregunta a Brevo antes de **cada** envío; antes de cada envío masivo `prepararEnvioMasivo` revisa al día todas las que podrían
+  enviar y responde `409 EMAIL_CREDITS_EXHAUSTED` **antes de reservar ninguna marca**. Un error de créditos (`CorreoFallido.sinCreditos`: 402, `not_enough_credits` o mensaje de créditos; no el 429) deja `creditos = 0`. Si todas las
+  credenciales rechazan un correo solo queda con error la primera (una dirección mala no apaga el código de acceso); si otra lo envía, quedan con error las que fallaron antes. `conRecuento` (`AsyncLocalStorage`) anota los
+  envíos por credencial sin cambiar la firma de `enviarConCredencial`; `recorrer` lo devuelve en `ResultadoEnvio.porCredencial` y **corta** con `agotado: true` si no queda ninguna con envíos. Las claves nuevas del resultado
+  solo aparecen cuando aplican (las pruebas comparan con `toEqual`).
 - Enlace público por ciclo (spec 027): igual que el del docente pero por ciclo completo, en su propia tabla `enlaces_ciclo` (el padrón se reemplaza en cada
   carga, así que el enlace no puede vivir en él; recargarlo no lo toca). `GET /v1/public/cycle` (+ `/export`) con `X-Link-Token`: nombre, código, ciclo, sección,
   turno y situación de los estudiantes y el asesor de cada sección, pero **sin celular** (llega a más gente que el docente), DNI, correo ni montos (prueba que lo
@@ -326,7 +332,7 @@ con ambos sistemas levantados.
 
 Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Cada cambio
 empieza en `specs/NNN-nombre/` (spec → plan → tasks → contracts) y se marcan las tasks al
-implementar. Specs actuales: 001–014, 016–029 y 030–043 (ver [README](README.md)); la 015 (certificados) tiene
+implementar. Specs actuales: 001–014, 016–029 y 030–044 (ver [README](README.md)); la 015 (certificados) tiene
 solo su diseño (`research.md`).
 
 ## Antes de dar por terminado

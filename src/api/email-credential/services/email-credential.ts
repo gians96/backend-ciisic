@@ -1,11 +1,12 @@
 import type { CredencialCorreo, Prisma } from '@prisma/client'
 import { prisma } from '../../../database/prisma'
-import { notFound, unprocessable } from '../../../core/http-error'
+import { conflict, notFound, unprocessable } from '../../../core/http-error'
 import { escapeHtml } from '../../../core/html'
 import { cifrar, descifrar, sufijo } from '../../../core/crypto'
 import { creditosDeEnvio, cuentaBrevo, enviarConBrevo } from './brevo-client'
 import { CorreoFallido, type CorreoSaliente, type CuentaCorreo } from './correo'
 import { CLAVE_DE_APLICACION, enviarConGmail, normalizarClaveDeAplicacion, verificarGmail } from './gmail-client'
+import { anotarAgotado, anotarEnvio } from './recuento-envios'
 import type { ActualizarCredencialInput, CrearCredencialInput, OrdenarCredencialesInput } from '../validation'
 
 type CredencialConEventos = CredencialCorreo & { eventos?: { id: number, codigo: string, nombreCorto: string }[] }
@@ -20,6 +21,13 @@ const MAXIMO_INTENTOS = 3
 
 /** Cuánto vale la última revisión de los créditos de Brevo: pasado este tiempo se vuelve a preguntar antes de enviar (spec 042). */
 const VIGENCIA_DE_CREDITOS_MS = 5 * 60 * 1000
+
+/**
+ * Cerca del límite (1 a 25 envíos) la revisión no vale: se pregunta a Brevo antes de **cada** envío (spec 044). El plan
+ * gratuito puede aceptar correos pasado el tope y dejarlos en cola sin dar error, así que el conteo local no se
+ * deja solo en el tramo donde un descuadre cuesta correos.
+ */
+const ZONA_DE_REVISION = 25
 
 export function aCredencial(c: CredencialConEventos) {
     return {
@@ -197,6 +205,12 @@ function descontarEnvio(credencial: CredencialCorreo): Prisma.CredencialCorreoUp
     return credencial.proveedor === 'BREVO' && typeof credencial.creditos === 'number' ? { creditos: Math.max(0, credencial.creditos - 1) } : {}
 }
 
+/** La revisión de créditos sigue valiendo: menos de 5 min y fuera de la zona cercana al límite. */
+function revisionVigente(credencial: CredencialCorreo, ahora = Date.now()): boolean {
+    if (!credencial.creditosEn || ahora - credencial.creditosEn.getTime() >= VIGENCIA_DE_CREDITOS_MS) return false
+    return !(typeof credencial.creditos === 'number' && credencial.creditos > 0 && credencial.creditos <= ZONA_DE_REVISION)
+}
+
 /** Sin envíos disponibles según la última revisión, que vale 5 min: pasado ese tiempo se vuelve a preguntar. */
 function sinCreditos(credencial: CredencialCorreo, ahora = Date.now()): boolean {
     return credencial.creditos === 0 && !!credencial.creditosEn && ahora - credencial.creditosEn.getTime() < VIGENCIA_DE_CREDITOS_MS
@@ -327,9 +341,9 @@ export function reiniciarEsperasDeCredenciales() {
  * cuenta no sirve (clave inválida o sin permisos): queda en espera. Si Brevo no responde se conserva lo que
  * había: es mejor intentar el envío. Gmail no informa créditos.
  */
-async function conCreditosAlDia(credencial: CredencialCorreo): Promise<CredencialCorreo | null> {
+async function conCreditosAlDia(credencial: CredencialCorreo, forzar = false): Promise<CredencialCorreo | null> {
     if (credencial.proveedor !== 'BREVO') return credencial
-    if (credencial.creditosEn && Date.now() - credencial.creditosEn.getTime() < VIGENCIA_DE_CREDITOS_MS) return credencial
+    if (!forzar && revisionVigente(credencial)) return credencial
     try {
         const datos = datosDeCreditos(await cuentaBrevo(descifrar(credencial.apiKeyCifrada)))
         await guardarSinFallar(credencial.id, datos)
@@ -349,7 +363,8 @@ async function conCreditosAlDia(credencial: CredencialCorreo): Promise<Credencia
  * lo estén: entonces se intenta con las que tienen créditos, es mejor que no enviar. Sin ninguna con
  * créditos la lista queda vacía. Una falla de la BD no impide el envío con la elegida.
  */
-async function credencialesParaIntentar(elegida: CredencialCorreo): Promise<CredencialCorreo[]> {
+async function credencialesParaIntentar(elegida: CredencialCorreo, opciones: { forzarRevision?: boolean, todas?: boolean } = {}): Promise<CredencialCorreo[]> {
+    const limite = opciones.todas ? Number.POSITIVE_INFINITY : MAXIMO_INTENTOS
     let activas: CredencialCorreo[] = []
     try {
         activas = await prisma.credencialCorreo.findMany({ where: { activo: true }, orderBy: ORDEN_DE_PRIORIDAD })
@@ -361,15 +376,33 @@ async function credencialesParaIntentar(elegida: CredencialCorreo): Promise<Cred
     const libres: CredencialCorreo[] = []
     const enEsperaConCreditos: CredencialCorreo[] = []
     for (const candidata of todas) {
-        if (libres.length >= MAXIMO_INTENTOS) break
+        if (libres.length >= limite) break
         if (estaEnEspera(candidata.id)) {
             if (!sinCreditos(candidata)) enEsperaConCreditos.push(candidata)
             continue
         }
-        const alDia = await conCreditosAlDia(candidata)
+        const alDia = await conCreditosAlDia(candidata, opciones.forzarRevision)
         if (alDia && !sinCreditos(alDia)) libres.push(alDia)
     }
-    return (libres.length ? libres : enEsperaConCreditos).slice(0, MAXIMO_INTENTOS)
+    return (libres.length ? libres : enEsperaConCreditos).slice(0, limite)
+}
+
+/**
+ * Antes de un envío masivo (spec 044): revisa al día los créditos de todas las credenciales que podrían enviar y, si
+ * ninguna tiene envíos, responde `409 EMAIL_CREDITS_EXHAUSTED` **antes** de reservar la marca de nadie. Devuelve cuántos
+ * envíos hay en total entre las que informan créditos y si alguna no los informa (Gmail, o Brevo sin datos).
+ */
+export async function prepararEnvioMasivo(credencialCorreoId: number | null): Promise<{ total: number, hayDesconocida: boolean }> {
+    const elegida = await credencialParaEvento(credencialCorreoId)
+    if (!elegida) throw conflict('EMAIL_CREDENTIAL_UNAVAILABLE', 'No hay una credencial de correo activa. Configúrala en Correo para poder enviar.')
+    const viables = await credencialesParaIntentar(elegida, { forzarRevision: true, todas: true })
+    if (!viables.length) {
+        throw conflict('EMAIL_CREDITS_EXHAUSTED', 'Ninguna credencial activa tiene envíos disponibles. Revisa los créditos en Correo o espera a que Brevo los renueve.')
+    }
+    return {
+        total: viables.reduce((suma, credencial) => suma + (typeof credencial.creditos === 'number' && credencial.proveedor === 'BREVO' ? credencial.creditos : 0), 0),
+        hayDesconocida: viables.some((credencial) => credencial.proveedor !== 'BREVO' || typeof credencial.creditos !== 'number'),
+    }
 }
 
 export interface OpcionesEnvio {
@@ -392,23 +425,39 @@ export interface OpcionesEnvio {
  */
 export async function enviarConCredencial(credencial: CredencialCorreo, correo: CorreoSaliente, opciones: OpcionesEnvio = {}): Promise<string | null> {
     const registrar = opciones.registrar ?? true
-    let primerError: string | null = null
     const candidatas = await credencialesParaIntentar(credencial)
-    if (!candidatas.length) return 'Ninguna credencial activa tiene envíos disponibles: revisa los créditos en Correo'
+    if (!candidatas.length) {
+        anotarAgotado()
+        return 'Ninguna credencial activa tiene envíos disponibles: revisa los créditos en Correo'
+    }
+    const fallos: { candidata: CredencialCorreo, detalle: string, deLaCuenta: boolean }[] = []
     for (const candidata of candidatas) {
         const mensaje = candidata.id === credencial.id ? correo : { ...correo, remitente: { ...correo.remitente, email: candidata.remitenteCorreo } }
         try {
             await enviarPorProveedor(candidata, mensaje)
             reanudar(candidata.id)
-            if (registrar) await registrarResultado(candidata.id, null, 'ultimoEnvioEn', descontarEnvio(candidata)).catch(() => undefined)
-            if (candidata.id !== credencial.id) console.warn(`[correo] La credencial ${credencial.id} falló; el correo salió por la ${candidata.id}`)
+            anotarEnvio(candidata)
+            if (registrar) {
+                await registrarResultado(candidata.id, null, 'ultimoEnvioEn', descontarEnvio(candidata)).catch(() => undefined)
+                // Si otra credencial pudo enviar este mismo correo, el problema era de las que fallaron antes
+                for (const fallo of fallos) await registrarResultado(fallo.candidata.id, fallo.detalle, 'ultimoEnvioEn').catch(() => undefined)
+            }
+            if (fallos.length) console.warn(`[correo] El correo salió por la credencial ${candidata.id} tras fallar la ${fallos[0]!.candidata.id}`)
             return null
         } catch (error) {
-            const detalle = mensajeDe(error)
-            primerError ??= detalle
-            if (error instanceof CorreoFallido && error.deLaCuenta) enEspera.set(candidata.id, Date.now() + ESPERA_TRAS_ERROR_MS)
-            if (registrar) await registrarResultado(candidata.id, detalle, 'ultimoEnvioEn').catch(() => undefined)
+            const cuenta = error instanceof CorreoFallido && error.deLaCuenta
+            if (cuenta) enEspera.set(candidata.id, Date.now() + ESPERA_TRAS_ERROR_MS)
+            // Una cuenta sin envíos se guarda en 0: el siguiente correo ni la intenta (también tras un reinicio)
+            if (error instanceof CorreoFallido && error.sinCreditos && candidata.proveedor === 'BREVO') await guardarSinFallar(candidata.id, { creditos: 0, creditosEn: new Date() })
+            fallos.push({ candidata, detalle: mensajeDe(error), deLaCuenta: cuenta })
         }
     }
-    return primerError
+    // Todas fallaron: si ninguna lo hizo por su cuenta, el problema es del mensaje (una dirección mala). Se anota la
+    // primera y las de la cuenta, no las tres: una sola dirección mala no debe dejar todas en error ni apagar el código de acceso
+    if (registrar) {
+        for (const fallo of fallos) {
+            if (fallo.deLaCuenta || fallo === fallos[0]) await registrarResultado(fallo.candidata.id, fallo.detalle, 'ultimoEnvioEn').catch(() => undefined)
+        }
+    }
+    return fallos[0]!.detalle
 }

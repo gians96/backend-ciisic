@@ -22,13 +22,25 @@ function esDeLaCuenta(status: number, cuerpo: unknown): boolean {
     return [401, 402, 403, 429].includes(status) || CODIGOS_DE_CUENTA.has(codigoDe(cuerpo))
 }
 
-function mensajeDeError(status: number, cuerpo: unknown): string {
-    const detalle = cuerpo && typeof cuerpo === 'object' && 'message' in cuerpo
-        ? String((cuerpo as { message: unknown }).message).slice(0, 300)
-        : ''
+function mensajeBruto(cuerpo: unknown): string {
+    return cuerpo && typeof cuerpo === 'object' && 'message' in cuerpo ? String((cuerpo as { message: unknown }).message) : ''
+}
+
+/**
+ * La cuenta se quedó sin envíos: estado 402, el código `not_enough_credits` (o «Insufficient credits») o un mensaje de
+ * créditos, cuota o límite diario en un 4xx. El 429 es límite de velocidad, no de créditos. Ojo: el plan gratuito puede
+ * *aceptar* correos pasado el tope y dejarlos en cola sin dar error; por eso los créditos se revisan antes de enviar.
+ */
+function esSinCreditos(status: number, cuerpo: unknown): boolean {
+    if (status === 402 || ['not_enough_credits', 'insufficient credits'].includes(codigoDe(cuerpo).toLowerCase())) return true
+    return status >= 400 && status < 500 && status !== 429 && /credit|quota|daily (sending )?limit/i.test(mensajeBruto(cuerpo))
+}
+
+function mensajeDeError(status: number, cuerpo: unknown, sinCreditos = false): string {
+    const detalle = mensajeBruto(cuerpo).slice(0, 300)
     const sufijo = detalle ? `: ${detalle}` : ''
     if (status === 401) return `API key de Brevo inválida o sin permisos${sufijo}`
-    if (status === 402 || codigoDe(cuerpo) === 'not_enough_credits') return `La cuenta de Brevo no tiene créditos o el plan no lo permite${sufijo}`
+    if (status === 402 || sinCreditos) return `La cuenta de Brevo no tiene créditos o el plan no lo permite${sufijo}`
     if (status === 429) return 'Brevo limitó las solicitudes (429); intenta más tarde'
     return `Brevo respondió ${status}${sufijo}`
 }
@@ -58,7 +70,10 @@ async function llamar<T>(apiKey: string, ruta: string, init: { method?: string, 
     } catch {
         cuerpo = null
     }
-    if (!respuesta.ok) throw new CorreoFallido(mensajeDeError(respuesta.status, cuerpo), respuesta.status, esDeLaCuenta(respuesta.status, cuerpo))
+    if (!respuesta.ok) {
+        const sinCreditos = esSinCreditos(respuesta.status, cuerpo)
+        throw new CorreoFallido(mensajeDeError(respuesta.status, cuerpo, sinCreditos), respuesta.status, sinCreditos || esDeLaCuenta(respuesta.status, cuerpo), sinCreditos)
+    }
     return cuerpo as T
 }
 

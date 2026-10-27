@@ -3,7 +3,9 @@ import app from '../../src/app'
 import { prisma } from '../../src/database/prisma'
 import * as configuracion from '../../src/core/configuracion-sistema'
 import { asegurarCodigoCredencial } from '../../src/core/codigos'
-import { credencialParaEvento, enviarConCredencial } from '../../src/api/email-credential/services/email-credential'
+import { credencialParaEvento, enviarConCredencial, prepararEnvioMasivo } from '../../src/api/email-credential/services/email-credential'
+import { anotarAgotado, anotarEnvio } from '../../src/api/email-credential/services/recuento-envios'
+import { conflict } from '../../src/core/http-error'
 import { enviarCorreoEnlaceCredencial } from '../../src/api/inscription/utils/sendEmail'
 import { aprobadasPresenciales, aprobadasVirtuales, idsDestinatarios, listarDestinatarios, whereDestinatarios } from '../../src/api/broadcast/services/destinatarios'
 import {
@@ -24,7 +26,7 @@ jest.mock('../../src/database/prisma', () => ({
         inscripcion: { findMany: jest.fn(), count: jest.fn(), updateMany: jest.fn() },
     },
 }))
-jest.mock('../../src/api/email-credential/services/email-credential', () => ({ credencialParaEvento: jest.fn(), enviarConCredencial: jest.fn() }))
+jest.mock('../../src/api/email-credential/services/email-credential', () => ({ credencialParaEvento: jest.fn(), enviarConCredencial: jest.fn(), prepararEnvioMasivo: jest.fn() }))
 jest.mock('../../src/api/inscription/utils/sendEmail', () => ({ enviarCorreoEnlaceCredencial: jest.fn() }))
 jest.mock('../../src/core/codigos', () => ({ ...jest.requireActual('../../src/core/codigos'), asegurarCodigoCredencial: jest.fn() }))
 
@@ -35,6 +37,7 @@ const m = prisma as unknown as {
 }
 const credencialDeCorreo = credencialParaEvento as Mock
 const enviarCorreo = enviarConCredencial as Mock
+const prepararEnvio = prepararEnvioMasivo as Mock
 const enviarEnlace = enviarCorreoEnlaceCredencial as Mock
 const asegurarCodigo = asegurarCodigoCredencial as Mock
 
@@ -69,6 +72,7 @@ beforeEach(() => {
     credencialDeCorreo.mockResolvedValue({ id: 1, remitenteCorreo: 'no-reply@undc.edu.pe', remitenteNombre: 'Congreso' })
     enviarCorreo.mockResolvedValue(null)
     enviarEnlace.mockResolvedValue(true)
+    prepararEnvio.mockResolvedValue({ total: 500, hayDesconocida: false })
     conLanding(LANDING)
 })
 afterEach(() => { jest.restoreAllMocks() })
@@ -174,10 +178,81 @@ describe('enviarEnlacesCredencial', () => {
         conLanding(null)
         await expect(enviarEnlacesCredencial(2, { ids: [1], reenviar: false }, actor, AHORA)).rejects.toMatchObject({ status: 409, code: 'LANDING_URL_MISSING' })
         conLanding(LANDING)
-        credencialDeCorreo.mockResolvedValue(null)
+        // La comprobación de la credencial es la de `prepararEnvioMasivo` (que además revisa los créditos)
+        prepararEnvio.mockRejectedValue(conflict('EMAIL_CREDENTIAL_UNAVAILABLE', 'No hay una credencial de correo activa.'))
         await expect(enviarEnlacesCredencial(2, { ids: [1], reenviar: false }, actor, AHORA)).rejects.toMatchObject({ status: 409, code: 'EMAIL_CREDENTIAL_UNAVAILABLE' })
         expect(m.inscripcion.findMany).not.toHaveBeenCalled()
         expect(m.inscripcion.updateMany).not.toHaveBeenCalled()
+    })
+
+    describe('créditos de las credenciales de correo (spec 044)', () => {
+        const sinEnvios = () => conflict('EMAIL_CREDITS_EXHAUSTED', 'Ninguna credencial activa tiene envíos disponibles.')
+
+        it('si ninguna credencial tiene envíos responde 409 antes de reservar la marca de nadie', async () => {
+            prepararEnvio.mockRejectedValue(sinEnvios())
+            m.inscripcion.findMany.mockResolvedValue([fila(1)])
+            await expect(enviarEnlacesCredencial(2, { ids: [1], reenviar: false }, actor, AHORA)).rejects.toMatchObject({ status: 409, code: 'EMAIL_CREDITS_EXHAUSTED' })
+            expect(m.inscripcion.updateMany).not.toHaveBeenCalled()
+            expect(enviarEnlace).not.toHaveBeenCalled()
+            expect(prepararEnvio).toHaveBeenCalledWith(null)
+        })
+
+        it('cuenta cuántos salieron por cada credencial', async () => {
+            m.inscripcion.findMany.mockResolvedValue([fila(1), fila(2), fila(3)])
+            const salen = [{ id: 1, nombre: 'ANGEL' }, { id: 1, nombre: 'ANGEL' }, { id: 3, nombre: 'LORENA' }]
+            enviarEnlace.mockImplementation(async () => { anotarEnvio(salen.shift()!); return true })
+            const r = await enviarEnlacesCredencial(2, { ids: [1, 2, 3], reenviar: false }, actor, AHORA)
+            expect(r).toEqual({
+                enviados: 3, yaEnviados: 0, noElegibles: 0, fallidos: 0,
+                porCredencial: [{ credencialId: 1, nombre: 'ANGEL', enviados: 2 }, { credencialId: 3, nombre: 'LORENA', enviados: 1 }],
+            })
+        })
+
+        it('si se acaban los envíos a mitad del lote corta: devuelve la marca y no cuenta lo que faltó como fallido', async () => {
+            m.inscripcion.findMany.mockResolvedValue([1, 2, 3, 4, 5].map((id) => fila(id)))
+            enviarEnlace.mockImplementation(async (inscripcion: { id: number }) => {
+                if (inscripcion.id === 3) {
+                    anotarAgotado()
+                    return false
+                }
+                anotarEnvio({ id: 1, nombre: 'ANGEL' })
+                return true
+            })
+            const r = await enviarEnlacesCredencial(2, { ids: [1, 2, 3, 4, 5], reenviar: false }, actor, AHORA)
+            expect(r).toEqual({ enviados: 2, yaEnviados: 0, noElegibles: 0, fallidos: 0, porCredencial: [{ credencialId: 1, nombre: 'ANGEL', enviados: 2 }], agotado: true })
+            expect(enviarEnlace).toHaveBeenCalledTimes(3)
+            // La marca de la que no salió vuelve a como estaba y a las dos siguientes ni se las toca
+            expect(m.inscripcion.updateMany).toHaveBeenCalledWith({ where: { id: 3, enlaceCredencialEnviadoEn: AHORA }, data: { enlaceCredencialEnviadoEn: null } })
+            expect(m.inscripcion.updateMany).not.toHaveBeenCalledWith(expect.objectContaining({ where: { id: 4, enlaceCredencialEnviadoEn: null } }))
+        })
+
+        it('el recuento de un envío no se mezcla con el de otro que corre a la vez', async () => {
+            m.inscripcion.findMany.mockResolvedValue([fila(1)])
+            enviarEnlace.mockImplementation(async () => {
+                await new Promise((resolver) => setTimeout(resolver, 5))
+                anotarEnvio({ id: 7, nombre: 'JOSEMARIA' })
+                return true
+            })
+            const [a, b] = await Promise.all([
+                enviarEnlacesCredencial(2, { ids: [1], reenviar: false }, actor, AHORA),
+                enviarEnlacesCredencial(2, { ids: [1], reenviar: false }, actor, AHORA),
+            ])
+            expect(a.porCredencial).toEqual([{ credencialId: 7, nombre: 'JOSEMARIA', enviados: 1 }])
+            expect(b.porCredencial).toEqual([{ credencialId: 7, nombre: 'JOSEMARIA', enviados: 1 }])
+        })
+
+        it('en las invitaciones a ponencias también revisa los créditos antes de reservar y cuenta por credencial', async () => {
+            prepararEnvio.mockRejectedValueOnce(sinEnvios())
+            await expect(enviarInvitacionPonencias(2, { ids: [1], reenviar: false, asunto: 'Inscríbete a las ponencias', mensaje: 'Hola, ya puedes inscribirte.' }, actor, AHORA))
+                .rejects.toMatchObject({ code: 'EMAIL_CREDITS_EXHAUSTED' })
+            expect(m.inscripcion.updateMany).not.toHaveBeenCalled()
+
+            m.inscripcion.findMany.mockResolvedValue([fila(1), fila(2)])
+            enviarCorreo.mockImplementation(async () => { anotarEnvio({ id: 4, nombre: 'LORENA' }); return null })
+            const r = await enviarInvitacionPonencias(2, { ids: [1, 2], reenviar: false, asunto: 'Inscríbete a las ponencias', mensaje: 'Hola, ya puedes inscribirte.' }, actor, AHORA)
+            expect(r).toMatchObject({ enviados: 2, porCredencial: [{ credencialId: 4, nombre: 'LORENA', enviados: 2 }] })
+            expect(r).not.toHaveProperty('agotado')
+        })
     })
 })
 
