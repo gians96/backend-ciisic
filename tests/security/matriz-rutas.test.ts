@@ -251,6 +251,8 @@ const MATRIZ: Record<Clave, Esperada> = {
     'PUT /v1/inscriptions/:id/kit': g('asistencia.marcar', eventoDeInscripcion),
     'DELETE /v1/inscriptions/:id/kit': g('asistencia.marcar', eventoDeInscripcion),
     'GET /v1/events/:eventId/kits/summary': g('asistencia.ver', P()),
+    // Tablero de kits (spec 045): solo cifras, con el mismo permiso que el resumen; las personas salen del listado de inscripciones
+    'GET /v1/events/:eventId/kits/dashboard': g('asistencia.ver', P()),
 
     // integration
     'GET /v1/events/:eventId/integrations': g('eventos.configurar'),
@@ -362,7 +364,7 @@ const LIMITES_POR_ACTOR: readonly RequestHandler[] = [
     limiteDescargaResumenPonencias, limiteAvisosPonencias, limiteEnviosMasivos, limiteLecturaEnvios,
 ]
 /** Total de rutas de /api: una ruta nueva obliga a clasificarla aquí. */
-const TOTAL_RUTAS = 209
+const TOTAL_RUTAS = 210
 
 function clasesDe(ruta: Ruta): Clase[] {
     const clases: Clase[] = []

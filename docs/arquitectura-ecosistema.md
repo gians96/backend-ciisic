@@ -615,6 +615,14 @@ desconocida = `PRESENCIAL` (también una cortesía sin tipo).
 - **Una inscripción virtual ya no marca asistencia**: `403 VIRTUAL_REGISTRATION` (nada lo salta; también las rutas legacy). El enlace de la transmisión lo envía la organización por correo, fuera del sistema. Las ponencias especializadas no cambian.
 - **Orden de despliegue**: backend primero (migración aditiva con relleno de `incluye_kit`; revisar con `prisma/preflight/verificar-kit.sql`) y luego el panel. Un panel anterior con el backend nuevo solo pierde los avisos del kit y ve el rechazo de los virtuales como un error de asistencia.
 
+### Tablero de kits (spec 045)
+
+- Sin migración ni permiso nuevo: todo sale de las columnas de la spec 037. **«A entregar»** = inscripción `APROBADO` con un tipo presencial que incluye kit (la misma regla de `kits/summary`).
+- `GET /api/v1/events/:eventId/inscriptions` y `…/inscriptions/export` aceptan `?kit=` (`CON_KIT`, `SIN_KIT`, `PENDIENTE`, `ENTREGADO`, `POR_APROBAR`, `REVISAR`; un valor desconocido es `422`). Cada fila del listado trae `kit` completo
+  (`{ incluye, entregado, entregadoEn, entregadoPor }`) además de `kitEntregado`, y el CSV agrega al final `Kit`, `Kit entregado el` y `Kit entregado por`.
+- `GET /api/v1/events/:eventId/kits/dashboard` (`asistencia.ver`) da `totales`, `porTipo` (con `delegacionId`), `entregas` por día y hora de Lima y `porPersona`: solo cifras y nombres de quienes entregan.
+- **Orden de despliegue**: backend primero (no hay migración). Un backend anterior ignora `?kit=` sin avisar: el panel lo detecta porque las filas no traen `kit` y no ofrece un listado sin filtrar como si lo estuviera.
+
 ---
 
 

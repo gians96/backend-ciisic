@@ -4,8 +4,9 @@ import { Prisma } from '@prisma/client'
 import type { Evento } from '@prisma/client'
 import { prisma } from '../../../database/prisma'
 import { conflict, notFound, unprocessable } from '../../../core/http-error'
-import { aColumnaFecha, fechaLima } from '../../../core/fechas'
+import { aColumnaFecha, fechaLima, horaLima } from '../../../core/fechas'
 import { monto, type CodigoEstadoInscripcion, type ModalidadAsistencia } from '../../../core/catalogos'
+import { condicionKit, situacionKit, TEXTO_SITUACION_KIT, type FiltroKit } from '../../../core/kit'
 import { pageMeta, type Pagination } from '../../../core/pagination'
 import {
     asegurarCodigoCredencial, conReintentoDeCodigo, enmascararCorreo, INDICE_CODIGO_CREDENCIAL, nuevoCodigoCredencial,
@@ -284,6 +285,8 @@ export interface FiltrosInscripcion {
     /** Spec 018: cómo se asiste (del tipo). `PRESENCIAL` incluye lo que no tiene tipo (cortesías). */
     modalidad?: ModalidadAsistencia
     esEstudianteUndc?: boolean
+    /** Spec 045: dónde está el kit (`FILTROS_KIT`). `PENDIENTE`, `POR_APROBAR` y `REVISAR` traen su propia condición de estado. */
+    kit?: FiltroKit
     q?: string
 }
 
@@ -298,13 +301,18 @@ export function construirFiltro(eventoId: number, filtros: FiltrosInscripcion, c
     }
     // Sin tipo (cortesía) se lee como PRESENCIAL, igual que en el resumen; con categoría o tipo concreto no aplica
     const presencialIncluyeSinTipo = filtros.modalidad === 'PRESENCIAL' && !filtros.categoria && !filtros.tipoInscripcionId
+    // Lo que no cabe en una clave propia va como elemento de `AND`. El kit (spec 045) también: así no pisa el `estado`, el
+    // `tipoInscripcion` ni el `OR` de la búsqueda de los otros filtros.
+    const ademas: Prisma.InscripcionWhereInput[] = [
+        ...(presencialIncluyeSinTipo ? [{ OR: [{ tipoInscripcionId: null }, { tipoInscripcion: delTipo }] }] : []),
+        ...(filtros.kit ? [condicionKit(filtros.kit)] : []),
+    ]
     return {
         eventoId,
         ...(filtros.estado ? { estado: { codigo: filtros.estado } } : {}),
         ...(filtros.tipoInscripcionId ? { tipoInscripcionId: filtros.tipoInscripcionId } : {}),
-        ...(presencialIncluyeSinTipo
-            ? { AND: [{ OR: [{ tipoInscripcionId: null }, { tipoInscripcion: delTipo }] }] }
-            : Object.keys(delTipo).length ? { tipoInscripcion: delTipo } : {}),
+        ...(!presencialIncluyeSinTipo && Object.keys(delTipo).length ? { tipoInscripcion: delTipo } : {}),
+        ...(ademas.length ? { AND: ademas } : {}),
         ...(filtros.esEstudianteUndc !== undefined ? { esEstudianteUndc: filtros.esEstudianteUndc } : {}),
         ...(q
             ? {
@@ -320,12 +328,19 @@ export function construirFiltro(eventoId: number, filtros: FiltrosInscripcion, c
     }
 }
 
+/**
+ * Por fecha de registro (una reinscripción, spec 017, conserva su id pero aparece como nueva). Los kits ya entregados se leen como
+ * «últimas entregas» (spec 045): de la entrega más reciente a la más antigua.
+ */
+export function ordenDelListado(filtros: Pick<FiltrosInscripcion, 'kit'>): Prisma.InscripcionOrderByWithRelationInput[] {
+    return filtros.kit === 'ENTREGADO' || filtros.kit === 'REVISAR' ? [{ kitEntregadoEn: 'desc' }, { id: 'desc' }] : [{ creadoEn: 'desc' }, { id: 'desc' }]
+}
+
 export async function listarInscripciones(eventoId: number, filtros: FiltrosInscripcion, paginacion: Pagination, conPago = true) {
     const where = construirFiltro(eventoId, filtros, conPago)
     const [total, filas] = await Promise.all([
         prisma.inscripcion.count({ where }),
-        // Por fecha de registro: una reinscripción (spec 017) conserva su id pero aparece como nueva
-        prisma.inscripcion.findMany({ where, include: detalleInclude, orderBy: [{ creadoEn: 'desc' }, { id: 'desc' }], skip: paginacion.skip, take: paginacion.take }),
+        prisma.inscripcion.findMany({ where, include: detalleInclude, orderBy: ordenDelListado(filtros), skip: paginacion.skip, take: paginacion.take }),
     ])
     return { data: filas.map((fila) => aFilaLista(fila, conPago)), meta: pageMeta(paginacion, total) }
 }
@@ -603,6 +618,10 @@ const COLUMNAS_CSV: Array<{ titulo: string, pago?: true, valor: (d: ReturnType<t
     // Spec 040: lo que codifica el QR del fotocheck y del PDF, y el enlace de la credencial 3D (la landing solo abre las aprobadas)
     { titulo: 'Código QR', valor: (d) => d.codigoCredencial },
     { titulo: 'Credencial 3D', valor: (d, urlLanding) => (d.estado.codigo === 'APROBADO' ? urlCredencial(urlLanding, d.codigoCredencial) : null) },
+    // Spec 045: la entrega del kit (no es un dato de pago). Al final, como las anteriores: quien lee el CSV por posición no nota el cambio
+    { titulo: 'Kit', valor: (d) => TEXTO_SITUACION_KIT[situacionKit(d.kit, d.estado.codigo)] },
+    { titulo: 'Kit entregado el', valor: (d) => (d.kit.entregadoEn ? `${fechaLima(d.kit.entregadoEn)} ${horaLima(d.kit.entregadoEn)}` : '') },
+    { titulo: 'Kit entregado por', valor: (d) => (d.kit.entregadoPor ? `${d.kit.entregadoPor.nombres} ${d.kit.entregadoPor.apellidos}` : '') },
 ]
 
 export async function exportarCsv(eventoId: number, filtros: FiltrosInscripcion, conPago = true): Promise<string> {

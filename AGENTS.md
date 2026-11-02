@@ -165,6 +165,12 @@ y Google. Documentación: [`docs/`](docs/README.md).
   VIRTUAL_REGISTRATION` tras `NOT_APPROVED`, sin excepción (ni «fuera de horario» ni la marca manual; también las rutas legacy); las ponencias especializadas no cambian. La marca, el listado de la actividad y el
   detalle traen `tipoInscripcion.incluyeKit` y `kit`; `ATTENDANCE_ALREADY_REGISTERED` trae `data { participante, inscripcion }` (`HttpError.datos`) para poder entregar un kit pendiente al volver a escanear. El correo con el
   enlace de la transmisión a los virtuales se envía desde el panel (spec 043). Despliegue: backend primero (migración aditiva) y revisar con `prisma/preflight/verificar-kit.sql`.
+- Tablero de kits (spec 045, sin migración ni permiso nuevo): **«a entregar» es una sola regla**, `aEntregar(eventoId)` de `src/core/kit.ts` (aprobada + tipo con kit y presencial): la usan `resumenKits` y el tablero, así que sus números
+  coinciden con la insignia «Kits:» de Asistencia. `?kit=` del listado y del CSV de inscripciones (`FILTROS_KIT`: `CON_KIT`, `SIN_KIT`, `PENDIENTE`, `ENTREGADO`, `POR_APROBAR`, `REVISAR`) es `condicionKit`: **siempre en positivo, sin `NOT`**
+  (una cortesía sin tipo tiene el `tipoInscripcionId` nulo) y **como un elemento más de `AND`** para no pisar `estado`, `tipoInscripcion` ni el `OR` de la búsqueda; un valor desconocido es `422` (nunca se ignora). Con `ENTREGADO` o `REVISAR` el listado
+  va por `kitEntregadoEn desc` (`ordenDelListado`). Las filas del listado traen `kit` completo (cuándo y quién) y el CSV agrega al final `Kit`, `Kit entregado el` y `Kit entregado por` (`situacionKit`; también sin «pagos.ver»).
+  `GET /v1/events/:eventId/kits/dashboard` (`asistencia.ver`, `src/api/kit/services/tablero.ts`) da `totales` (con `porAprobar` y `aRevisar`: entregados que hoy no corresponden), `porTipo` (con `delegacionId`, así hay vista por delegación),
+  `entregas` por día y hora de Lima y `porPersona`; **solo cifras y nombres de quienes entregan, nunca datos de los inscritos**. Despliegue: backend primero (no hay migración).
 - Delegaciones (specs 021–024 y 029): un grupo con delegado (`Delegacion`) cuyos integrantes tienen cada uno su inscripción
   (`delegacion_id`). **Cada delegación tiene sus propios planes** `CON_KIT`, `SIN_KIT` y `VIRTUAL`: tres tipos reales (`delegacion_con_kit`,
   `delegacion_sin_kit`, `delegacion_virtual`; `precio == precioInstitucional`) de su **categoría oculta** `DELEGACION_<id>`
@@ -332,7 +338,7 @@ con ambos sistemas levantados.
 
 Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Cada cambio
 empieza en `specs/NNN-nombre/` (spec → plan → tasks → contracts) y se marcan las tasks al
-implementar. Specs actuales: 001–014, 016–029 y 030–044 (ver [README](README.md)); la 015 (certificados) tiene
+implementar. Specs actuales: 001–014, 016–029 y 030–045 (ver [README](README.md)); la 015 (certificados) tiene
 solo su diseño (`research.md`).
 
 ## Antes de dar por terminado

@@ -55,6 +55,7 @@ virtual, asistencia y perfil con foto).
 | [043](specs/043-acceso-virtual) | Enlace de acceso al congreso para los inscritos virtuales: un mismo mensaje con el enlace que escribe el staff, con marca de a quién ya se le envió, desde el panel |
 | [044](specs/044-reparto-envios) | Los envíos masivos pasan solos de una credencial a la siguiente al llegar al límite: tope seguro (se pregunta a Brevo antes de cada envío cerca del límite), `409` si ninguna tiene envíos, corte al agotarse y cuántos salieron por cada credencial |
 | [041](specs/041-correo-respaldo-gmail) | Correo con respaldo: credenciales por prioridad (si una falla o se queda sin créditos se usa la siguiente) y envío directo por el SMTP de Gmail con una contraseña de aplicación |
+| [045](specs/045-tablero-kits) | Tablero de kits: filtro `?kit=` (pendientes, entregados, por aprobar, a revisar) en el listado y el CSV de inscripciones, `kit` completo en cada fila, tres columnas de kit en el CSV y `GET /events/:id/kits/dashboard` (por tipo y delegación, ritmo y quién entrega); sin migración |
 
 ## Desarrollo local
 

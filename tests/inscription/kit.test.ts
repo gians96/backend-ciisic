@@ -97,7 +97,7 @@ describe('el kit en el detalle y el listado de inscripciones (spec 037)', () => 
         expect(r.body.data.kit).toMatchObject({ entregado: false, entregadoEn: null, entregadoPor: null })
     })
 
-    it('el listado trae `incluyeKit` del tipo y si el kit ya se entregó, sin el detalle de cuándo ni quién', async () => {
+    it('el listado trae `incluyeKit` del tipo, si el kit ya se entregó y, desde la spec 045, el `kit` completo con cuándo y quién', async () => {
         m.inscripcion.findMany.mockResolvedValue([inscripcion(), inscripcion({ id: 6, kitEntregadoEn: ENTREGADO_EN, kitEntregadoPor: ENTREGADOR })])
         const r = await request(app).get('/api/v1/events/2/inscriptions').set(tesorero())
         expect(r.status).toBe(200)
@@ -105,6 +105,7 @@ describe('el kit en el detalle y el listado de inscripciones (spec 037)', () => 
         expect(pendiente.tipoInscripcion.incluyeKit).toBe(true)
         expect(pendiente.kitEntregado).toBe(false)
         expect(entregado.kitEntregado).toBe(true)
-        expect(entregado).not.toHaveProperty('kit')
+        // La spec 037 lo dejaba solo en el detalle; la 045 lo suma a las filas (el tablero lista a quién se entregó, cuándo y quién)
+        expect(entregado.kit).toEqual({ incluye: true, entregado: true, entregadoEn: ENTREGADO_EN.toISOString(), entregadoPor: ENTREGADOR })
     })
 })

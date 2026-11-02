@@ -7,11 +7,13 @@ import { eventoDeInscripcion, eventoDelParametro } from '../../../core/resolutor
 /**
  * Entrega del kit (spec 037). Entregar y deshacer lo hace quien marca asistencia (`asistencia.marcar`): así funciona con
  * las cuentas de la puerta tal como están; ver cuántos kits van, `asistencia.ver`. Cuentas por evento: solo en sus eventos.
+ * El tablero (spec 045) se lee con el mismo permiso que el resumen: solo trae cifras; las personas salen del listado de inscripciones.
  */
 const routes: AppRoute[] = [
     { method: 'put', path: '/v1/inscriptions/:id/kit', handler: controller.deliver, middlewares: [requirePermiso('asistencia.marcar', { evento: eventoDeInscripcion }), limiteMarcarAsistencia] },
     { method: 'delete', path: '/v1/inscriptions/:id/kit', handler: controller.undo, middlewares: [requirePermiso('asistencia.marcar', { evento: eventoDeInscripcion }), limiteMarcarAsistencia] },
     { method: 'get', path: '/v1/events/:eventId/kits/summary', handler: controller.summary, middlewares: [requirePermiso('asistencia.ver', { evento: eventoDelParametro('eventId') })] },
+    { method: 'get', path: '/v1/events/:eventId/kits/dashboard', handler: controller.dashboard, middlewares: [requirePermiso('asistencia.ver', { evento: eventoDelParametro('eventId') })] },
 ]
 
 export default buildRouter(routes)

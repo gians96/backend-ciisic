@@ -165,8 +165,9 @@ export function aFilaLista(i: InscripcionDetalle, conPago = true) {
             : null,
         clasificacion: d.clasificacion,
         estado: d.estado,
-        /** Kit entregado (spec 037); el detalle trae cuándo y quién. */
+        /** Kit entregado (spec 037). `kit` (spec 045) trae además si el tipo lo incluye, cuándo y quién lo entregó. */
         kitEntregado: d.kit.entregado,
+        kit: d.kit,
         /** La delegación sin su pago: el grupo completo se ve en el detalle (spec 022). */
         delegacion: d.delegacion ? { id: d.delegacion.id, nombre: d.delegacion.nombre, codigoLink: d.delegacion.codigoLink, totalIntegrantes: d.delegacion.totalIntegrantes } : null,
         monto: d.pago.monto,

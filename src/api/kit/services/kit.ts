@@ -1,7 +1,7 @@
 import { prisma } from '../../../database/prisma'
 import { conflict, HttpError, notFound } from '../../../core/http-error'
 import { fechaLima, horaLima } from '../../../core/fechas'
-import { aKit, KIT_SELECT, tipoIncluyeKit, type KitEstado } from '../../../core/kit'
+import { aEntregar, aKit, KIT_SELECT, tipoIncluyeKit, type KitEstado } from '../../../core/kit'
 import type { Actor } from '../../../core/actor'
 import { obtenerEventoPorId } from '../../event/services/public-event'
 
@@ -82,7 +82,7 @@ export async function deshacerEntregaKit(inscripcionId: number): Promise<Resulta
 /** Cuántos kits corresponden al evento y cuántos ya se entregaron: inscripciones aprobadas con un tipo presencial que incluye kit. */
 export async function resumenKits(eventoId: number) {
     await obtenerEventoPorId(eventoId)
-    const donde = { eventoId, estado: { codigo: 'APROBADO' }, tipoInscripcion: { incluyeKit: true, modalidad: 'PRESENCIAL' as const } }
+    const donde = aEntregar(eventoId)
     const [conKit, entregados] = await Promise.all([
         prisma.inscripcion.count({ where: donde }),
         prisma.inscripcion.count({ where: { ...donde, kitEntregadoEn: { not: null } } }),
