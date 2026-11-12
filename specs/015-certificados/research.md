@@ -1,3 +1,5 @@
+> **Fase 1 implementada (2026-11-12):** certificados firmados fuera del sistema, ver [`spec.md`](spec.md). Lo de abajo (plantillas, generación, EN_FIRMA) es la **fase 2**; su modelo deberá extender la tabla `certificados` existente.
+>
 > **Borrador de diseño (2026-09-30).** Generado por arquitectos y revisado adversarialmente antes de la spec.
 > Donde contradiga a `spec.md`/`plan.md` de esta carpeta o a la reconciliación de abajo, **mandan la spec y el plan**.
 >

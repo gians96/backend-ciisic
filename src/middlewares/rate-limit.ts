@@ -131,3 +131,10 @@ export const limiteDescargaDocente = limitador(MINUTO, 10, 'Demasiadas descargas
 // `limiteVistaDocente`).
 export const limiteGestionDocentes = limitador(15 * MINUTO, 120, undefined, { clave: 'actor' })
 export const limiteIntentosDni = limitador(15 * MINUTO, 10, 'Demasiados intentos con el DNI. Espera unos minutos e inténtalo de nuevo.', { soloFallos: true })
+
+// Certificados (spec 015). Gestión por cuenta de staff; las consultas públicas, por visitante. La consulta por DNI
+// usa `limiteIntentosDni` (solo cuentan los fallos) y además `limiteConsultaCertificados` para el total.
+export const limiteCargaCertificados = limitador(15 * MINUTO, 300, 'Demasiadas cargas seguidas. Intenta nuevamente en unos minutos.', { clave: 'actor' })
+export const limiteLecturaCertificados = limitador(MINUTO, 240, undefined, { clave: 'actor' })
+export const limiteConsultaCertificados = limitador(MINUTO, 30, 'Demasiadas consultas. Espera un momento e inténtalo de nuevo.')
+export const limiteDescargaCertificadoPublico = limitador(MINUTO, 30, 'Demasiadas descargas. Espera un minuto.')

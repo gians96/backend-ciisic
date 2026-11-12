@@ -260,6 +260,7 @@ y Google. Documentación: [`docs/`](docs/README.md).
   `jp_docente_id` solo cambia de nombre y DNI (sus secciones salen de sus cursos). Los datos se cargan con `npm run padron:desde-jp` (simula por defecto, `--aplicar`): lee SIVIRENO en JP **solo con `SELECT`** (`JP_DATABASE_URL`
   es de la consola, **no** del API: el API no se conecta a JP), toma los DNI de los docentes de un JSON **fuera del repo** (`--docentes`), enlaza a cada docente por su id de SIVIRENO, su DNI o su nombre (y crea los que faltan, sin tocar
   nombre, DNI ni enlace de los que existen) y conserva el DNI del padrón porque SIVIRENO no trae el de los alumnos. Cargar después el Excel **borra** los cursos. Ver `specs/034-padron-cursos-sivireno` y `docs/operacion.md`.
+- Certificados, fase 1 (spec 015, `src/api/certificate`): se firman **fuera del sistema**. El Excel (DNI + `Codigo`) se importa por DNI (con y sin el cero que Excel come; quien no existe se crea, nunca se modifica a una persona existente; simular primero) y cada PDF `<codigo>[R][R][R].pdf` se asocia por el código de su nombre (`codigoDeNombreArchivo`). `certificados.codigo` **distingue mayúsculas** (`utf8mb4_bin`). Situación: Falta PDF (`SIN_ARCHIVO`) · Listo para entregar (`LISTO` sin `enviado_en`) · Entregado · Anulado. El envío por correo reserva `enviado_en` como la spec 039 y lleva el PDF y los enlaces `<url_panel>/certificado/<codigo>` y `<url_panel>/consulta-certificados` (sin `url_panel`: `409 PANEL_URL_MISSING`). Lo público (`/v1/public/certificates/*`) y el portal solo dan los `LISTO`, sin documento ni contacto, y el DNI va en el cuerpo con `limiteIntentosDni`. Plantillas y generación quedan para la fase 2 (`specs/015-certificados/research.md`).
 - Reglas del dominio institucional fijas en `src/core/correo-institucional.ts` (`undc.edu.pe`,
   parte local numérica = estudiante).
 - Las rutas legacy existen para la landing anterior y se apagan desde el panel (Sistema).
@@ -339,7 +340,7 @@ con ambos sistemas levantados.
 Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Cada cambio
 empieza en `specs/NNN-nombre/` (spec → plan → tasks → contracts) y se marcan las tasks al
 implementar. Specs actuales: 001–014, 016–029 y 030–045 (ver [README](README.md)); la 015 (certificados) tiene
-solo su diseño (`research.md`).
+su fase 1 (`spec.md`) y el diseño de la fase 2 (`research.md`).
 
 ## Antes de dar por terminado
 

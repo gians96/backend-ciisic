@@ -2,7 +2,7 @@ import multer from 'multer'
 import path from 'path'
 import fs from 'fs'
 import crypto from 'crypto'
-import { DIRECTORIO_UPLOADS, MAX_BYTES_VOUCHER } from '../core/almacenamiento'
+import { DIRECTORIO_UPLOADS, MAX_BYTES_CERTIFICADO, MAX_BYTES_VOUCHER } from '../core/almacenamiento'
 import { HttpError } from '../core/http-error'
 import type { NextFunction, Request, Response } from 'express'
 
@@ -132,3 +132,21 @@ export const uploadExcel = multer({
 export function esLibroXlsx(contenido: Buffer): boolean {
     return contenido.length > 4 && contenido[0] === 0x50 && contenido[1] === 0x4b && contenido[2] === 0x03 && contenido[3] === 0x04
 }
+
+// ─── Certificados firmados (spec 015) ───────────────────────────────────────
+
+/** Certificados por petición: el panel los sube en tandas de 10. */
+export const MAX_CERTIFICADOS_POR_SUBIDA = 10
+
+/** Los PDF firmados se leen en memoria: el servicio valida el contenido y los guarda con un nombre propio. */
+export const uploadCertificados = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: MAX_BYTES_CERTIFICADO, files: MAX_CERTIFICADOS_POR_SUBIDA },
+    fileFilter: (_req, file, cb) => {
+        if (path.extname(file.originalname).toLowerCase() !== '.pdf') {
+            cb(new HttpError(422, 'INVALID_FILE_TYPE', 'Solo se aceptan certificados en PDF.'))
+            return
+        }
+        cb(null, true)
+    },
+})

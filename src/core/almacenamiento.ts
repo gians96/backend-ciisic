@@ -57,3 +57,30 @@ export function leerArchivoServido(ruta: string, noEncontrado: () => Error): Buf
         throw error
     }
 }
+
+/** Certificados firmados (spec 015): `uploads/certificados/<eventoId>/<archivo>`; la carpeta es por id (el código del evento se edita). */
+export const DIRECTORIO_CERTIFICADOS = path.join(DIRECTORIO_UPLOADS, 'certificados')
+
+/** Tamaño máximo de un certificado firmado (10 MB): un PDF con varias firmas digitales pesa menos de 2 MB. */
+export const MAX_BYTES_CERTIFICADO = 10 * 1024 * 1024
+
+/** Nombre de un certificado guardado, siempre generado por el servidor: `cert-<uuid>.pdf` (nunca el código ni el nombre subido). */
+export const REGEX_ARCHIVO_CERTIFICADO = /^cert-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.pdf$/
+
+export function nuevoNombreCertificado(): string {
+    return `cert-${randomUUID()}.pdf`
+}
+
+/** Ruta en disco de un certificado guardado, o `null` si el nombre no tiene el formato del servidor. */
+export function rutaCertificado(eventoId: number, archivo: string | null | undefined): string | null {
+    if (!archivo || !REGEX_ARCHIVO_CERTIFICADO.test(archivo) || !Number.isSafeInteger(eventoId) || eventoId < 1) return null
+    return path.join(DIRECTORIO_CERTIFICADOS, String(eventoId), archivo)
+}
+
+/** Guarda un archivo de forma atómica: escribe un temporal y lo renombra (nadie lee un PDF a medias). */
+export async function guardarAtomico(ruta: string, contenido: Buffer): Promise<void> {
+    await fs.promises.mkdir(path.dirname(ruta), { recursive: true })
+    const temporal = `${ruta}.${randomUUID()}.tmp`
+    await fs.promises.writeFile(temporal, contenido, { flag: 'wx' })
+    await fs.promises.rename(temporal, ruta)
+}

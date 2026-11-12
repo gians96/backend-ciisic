@@ -77,7 +77,7 @@ export const ETIQUETAS_PERMISO: Record<Permiso, string> = {
     'inscripciones.cortesia': 'Registrar inscripciones de cortesía',
     'inscripciones.cambiar_tipo': 'Cambiar el tipo y la categoría de una inscripción',
     'legacy.usar': 'Usar las rutas de la versión anterior',
-    'certificados.gestionar': 'Gestionar plantillas y emitir certificados',
+    'certificados.gestionar': 'Importar el Excel de certificados y anularlos',
     'especializadas.gestionar': 'Crear, editar y eliminar ponencias especializadas',
     'especializadas.enlace_aforo': 'Crear, renovar y desactivar el enlace público del aforo de las ponencias especializadas',
     'reportes.gestionar': 'Cargar el padrón de estudiantes y los asesores por sección',
@@ -98,7 +98,7 @@ export const ETIQUETAS_PERMISO: Record<Permiso, string> = {
     'mensajes.ver': 'Ver mensajes de contacto',
     'mensajes.eliminar': 'Eliminar mensajes de contacto',
     'certificados.ver': 'Ver certificados',
-    'certificados.operar': 'Generar, descargar para firmar y subir certificados firmados',
+    'certificados.operar': 'Subir los certificados firmados y enviarlos por correo',
     'especializadas.ver': 'Ver las ponencias especializadas y sus inscritos',
     'especializadas.inscribir': 'Inscribir manualmente a ponencias especializadas y corregir inscripciones',
     'especializadas.asistencia': 'Tomar asistencia en ponencias especializadas (inscribe al instante con el DNI)',
@@ -149,7 +149,7 @@ const PERMISOS_TESORERO: readonly Permiso[] = [
 
 /**
  * Permisos que un Owner o Administrador puede marcar para una cuenta de la Comisión. Nunca incluye
- * pagos ni permisos globales. Los de certificados se habilitan con la spec 015.
+ * pagos ni permisos globales. Certificados (spec 015): ver, y operar (subir los PDF firmados y enviarlos).
  */
 export const PERMISOS_ELEGIBLES_COMISION: readonly Permiso[] = [
     'asistencia.marcar',
@@ -170,6 +170,8 @@ export const PERMISOS_ELEGIBLES_COMISION: readonly Permiso[] = [
     'reportes.exportar',
     'delegaciones.ver',
     'delegaciones.inscribir',
+    'certificados.ver',
+    'certificados.operar',
 ]
 
 /** Permiso con el que se crea por defecto una cuenta de la Comisión. */

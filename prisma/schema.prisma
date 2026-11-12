@@ -49,6 +49,10 @@ model Administrador {
   asistenciasPonenciaRegistradas   InscripcionPonencia[]  @relation("InscripcionPonenciaAsistenciaPor")
   cambiosTipoRealizados            CambioTipoInscripcion[] @relation("CambioTipoRealizadoPor")
   kitsEntregados                   Inscripcion[]          @relation("InscripcionKitEntregadoPor")
+  certificadosImportados           Certificado[]          @relation("CertificadoImportadoPor")
+  certificadosSubidos              Certificado[]          @relation("CertificadoSubidoPor")
+  certificadosEnviados             Certificado[]          @relation("CertificadoEnviadoPor")
+  certificadosAnulados             Certificado[]          @relation("CertificadoAnuladoPor")
 
   @@index([rolId], map: "idx_administradores_rol")
   @@map("administradores")
@@ -117,6 +121,7 @@ model Evento {
   credencialCorreo        CredencialCorreo?       @relation(fields: [credencialCorreoId], references: [id], onDelete: SetNull, map: "fk_eventos_credencial_correo")
   categorias              CategoriaInscripcion[]
   inscripciones           Inscripcion[]
+  certificados            Certificado[]
   actividades             Actividad[]
   ponencias               Ponencia[]
   ponenciasEspecializadas PonenciaEspecializada[]
@@ -166,6 +171,7 @@ model Participante {
   inscripciones     Inscripcion[]
   asistencias       Asistencia[]
   codigosAcceso     CodigoAcceso[]
+  certificados      Certificado[]
 
   @@unique([tipoDocumentoId, numeroDocumento], map: "uq_participantes_documento")
   @@map("participantes")
@@ -329,6 +335,7 @@ model Inscripcion {
   kitEntregadoPor        Administrador?    @relation("InscripcionKitEntregadoPor", fields: [kitEntregadoPorId], references: [id], onDelete: SetNull, map: "fk_inscripciones_kit_entregado_por")
   inscripcionesPonencia  InscripcionPonencia[]
   cambiosTipo            CambioTipoInscripcion[]
+  certificados           Certificado[]
 
   @@unique([eventoId, participanteId], map: "uq_inscripciones_evento_participante")
   @@index([participanteId], map: "idx_inscripciones_participante")
@@ -1014,4 +1021,64 @@ model ConfiguracionSistema {
 
   @@index([actualizadoPorId], map: "idx_configuracion_sistema_actualizado_por")
   @@map("configuracion_sistema")
+}
+
+// ─── Certificados (spec 015, fase 1: importación de certificados firmados fuera del sistema) ─────
+
+/// SIN_ARCHIVO: importado del Excel, falta su PDF firmado. LISTO: tiene el PDF (entregado = `enviadoEn`). ANULADO: retirado.
+enum EstadoCertificado {
+  SIN_ARCHIVO
+  LISTO
+  ANULADO
+}
+
+/// Certificado de una persona en un evento. El `codigo` viene del Excel (lo generó quien armó y firmó los PDF) y
+/// distingue mayúsculas: la columna usa la collation `utf8mb4_bin` (ver la migración). El PDF se empareja por ese
+/// código (`<codigo>[R][R][R].pdf`) y se guarda en `uploads/certificados/<eventoId>/` con un nombre del servidor.
+model Certificado {
+  id               Int               @id @default(autoincrement())
+  eventoId         Int               @map("evento_id")
+  participanteId   Int               @map("participante_id")
+  /// Inscripción APROBADO de la persona en el evento al importarla; NULL = no pagó o no se inscribió (se crea igual).
+  inscripcionId    Int?              @map("inscripcion_id")
+  codigo           String            @unique(map: "uq_certificados_codigo") @db.VarChar(40)
+  /// "<evento>:<participante>:<tipo>" mientras no esté anulado (NULL si ANULADO): un certificado por persona, tipo y evento.
+  claveVigente     String?           @unique(map: "uq_certificados_clave_vigente") @map("clave_vigente") @db.VarChar(120)
+  tipo             String            @db.VarChar(40)
+  estado           EstadoCertificado @default(SIN_ARCHIVO)
+  nombreImpreso    String            @map("nombre_impreso") @db.VarChar(200)
+  numeroDocumento  String            @map("numero_documento") @db.VarChar(20)
+  observacion      String?           @db.VarChar(500)
+  archivo          String?           @db.VarChar(120)
+  hashArchivo      String?           @map("hash_archivo") @db.Char(64)
+  bytesArchivo     Int?              @map("bytes_archivo")
+  firmasDetectadas Int               @default(0) @map("firmas_detectadas")
+  subidoEn         DateTime?         @map("subido_en")
+  subidoPorId      Int?              @map("subido_por_id")
+  enviadoEn        DateTime?         @map("enviado_en")
+  enviadoPorId     Int?              @map("enviado_por_id")
+  envioError       String?           @map("envio_error") @db.VarChar(300)
+  importadoPorId   Int?              @map("importado_por_id")
+  anuladoEn        DateTime?         @map("anulado_en")
+  anuladoPorId     Int?              @map("anulado_por_id")
+  motivoAnulacion  String?           @map("motivo_anulacion") @db.VarChar(500)
+  creadoEn         DateTime          @default(now()) @map("creado_en")
+  actualizadoEn    DateTime          @updatedAt @map("actualizado_en")
+  evento           Evento            @relation(fields: [eventoId], references: [id], map: "fk_certificados_evento")
+  participante     Participante      @relation(fields: [participanteId], references: [id], map: "fk_certificados_participante")
+  inscripcion      Inscripcion?      @relation(fields: [inscripcionId], references: [id], onDelete: SetNull, map: "fk_certificados_inscripcion")
+  importadoPor     Administrador?    @relation("CertificadoImportadoPor", fields: [importadoPorId], references: [id], onDelete: SetNull, map: "fk_certificados_importado_por")
+  subidoPor        Administrador?    @relation("CertificadoSubidoPor", fields: [subidoPorId], references: [id], onDelete: SetNull, map: "fk_certificados_subido_por")
+  enviadoPor       Administrador?    @relation("CertificadoEnviadoPor", fields: [enviadoPorId], references: [id], onDelete: SetNull, map: "fk_certificados_enviado_por")
+  anuladoPor       Administrador?    @relation("CertificadoAnuladoPor", fields: [anuladoPorId], references: [id], onDelete: SetNull, map: "fk_certificados_anulado_por")
+
+  @@index([eventoId, estado], map: "idx_certificados_evento_estado")
+  @@index([participanteId], map: "idx_certificados_participante")
+  @@index([inscripcionId], map: "idx_certificados_inscripcion")
+  @@index([numeroDocumento], map: "idx_certificados_numero_documento")
+  @@index([importadoPorId], map: "idx_certificados_importado_por")
+  @@index([subidoPorId], map: "idx_certificados_subido_por")
+  @@index([enviadoPorId], map: "idx_certificados_enviado_por")
+  @@index([anuladoPorId], map: "idx_certificados_anulado_por")
+  @@map("certificados")
 }

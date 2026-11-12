@@ -7,6 +7,7 @@ import { requireTokenEvento } from '../../src/middlewares/sitio'
 import { rutaLegacy } from '../../src/middlewares/legacy'
 import {
     limiteAvisosPonencias, limiteCargaPadron, limiteCheckInPonencia, limiteDescargaReportes, limiteDescargaResumenPonencias, limiteEnlacesAsesores, limiteEnviosMasivos, limiteGestionDocentes, limiteLecturaEnvios, limiteLecturaReportes, limiteMarcarAsistencia, limiteReenvioCredencial, limiteRenovacionSesion, limiteSwitch,
+    limiteCargaCertificados, limiteLecturaCertificados,
 } from '../../src/middlewares/rate-limit'
 import { ALCANCE, type Permiso } from '../../src/core/permisos'
 import {
@@ -88,6 +89,10 @@ const PUBLICAS: readonly Clave[] = [
     'GET /v1/public/cycle/export',
     'POST /v1/public/advisor/lookup',
     'POST /v1/public/advisor/lookup/export',
+    // Certificados (spec 015): consulta por DNI (en el cuerpo, intentos fallidos topados por IP) y el certificado por su código; solo los que tienen PDF
+    'POST /v1/public/certificates/lookup',
+    'GET /v1/public/certificates/:codigo',
+    'GET /v1/public/certificates/:codigo/file',
 ]
 
 /** API del sitio: el evento sale del token de acceso (`requireTokenEvento`). */
@@ -124,6 +129,8 @@ const PARTICIPANTE: readonly Clave[] = [
     'GET /v1/me', 'GET /v1/me/inscriptions', 'GET /v1/me/inscriptions/:id/credential',
     // Portal v2 (spec 014)
     'PATCH /v1/me/profile', 'GET /v1/me/photo', 'PUT /v1/me/photo', 'DELETE /v1/me/photo', 'GET /v1/me/inscriptions/:id/badge', 'GET /v1/me/attendances',
+    // Certificados (spec 015)
+    'GET /v1/me/certificates', 'GET /v1/me/certificates/:id/file',
 ]
 const SESION: readonly Clave[] = ['GET /v1/auth/session']
 
@@ -339,6 +346,19 @@ const MATRIZ: Record<Clave, Esperada> = {
     'POST /v1/events/:eventId/advisory/cycle-links': g('reportes.gestionar'),
     'DELETE /v1/events/:eventId/advisory/cycle-links/:ciclo': g('reportes.gestionar'),
 
+    // certificate (spec 015): ver y operar por evento; importar y anular, global
+    'GET /v1/events/:eventId/certificates': g('certificados.ver', P()),
+    'GET /v1/events/:eventId/certificates/ids': g('certificados.ver', P()),
+    'GET /v1/events/:eventId/certificates/pending-inscriptions': g('certificados.ver', P()),
+    'POST /v1/events/:eventId/certificates/import': g('certificados.gestionar'),
+    'POST /v1/events/:eventId/certificates/files': g('certificados.operar', P()),
+    'POST /v1/events/:eventId/certificates/send': g('certificados.operar', P()),
+    'GET /v1/events/:eventId/certificates/:id': g('certificados.ver', P()),
+    'GET /v1/events/:eventId/certificates/:id/file': g('certificados.ver', P()),
+    'PUT /v1/events/:eventId/certificates/:id/file': g('certificados.operar', P()),
+    'POST /v1/events/:eventId/certificates/:id/test': g('certificados.operar', P()),
+    'POST /v1/events/:eventId/certificates/:id/annul': g('certificados.gestionar'),
+
     // system-settings
     'GET /v1/settings': g('sistema.configurar'),
     'PUT /v1/settings': g('sistema.configurar'),
@@ -362,9 +382,10 @@ const esValidacion = (h: Handle) => h.validaCuerpo === true
 const LIMITES_POR_ACTOR: readonly RequestHandler[] = [
     limiteMarcarAsistencia, limiteCheckInPonencia, limiteReenvioCredencial, limiteRenovacionSesion, limiteSwitch, limiteLecturaReportes, limiteDescargaReportes, limiteCargaPadron, limiteEnlacesAsesores, limiteGestionDocentes,
     limiteDescargaResumenPonencias, limiteAvisosPonencias, limiteEnviosMasivos, limiteLecturaEnvios,
+    limiteCargaCertificados, limiteLecturaCertificados,
 ]
 /** Total de rutas de /api: una ruta nueva obliga a clasificarla aquí. */
-const TOTAL_RUTAS = 210
+const TOTAL_RUTAS = 226
 
 function clasesDe(ruta: Ruta): Clase[] {
     const clases: Clase[] = []
@@ -434,6 +455,7 @@ describe('matriz de rutas (spec 013)', () => {
         // La detección de multer y validateBody funciona (si no, lo anterior no probaría nada)
         expect(rutas.filter((r) => r.handles.some(esMulter)).map((r) => r.clave).sort()).toEqual([
             'POST /v1/inscription', 'POST /v1/papers', 'POST /v1/events/:eventId/advisory/import', 'POST /v1/delegations/:id/payments', 'POST /v1/payment-qr', 'POST /v1/site/delegations/link/:codigoLink/payments', 'POST /v1/site/inscriptions', 'POST /v1/site/papers', 'PUT /v1/me/photo',
+            'POST /v1/events/:eventId/certificates/import', 'POST /v1/events/:eventId/certificates/files', 'PUT /v1/events/:eventId/certificates/:id/file',
         ].sort())
         expect(rutas.filter((r) => r.handles.some(esValidacion)).length).toBeGreaterThan(30)
     })
@@ -464,10 +486,11 @@ describe('matriz de rutas (spec 013)', () => {
         expect(con(limiteCargaPadron)).toEqual(['POST /v1/events/:eventId/advisory/import'])
         expect(con(limiteDescargaResumenPonencias)).toEqual(['GET /v1/events/:eventId/specialized-talk-attendees/export'])
         expect(con(limiteAvisosPonencias)).toEqual(['POST /v1/events/:eventId/specialized-talk-attendees/cancel', 'POST /v1/events/:eventId/specialized-talk-attendees/notify'])
-        expect(con(limiteEnviosMasivos)).toEqual([
+        expect(con(limiteEnviosMasivos).sort()).toEqual([
             'POST /v1/events/:eventId/credential-links/send', 'POST /v1/events/:eventId/specialized-talk-invitations/send', 'POST /v1/events/:eventId/specialized-talk-invitations/test',
             'POST /v1/events/:eventId/virtual-access/send', 'POST /v1/events/:eventId/virtual-access/test',
-        ])
+            'POST /v1/events/:eventId/certificates/send', 'POST /v1/events/:eventId/certificates/:id/test',
+        ].sort())
         expect(con(limiteLecturaEnvios)).toEqual([
             'GET /v1/events/:eventId/credential-links', 'GET /v1/events/:eventId/credential-links/ids', 'GET /v1/events/:eventId/specialized-talk-invitations', 'GET /v1/events/:eventId/specialized-talk-invitations/ids',
             'GET /v1/events/:eventId/virtual-access', 'GET /v1/events/:eventId/virtual-access/ids',
