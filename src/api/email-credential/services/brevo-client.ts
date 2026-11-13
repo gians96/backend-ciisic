@@ -36,9 +36,16 @@ function esSinCreditos(status: number, cuerpo: unknown): boolean {
     return status >= 400 && status < 500 && status !== 429 && /credit|quota|daily (sending )?limit/i.test(mensajeBruto(cuerpo))
 }
 
+/** «We have detected you are using an unrecognised IP address …»: la key es válida pero la IP no está autorizada. */
+export function esIpNoAutorizada(cuerpo: unknown): boolean {
+    return /unrecogni[sz]ed ip|ip address|authori[sz]ed ips?/i.test(mensajeBruto(cuerpo))
+}
+
 function mensajeDeError(status: number, cuerpo: unknown, sinCreditos = false): string {
     const detalle = mensajeBruto(cuerpo).slice(0, 300)
     const sufijo = detalle ? `: ${detalle}` : ''
+    // Brevo bloquea por defecto las API keys usadas desde una IP que no está autorizada: todas fallan a la vez
+    if (status === 401 && esIpNoAutorizada(cuerpo)) return 'Brevo bloqueó la IP del servidor: autorízala en Brevo → Configuración de seguridad → IPs autorizadas (o desactiva ese bloqueo)'
     if (status === 401) return `API key de Brevo inválida o sin permisos${sufijo}`
     if (status === 402 || sinCreditos) return `La cuenta de Brevo no tiene créditos o el plan no lo permite${sufijo}`
     if (status === 429) return 'Brevo limitó las solicitudes (429); intenta más tarde'

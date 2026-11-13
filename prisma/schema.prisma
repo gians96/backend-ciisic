@@ -954,6 +954,8 @@ model CredencialCorreo {
   apiKeySufijo     String             @map("api_key_sufijo") @db.VarChar(8)
   remitenteCorreo  String             @map("remitente_correo") @db.VarChar(191)
   remitenteNombre  String?            @map("remitente_nombre") @db.VarChar(120)
+  /// Gmail: puerto SMTP preferido, 465 (SSL) o 587 (STARTTLS); NULL = 465. Si no conecta se prueba el otro. Brevo: NULL.
+  smtpPuerto       Int?               @map("smtp_puerto")
   esPredeterminada Boolean            @default(false) @map("es_predeterminada")
   /// Orden de respaldo (menor = antes; la predeterminada va primero sin importar su valor). PUT /order la renumera 1, 2, 3… (spec 041).
   prioridad        Int                @default(0)

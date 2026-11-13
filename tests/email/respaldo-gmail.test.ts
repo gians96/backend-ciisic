@@ -114,7 +114,7 @@ describe('cliente de Gmail por SMTP', () => {
     })
 
     it('verifica la cuenta sin enviar nada', async () => {
-        expect(await verificarGmail({ usuario: 'garias@undc.edu.pe', clave: CLAVE_GMAIL })).toEqual({ correo: 'garias@undc.edu.pe', empresa: null, planes: [] })
+        expect(await verificarGmail({ usuario: 'garias@undc.edu.pe', clave: CLAVE_GMAIL })).toEqual({ correo: 'garias@undc.edu.pe', empresa: null, planes: [], puerto: 465 })
         expect(mockVerificar).toHaveBeenCalledTimes(1)
         expect(mockEnviar).not.toHaveBeenCalled()
     })

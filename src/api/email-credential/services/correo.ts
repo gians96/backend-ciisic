@@ -34,4 +34,6 @@ export interface CuentaCorreo {
     correo: string | null
     empresa: string | null
     planes: { tipo: string, creditos: number | null, tipoCreditos: string | null }[]
+    /** Gmail: el puerto por el que conectó (465 o 587). */
+    puerto?: number
 }

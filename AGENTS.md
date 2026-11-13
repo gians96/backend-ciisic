@@ -223,7 +223,7 @@ y Google. Documentación: [`docs/`](docs/README.md).
   (`htmlComunicado` con `accion`): el `enlace` lo escribe quien envía en cada petición (`https`, sin credenciales ni espacios, máx. 500: `esEnlaceDeAcceso`), no se guarda ni necesita `url_landing`. Rutas `…/virtual-access`
   (+ `/ids`, `/send`, `/test`) con los permisos existentes: ver = `inscripciones.ver`, enviar y probar = `credenciales.reenviar`. Reserva de la marca, reversión y tandas como la spec 039. El enlace da acceso a la
   transmisión: **no va al log** (solo ids y totales) ni a la BD.
-- Correo con respaldo (spec 041, `src/api/email-credential`): una credencial es `BREVO` (API) o `GMAIL_SMTP` (`smtp.gmail.com:465`, SSL, **host fijo**; la contraseña de aplicación va cifrada en `api_key_cifrada`
+- Correo con respaldo (spec 041, `src/api/email-credential`): una credencial es `BREVO` (API) o `GMAIL_SMTP` (`smtp.gmail.com`, **host fijo**, puerto 465 SSL o 587 STARTTLS en `smtp_puerto` —NULL = 465— y si el elegido no conecta se prueba el otro, nunca tras un corte a mitad del envío: spec 046; la contraseña de aplicación va cifrada en `api_key_cifrada`
   y el remitente es la cuenta de Gmail). La **predeterminada es siempre la primera** y las demás van por `prioridad` (`PUT /v1/email-credentials/order` con todos los ids). **Todo envío pasa por
   `enviarConCredencial`**, que prueba la credencial elegida y, si falla, las demás activas por prioridad (máx. 3) **con el remitente de la que envía**; una cuenta que falla por sí misma (sin créditos,
   límite diario, clave inválida: `CorreoFallido.deLaCuenta`) queda 15 min en espera en memoria. No envíes con `enviarConBrevo`/`enviarConGmail` directamente salvo en «Probar» y «Enviar prueba»
@@ -339,7 +339,7 @@ con ambos sistemas levantados.
 
 Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Cada cambio
 empieza en `specs/NNN-nombre/` (spec → plan → tasks → contracts) y se marcan las tasks al
-implementar. Specs actuales: 001–014, 016–029 y 030–045 (ver [README](README.md)); la 015 (certificados) tiene
+implementar. Specs actuales: 001–014, 016–029 y 030–046 (ver [README](README.md)); la 015 (certificados) tiene
 su fase 1 (`spec.md`) y el diseño de la fase 2 (`research.md`).
 
 ## Antes de dar por terminado

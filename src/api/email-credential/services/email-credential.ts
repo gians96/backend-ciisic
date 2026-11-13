@@ -5,7 +5,7 @@ import { escapeHtml } from '../../../core/html'
 import { cifrar, descifrar, sufijo } from '../../../core/crypto'
 import { creditosDeEnvio, cuentaBrevo, enviarConBrevo } from './brevo-client'
 import { CorreoFallido, type CorreoSaliente, type CuentaCorreo } from './correo'
-import { CLAVE_DE_APLICACION, enviarConGmail, normalizarClaveDeAplicacion, verificarGmail } from './gmail-client'
+import { CLAVE_DE_APLICACION, enviarConGmail, esPuertoSmtp, normalizarClaveDeAplicacion, PUERTO_SMTP_POR_DEFECTO, verificarGmail } from './gmail-client'
 import { anotarAgotado, anotarEnvio } from './recuento-envios'
 import type { ActualizarCredencialInput, CrearCredencialInput, OrdenarCredencialesInput } from '../validation'
 
@@ -37,6 +37,8 @@ export function aCredencial(c: CredencialConEventos) {
         apiKeyEnmascarada: `••••${c.apiKeySufijo}`,
         remitenteCorreo: c.remitenteCorreo,
         remitenteNombre: c.remitenteNombre,
+        /** Gmail: puerto SMTP preferido (465 o 587); Brevo: `null`. */
+        smtpPuerto: c.proveedor === 'GMAIL_SMTP' ? (esPuertoSmtp(c.smtpPuerto) ? c.smtpPuerto : PUERTO_SMTP_POR_DEFECTO) : null,
         esPredeterminada: c.esPredeterminada,
         prioridad: c.prioridad,
         /** Envíos que le quedan en Brevo en la última revisión; `null` = no se sabe (nunca se revisó, o es Gmail, que no lo informa). */
@@ -99,6 +101,7 @@ export async function crearCredencial(input: CrearCredencialInput) {
                 apiKeySufijo: sufijo(secreto),
                 remitenteCorreo: input.remitenteCorreo,
                 remitenteNombre: input.remitenteNombre ?? null,
+                smtpPuerto: proveedor === 'GMAIL_SMTP' && esPuertoSmtp(input.smtpPuerto) ? input.smtpPuerto : null,
                 esPredeterminada,
                 prioridad: esPredeterminada ? 0 : (ultima?._max.prioridad ?? 0) + 1,
                 activo: input.activo ?? true,
@@ -125,6 +128,7 @@ export async function actualizarCredencial(id: number, input: ActualizarCredenci
     if (input.remitenteCorreo !== undefined) data.remitenteCorreo = input.remitenteCorreo
     if (input.remitenteNombre !== undefined) data.remitenteNombre = input.remitenteNombre
     if (input.activo !== undefined) data.activo = input.activo
+    if (input.smtpPuerto !== undefined && actual.proveedor === 'GMAIL_SMTP') data.smtpPuerto = esPuertoSmtp(input.smtpPuerto) ? input.smtpPuerto : null
     if (input.apiKey !== undefined) {
         const secreto = secretoParaGuardar(actual.proveedor, input.apiKey)
         data.apiKeyCifrada = cifrar(secreto)
@@ -223,7 +227,7 @@ function mensajeDe(error: unknown): string {
 /** Envía un correo con el proveedor de la credencial (Brevo por API o Gmail por SMTP), sin respaldo. */
 function enviarPorProveedor(credencial: CredencialCorreo, correo: CorreoSaliente) {
     const secreto = descifrar(credencial.apiKeyCifrada)
-    if (credencial.proveedor === 'GMAIL_SMTP') return enviarConGmail({ usuario: credencial.remitenteCorreo, clave: secreto }, correo)
+    if (credencial.proveedor === 'GMAIL_SMTP') return enviarConGmail({ usuario: credencial.remitenteCorreo, clave: secreto, puerto: credencial.smtpPuerto }, correo)
     return enviarConBrevo(secreto, correo)
 }
 
@@ -233,9 +237,13 @@ export async function probarCredencial(id: number): Promise<{ ok: boolean, cuent
     try {
         const secreto = descifrar(credencial.apiKeyCifrada)
         const cuenta = credencial.proveedor === 'GMAIL_SMTP'
-            ? await verificarGmail({ usuario: credencial.remitenteCorreo, clave: secreto })
+            ? await verificarGmail({ usuario: credencial.remitenteCorreo, clave: secreto, puerto: credencial.smtpPuerto })
             : await cuentaBrevo(secreto)
-        await registrarResultado(id, null, 'ultimaPruebaEn', credencial.proveedor === 'GMAIL_SMTP' ? {} : datosDeCreditos(cuenta))
+        // Gmail conectó por el otro puerto (la red bloquea el elegido): se guarda el que funciona para los envíos
+        const puertoQueFunciona = credencial.proveedor === 'GMAIL_SMTP' && esPuertoSmtp(cuenta.puerto) && cuenta.puerto !== (credencial.smtpPuerto ?? PUERTO_SMTP_POR_DEFECTO)
+            ? { smtpPuerto: cuenta.puerto }
+            : {}
+        await registrarResultado(id, null, 'ultimaPruebaEn', credencial.proveedor === 'GMAIL_SMTP' ? puertoQueFunciona : datosDeCreditos(cuenta))
         reanudar(id)
         return { ok: true, cuenta, credencial: aCredencial(await obtener(id)) }
     } catch (error) {

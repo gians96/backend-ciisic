@@ -9,6 +9,8 @@ const campos = {
     remitenteNombre: yup.string().trim().max(120).nullable(),
     esPredeterminada: yup.boolean(),
     activo: yup.boolean(),
+    /** Solo Gmail: 465 (SSL) o 587 (STARTTLS). */
+    smtpPuerto: yup.number().oneOf([465, 587], 'El puerto debe ser 465 o 587').nullable(),
 }
 
 export const crearCredencialSchema = yup.object({
